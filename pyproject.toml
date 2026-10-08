@@ -1,0 +1,158 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tech-toppings-backend"
+version = "0.1.0"
+description = "Tech-Toppings API: a modular FastAPI backend hosting independent feature modules."
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+  "beanie>=2.2",
+  "fastapi>=0.142",
+  "pydantic>=2.13",
+  "pydantic-settings>=2.15",
+  "pymongo>=4.18",
+  "structlog>=26.1",
+  "uvicorn>=0.54",
+]
+
+[project.optional-dependencies]
+dev = [
+  "actionlint-py>=1.7",
+  "asgi-lifespan>=2.1",
+  "httpx>=0.28",
+  "import-linter>=2.15",
+  "mypy>=2.4",
+  "pip-audit>=2.10",
+  "pip-tools>=7.6",
+  "poethepoet>=0.48",
+  "pre-commit>=4.6",
+  "pytest>=9.1",
+  "pytest-asyncio>=1.4",
+  "pytest-cov>=7.1",
+  "ruff>=0.16",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+# ---------------------------------------------------------------- tasks (poe)
+[tool.poe]
+envfile = { optional = [".env"] }  # HOST, PORT, TEST_MONGO_URI ... for local runs
+
+[tool.poe.tasks]
+dev.cmd = "uvicorn app.main:create_app --factory --reload --host ${HOST} --port ${PORT} --no-access-log"
+dev.env = { HOST.default = "127.0.0.1", PORT.default = "8000" }
+dev.help = "Run the API with auto-reload"
+
+lint.sequence = ["lint-ruff", "lint-format", "typecheck", "imports"]
+lint.help = "All static checks (ruff, format, mypy, import-linter)"
+lint-ruff = "ruff check ."
+lint-format = "ruff format --check ."
+typecheck = "mypy"
+imports = "lint-imports"
+fmt.sequence = ["ruff format .", "ruff check --fix ."]
+fmt.default_item_type = "cmd"
+fmt.help = "Auto-format and auto-fix"
+
+test.cmd = "pytest --cov --cov-report=term-missing"
+test.help = "Run the test suite with coverage (needs MongoDB, see README)"
+audit.cmd = "pip-audit --requirement requirements/base.lock --no-deps --disable-pip --progress-spinner off"
+audit.help = "Check pinned runtime dependencies for known vulnerabilities"
+actionlint.cmd = "actionlint .github/workflows/ci.yml"
+check.sequence = ["lint", "test", "audit", "actionlint"]
+check.help = "Everything CI runs, locally"
+
+lock.sequence = [
+  "pip-compile pyproject.toml --output-file requirements/base.lock --strip-extras --no-emit-index-url --quiet",
+  "pip-compile pyproject.toml --extra dev --output-file requirements/dev.lock --strip-extras --no-emit-index-url --quiet",
+]
+lock.default_item_type = "cmd"
+lock.env = { CUSTOM_COMPILE_COMMAND = "poe lock" }
+lock.help = "Re-pin dependencies from pyproject.toml"
+sync.sequence = ["pip-sync requirements/dev.lock", "pip install --no-deps --editable ."]
+sync.default_item_type = "cmd"
+sync.help = "Make .venv match requirements/dev.lock exactly"
+
+openapi.cmd = "python scripts/export_openapi.py"
+openapi.help = "Write openapi.json (consumed by the frontend type generator)"
+docker-build.cmd = "docker build --tag tech-toppings-backend:local ."
+
+# ---------------------------------------------------------------- ruff
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+extend-exclude = ["docs"]  # keep hand-aligned snippets in Markdown untouched
+
+[tool.ruff.lint]
+select = [
+  "A", "ARG", "ASYNC", "B", "C4", "DTZ", "E", "ERA", "F", "FAST", "I", "N", "PERF", "PL",
+  "PT", "PTH", "RET", "RUF", "S", "SIM", "T20", "TID", "TRY", "UP", "W",
+]
+ignore = [
+  "TRY003", # explicit messages on AppError subclasses are intended
+]
+
+[tool.ruff.lint.pylint]
+max-args = 6
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"fastapi.HTTPException".msg = "Raise an app.core.errors.AppError subclass instead."
+"starlette.exceptions.HTTPException".msg = "Raise an app.core.errors.AppError subclass instead."
+"os.getenv".msg = "Read configuration through app.core.config.Settings."
+"os.environ".msg = "Read configuration through app.core.config.Settings."
+
+[tool.ruff.lint.per-file-ignores]
+"app/core/config.py" = ["TID251"]   # the one place allowed to read the environment
+"app/core/errors.py" = ["TID251"]   # registers the handler for Starlette's HTTPException
+"app/platform/__init__.py" = ["A005"]  # app.platform is a subpackage; no stdlib clash in practice
+"tests/**" = ["S101", "PLR2004", "S105", "S106"]
+"tests/helpers.py" = ["S101", "TID251"]  # reads TEST_MONGO_URI
+"tests/conftest.py" = ["TID251"]  # strips settings variables for hermetic tests
+"scripts/**" = ["T20"]
+
+# ---------------------------------------------------------------- mypy
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unreachable = true
+plugins = ["pydantic.mypy"]
+files = ["app", "tests", "scripts"]
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+# ---------------------------------------------------------------- import-linter
+[tool.importlinter]
+root_package = "app"
+
+[[tool.importlinter.contracts]]
+name = "Layers: modules -> platform -> core (never upwards)"
+type = "layers"
+layers = ["(app.modules)", "app.platform", "app.core"]
+
+# ---------------------------------------------------------------- pytest / coverage
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+addopts = "-ra --strict-markers --strict-config"
+
+[tool.coverage.run]
+source = ["app"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_covered = true
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError", "@overload"]

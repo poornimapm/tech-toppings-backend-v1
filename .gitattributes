@@ -1,0 +1,6 @@
+# Normalise line endings in the repository to LF (CI and the Docker image run on Linux).
+* text=auto eol=lf
+
+# Windows-only scripts keep CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf

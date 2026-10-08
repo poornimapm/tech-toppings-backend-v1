@@ -1,0 +1,36 @@
+# --- secrets / local configuration (never commit) ---
+.env
+.env.*
+!.env.example
+environments/*.env
+!environments/*.env.example
+*.pem
+*.key
+
+# --- python ---
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# --- tooling caches / reports ---
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.import_linter_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# --- generated ---
+openapi.json
+
+# --- editors / OS ---
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db

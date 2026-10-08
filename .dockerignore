@@ -1,0 +1,12 @@
+# Build context = only what the image needs (see Dockerfile COPY lines). Deny everything else.
+*
+!app/
+!requirements/base.lock
+!pyproject.toml
+!README.md
+
+# Defence in depth: never ship caches or secrets even if allowed above.
+**/__pycache__
+**/*.py[cod]
+**/.env
+**/.env.*

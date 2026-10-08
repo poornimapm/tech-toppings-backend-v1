@@ -1,0 +1,33 @@
+# Local production-parity stack: the API image + MongoDB 8.0 (same major version as Atlas M0).
+# Usage:  docker compose up --build      then open http://localhost:8000/readyz
+# Day-to-day development uses `poe dev` against your local MongoDB instead.
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      MONGO_URI: mongodb://mongo:27017/tech-toppings-v1
+      APP_ENV: development
+      LOG_FORMAT: console
+    depends_on:
+      mongo:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+
+  mongo:
+    image: mongo:8.0
+    ports:
+      - "27018:27017" # 27018 on the host so it never collides with a local mongod on 27017
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ ping: 1 }).ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mongo-data:
