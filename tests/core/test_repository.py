@@ -6,7 +6,7 @@ from beanie import PydanticObjectId
 from app.core.errors import NotFoundError
 from app.core.pagination import PageParams
 from app.core.repository import Scope, parse_object_id
-from tests.fixtures.notes import Note, NoteRepository
+from tests.fixtures.modules.notes.models import Note, NoteRepository
 from tests.helpers import FrozenClock
 
 ALICE = PydanticObjectId()
@@ -34,7 +34,7 @@ async def test_create_always_stamps_the_scope_owner(clock: FrozenClock) -> None:
     note = await repo.create({"text": "x", "user_id": BOB, "module_key": "spoofed"})
 
     assert note.user_id == ALICE
-    assert note.module_key == "test_notes"
+    assert note.module_key == "notes"
     assert note.created_by == ALICE
     assert note.created_at == clock.now()
 
@@ -105,4 +105,4 @@ async def test_pagination_counts_everything_but_returns_one_page(clock: FrozenCl
 
 
 def test_note_model_settings() -> None:
-    assert Note.MODULE_KEY == "test_notes"
+    assert Note.MODULE_KEY == "notes"

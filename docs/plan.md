@@ -1005,6 +1005,7 @@ Then I stop until you reply `proceed`.
 | D9 | **All backend packages are installed in a project-level venv** at `tech-toppings-backend-v1\.venv` (Python 3.11). Dependencies are locked with pip-tools. Nothing is installed into your global or user Python. Frontend packages and Playwright browsers stay inside `node_modules`. (`uv` was dropped.) | Your instruction (2026-10-08) |
 | D10 | No email in v1: forgot/reset/verify flows are replaced by admin reset plus a forced password change. | Your decision (Q4) |
 | D11 | **PyMongo Async + Beanie 2** instead of Motor. | Motor has been deprecated since 2026-05-14. Approved 2026-10-08. |
+| D13 | Phase 3 module system details (see ADR-0001 implementation notes): presentation lives only in the frontend manifest; admin overrides are read on demand (no startup sync); notify-me is stored in `user_modules`; widgets/jobs/search/export/erase manifest fields come with their phases; a backend-only module shows with a placeholder tile; the setting is `MODULES_PACKAGES`. | Simpler, fewer writes, one source of truth per concern. Reported 2026-10-09. |
 | D12 | The frontend runs on **Node 24 LTS through fnm**, scoped to this repo via `.node-version`. Your system Node 20 and fnm's default (`system`) are unchanged. **TypeScript 5.9 and ESLint 9** are pinned because typescript-eslint, openapi-typescript and jsx-a11y don't support TS 7 or ESLint 10 yet. | Current React Router 8, Vitest 5 and MSW 3 need Node ≥ 22, and Node 20 reached end of life on 2026-04-30. Approved 2026-10-08. |
 
 ---

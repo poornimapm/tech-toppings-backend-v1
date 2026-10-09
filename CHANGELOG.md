@@ -6,6 +6,48 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added — Phase 3: module system (2026-10-09)
+
+**Modules**
+- `ModuleManifest` spec: key, version, status (`live` / `beta` / `coming_soon`), order,
+  default on/off, settings model, routers, documents and tile stat, all as import paths.
+- Discovery from `MODULES_PACKAGES` with strict checks. A broken module stops startup with a
+  clear message.
+- Documents are registered and routers mounted at `/v1/<slug>` and `/v1/admin/<slug>` with
+  no edit to `create_app`.
+- Coming-soon manifests for expenses, medicine, receipts, study, gov_docs, meals, habits and
+  journal.
+
+**Catalog API**
+- `GET /v1/modules` and `GET /v1/modules/{key}`: manifest, admin overrides and the user's
+  preferences, merged.
+- Pin, turn on or off for me, arrange (`PUT /v1/modules/order`), and "notify me" for
+  upcoming modules.
+- Per-user module settings with a JSON Schema endpoint, strict validation that never echoes
+  values, and graceful fallback for outdated stored values.
+- Tile figures run in parallel with a timeout; a failing module is logged and skipped.
+
+**Enforcement**
+- A gate in front of every module route returns `403 MODULE_DISABLED` when the module is off
+  globally or for the user. Admin routes stay reachable.
+- import-linter contracts: modules are independent and import only `app.platform`. An AST
+  test covers the same rule for future sub-packages and the test modules.
+- `app.platform` now re-exports the API modules are written against.
+
+**Tests (218, 98.0% coverage)**
+- Demo module dropped in as a folder: it is listed, mounted, counted and gated with no
+  other edit.
+- Discovery failure cases, catalog filters and sorting, pins and order persistence, admin
+  overrides, notify-me, settings, and the gate.
+- The isolation matrix now covers catalog routes: acting on a shared module key changes only
+  the caller's own state.
+
+### Fixed
+- Each app built its own TLS context for outbound HTTP, which took about 4 s per app on
+  Windows. The context is now built once per process.
+- Document classes defined after a first Beanie initialisation inherited `"_id"` as their
+  default id; abstract bases are now cleaned after initialisation.
+
 ### Added — Phase 2: auth, users, RBAC (2026-10-08)
 
 **Accounts**

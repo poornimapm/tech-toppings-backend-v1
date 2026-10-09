@@ -1,5 +1,5 @@
 """Admin vs user behaviour, exercised through the test-only notes resource:
-``/v1/admin/test-notes`` uses ``AdminUser`` and an unrestricted scope."""
+``/v1/admin/notes`` uses ``AdminUser`` and an unrestricted scope."""
 
 from __future__ import annotations
 
@@ -23,11 +23,11 @@ async def test_admin_sees_every_users_records(
     client: AsyncClient, other_client: AsyncClient
 ) -> None:
     first = await register(other_client, name="First")
-    note = await other_client.post("/v1/test-notes", headers=first.headers, json={"text": "a"})
+    note = await other_client.post("/v1/notes", headers=first.headers, json={"text": "a"})
     admin_token = await make_admin(client)
 
     response = await client.get(
-        "/v1/admin/test-notes?page_size=100", headers={"Authorization": f"Bearer {admin_token}"}
+        "/v1/admin/notes?page_size=100", headers={"Authorization": f"Bearer {admin_token}"}
     )
 
     assert response.status_code == 200
@@ -37,14 +37,14 @@ async def test_admin_sees_every_users_records(
 async def test_regular_users_are_forbidden_from_admin_routes(client: AsyncClient) -> None:
     user = await register(client)
 
-    response = await client.get("/v1/admin/test-notes", headers=user.headers)
+    response = await client.get("/v1/admin/notes", headers=user.headers)
 
     assert response.status_code == 403
     assert response.json()["code"] == "FORBIDDEN"
 
 
 async def test_admin_routes_require_authentication(client: AsyncClient) -> None:
-    response = await client.get("/v1/admin/test-notes")
+    response = await client.get("/v1/admin/notes")
 
     assert response.status_code == 401
 
@@ -56,8 +56,6 @@ async def test_demoting_an_admin_takes_effect_immediately(client: AsyncClient) -
         {"_id": PydanticObjectId(me["id"])}, {"$set": {"role": "user"}}
     )
 
-    response = await client.get(
-        "/v1/admin/test-notes", headers={"Authorization": f"Bearer {token}"}
-    )
+    response = await client.get("/v1/admin/notes", headers={"Authorization": f"Bearer {token}"})
 
     assert response.status_code == 403

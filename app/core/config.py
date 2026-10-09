@@ -262,6 +262,22 @@ class DefaultsSettings(BaseSettings):
         return value
 
 
+class ModulesSettings(BaseSettings):
+    """Where feature modules are discovered (ADR-0001). Each package's sub-packages that contain
+    a ``manifest.py`` are modules; tests add a fixtures package."""
+
+    model_config = _group_config("MODULES_")
+
+    packages: Annotated[tuple[str, ...], NoDecode] = ("app.modules",)
+    # A slow module must not hold up the Welcome page; its tile simply shows no figure.
+    tile_stat_timeout_seconds: float = Field(default=2.0, gt=0, le=30)
+
+    @field_validator("packages", mode="before")
+    @classmethod
+    def split_packages(cls, value: Any) -> Any:
+        return _split_csv(value)
+
+
 class BootstrapSettings(BaseSettings):
     """First admin account, created or promoted by `poe seed` (skipped when unset)."""
 
@@ -291,6 +307,7 @@ class Settings(BaseModel):
     rate_limit: RateLimitSettings
     api: ApiSettings
     defaults: DefaultsSettings
+    modules: ModulesSettings
     bootstrap: BootstrapSettings
 
 
@@ -313,6 +330,7 @@ def load_settings(env_files: Sequence[Path] | None = None) -> Settings:
         rate_limit=RateLimitSettings(_env_file=existing),
         api=ApiSettings(_env_file=existing),
         defaults=DefaultsSettings(_env_file=existing),
+        modules=ModulesSettings(_env_file=existing),
         bootstrap=BootstrapSettings(_env_file=existing),
     )
 

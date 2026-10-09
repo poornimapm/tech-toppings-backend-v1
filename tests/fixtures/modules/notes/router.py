@@ -1,34 +1,12 @@
-"""Test-only owned resource ("notes") exercising ScopedRepository through real HTTP routes.
-
-It stands in for module data until Phase 5 (expenses) and is mounted only in tests: the
-isolation matrix and the admin-vs-user tests run against it.
-"""
-
 from __future__ import annotations
 
-from typing import Annotated, ClassVar
+from typing import Annotated
 
 from fastapi import APIRouter, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.core.deps import ClockDep
-from app.core.documents import OwnedDocument
-from app.core.pagination import Page, PageParamsDep, parse_sort
-from app.core.repository import Scope, ScopedRepository
-from app.platform.auth.deps import AdminUser, UserScope
-
-
-class Note(OwnedDocument):
-    MODULE_KEY: ClassVar[str] = "test_notes"
-
-    text: str
-
-    class Settings:
-        name = "test_notes"
-
-
-class NoteRepository(ScopedRepository[Note]):
-    model: ClassVar[type[OwnedDocument]] = Note
+from app.platform import AdminUser, ClockDep, Page, PageParamsDep, Scope, UserScope, parse_sort
+from tests.fixtures.modules.notes.models import Note, NoteRepository
 
 
 class NoteIn(BaseModel):
@@ -49,8 +27,8 @@ def to_out(note: Note) -> NoteOut:
 
 SORT_FIELDS = ("created_at", "text")
 
-router = APIRouter(prefix="/v1/test-notes", tags=["test-notes"])
-admin_router = APIRouter(prefix="/v1/admin/test-notes", tags=["test-notes"])
+router = APIRouter()
+admin_router = APIRouter()
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)

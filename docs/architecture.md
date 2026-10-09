@@ -24,10 +24,15 @@ This keeps the refresh-token cookie first-party and makes CORS unnecessary (ADR-
 |---|---|---|
 | Core | `app.core` | stdlib, third-party |
 | Platform | `app.platform` | core |
-| Modules | `app.modules.<key>` | core, platform public surface |
+| Modules | `app.modules.<key>` | `app.platform` only (the names it re-exports) |
 
-`app.main` composes everything. import-linter (`pyproject.toml`) fails CI if a lower layer
-imports a higher one.
+`app.main` composes everything. import-linter (`pyproject.toml`) fails CI if:
+- a lower layer imports a higher one;
+- one module imports another;
+- a module imports `app.core` or a platform sub-package instead of `app.platform`.
+
+`tests/architecture/test_module_boundaries.py` checks the same import rule with an AST scan,
+so it also covers platform sub-packages added later and the test-only modules.
 
 ## Request lifecycle
 
@@ -127,6 +132,62 @@ Three test suites enforce these rules:
 - Both suites read the route inventory from the OpenAPI schema. FastAPI keeps included
   routers nested, so `app.routes` alone would miss routes.
 
+## Modules
+
+A module is a folder under a package listed in `MODULES_PACKAGES` (default `app.modules`;
+tests add `tests.fixtures.modules`) with a `manifest.py`:
+
+```python
+MANIFEST = ModuleManifest(
+    key="expenses", version="0.1.0", status=ModuleStatus.LIVE, order=10,
+    settings_model=ExpenseSettings,                   # extra="forbid", validated per user
+    router="app.modules.expenses.router:router",      # mounted at /v1/expenses
+    admin_router="app.modules.expenses.admin:router", # mounted at /v1/admin/expenses
+    documents=("app.modules.expenses.models:Expense",),
+    tile_stat="app.modules.expenses.stats:month_total",  # async (scope, clock) -> TileStat
+)
+```
+
+**Discovery** (`platform/modules/discovery.py`) runs in `create_app`, before the database
+starts. It imports each manifest and checks that:
+- the key equals the folder name and is unique across packages;
+- every import path stays inside the module's own package and resolves to the right kind of
+  object (router, Beanie document, async function);
+- a settings model forbids unknown fields, and a coming-soon module has no routes.
+
+Any failure stops startup with a message naming the module. The registry then registers the
+documents with Beanie and mounts the routers. Name, icon and colour are not here: they live
+in the module's frontend folder, so the backend describes behaviour only.
+
+**What a user sees** (`GET /v1/modules`) is three layers merged, later ones winning:
+
+| Layer | Stored in | Controls |
+|---|---|---|
+| Manifest | code | status, default order, enabled by default |
+| Admin override | `modules` (written by the admin console, Phase 10) | status, global on/off, order |
+| User preference | `user_modules`, one per user and module | on/off for me, pinned, position, settings, notify-me |
+
+A module is **available** when it is globally enabled, enabled for the user and not coming
+soon. Available modules also get their `tile_stat` figure. Stats run in parallel with a
+timeout (`MODULES_TILE_STAT_TIMEOUT_SECONDS`), and a failing stat is logged and skipped, so
+one broken module never breaks the Welcome page.
+
+**Availability is enforced on the server.** Every module route sits behind a gate dependency
+(signed in, then available) that answers `403 MODULE_DISABLED` before the module's code runs.
+Admin routes skip the gate, so admins can still manage a module's data while it is off.
+
+**Catalog endpoints** (`platform/modules/router.py`):
+- `GET /v1/modules` (filters `status`, `pinned`; sort `position` or `key`) and
+  `GET /v1/modules/{key}`;
+- `PATCH /v1/modules/{key}/preferences` (pin, on/off) and `PUT /v1/modules/order`;
+- `POST/DELETE /v1/modules/{key}/interest` ("notify me", coming-soon modules only);
+- `GET /v1/modules/{key}/settings/schema`, and `GET/PUT /v1/modules/{key}/settings`.
+
+Module keys are a shared catalog, not owned records: every call changes only the caller's own
+`user_modules` record. Preference writes are single atomic upserts, so two tabs can't create
+duplicates. Stored settings that a newer module version no longer accepts fall back to their
+defaults instead of failing.
+
 ## Configuration
 
 `app.core.config` is the only module that reads the environment.
@@ -144,6 +205,7 @@ Each concern is a frozen `BaseSettings` group with its own prefix:
 | `RATE_LIMIT_` | `RateLimitSettings` |
 | `API_` | `ApiSettings` (page sizes) |
 | `DEFAULT_` | `DefaultsSettings` (new-account locale, currency, time zone) |
+| `MODULES_` | `ModulesSettings` (packages to discover, tile-stat timeout) |
 | `BOOTSTRAP_ADMIN_` | `BootstrapSettings` (`poe seed`) |
 
 Sources, from lowest to highest priority:
@@ -167,6 +229,12 @@ there, so each test gets an isolated app.
 Tests run against a **real MongoDB**: `TEST_MONGO_URI` (default `localhost:27017`), using a
 throwaway database `tt-test-<random>` that is dropped after the session.
 
-They are hermetic: settings variables from the shell or `.env` are stripped. Apps are built
+They are hermetic: settings variables from the shell or `.env` are stripped. A test-only
+module, `tests/fixtures/modules/notes`, goes through the same discovery as real modules and
+backs the isolation, RBAC and gate tests.
+
+`Database` removes the query attributes Beanie writes onto abstract base documents (such as
+`OwnedDocument`) after initialisation. Without this, a document class defined later in the
+same process would inherit `"_id"` as its default id. Apps are built
 with explicit `Settings` through `tests/helpers.build_settings` and exercised in-process
 (`asgi-lifespan` + `httpx.ASGITransport`).

@@ -33,6 +33,7 @@ from app.core.config import (
     Environment,
     LogFormat,
     LogSettings,
+    ModulesSettings,
     MongoSettings,
     RateLimitSettings,
     RegistrationMode,
@@ -40,13 +41,14 @@ from app.core.config import (
     Settings,
 )
 from app.main import create_app
-from tests.fixtures import notes
 
 TEST_MONGO_BASE_URI = os.environ.get("TEST_MONGO_URI", "mongodb://localhost:27017")
 UNREACHABLE_MONGO_URI = "mongodb://127.0.0.1:1/tt-unreachable"
 
 TEST_JWT_SECRET = "test-secret-" + "x" * 40
 CSRF = {"X-TT-CSRF": "1"}
+# The real modules plus the test-only ones (tests/fixtures/modules), e.g. "notes".
+TEST_MODULE_PACKAGES = ("app.modules", "tests.fixtures.modules")
 PASSWORD = "Correct-Horse-42"
 REFRESH_COOKIE = "tt_refresh"
 
@@ -88,6 +90,7 @@ def build_settings(mongo_uri: str, **groups: Any) -> Settings:
         "rate_limit": RateLimitSettings(_env_file=None, enabled=False),
         "api": ApiSettings(_env_file=None),
         "defaults": DefaultsSettings(_env_file=None),
+        "modules": ModulesSettings(_env_file=None, packages=TEST_MODULE_PACKAGES),
         "bootstrap": BootstrapSettings(_env_file=None),
     }
     return Settings(**(defaults | groups))
@@ -108,11 +111,8 @@ class FrozenClock:
 
 
 def build_app(settings: Settings, clock: Clock | None = None) -> FastAPI:
-    """The real app plus the test-only notes resource (see tests/fixtures/notes.py)."""
-    app = create_app(settings, clock=clock or FrozenClock(), documents=[notes.Note])
-    app.include_router(notes.router)
-    app.include_router(notes.admin_router)
-    return app
+    """The real app; test settings add the test-only modules (tests/fixtures/modules)."""
+    return create_app(settings, clock=clock or FrozenClock())
 
 
 @asynccontextmanager

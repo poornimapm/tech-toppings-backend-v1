@@ -163,7 +163,8 @@ app/
     auth/            register/login/refresh/logout, sessions, Google, lockout, operator tasks
     users/           User model, /v1/me
     health/          /healthz, /readyz
-  modules/           feature modules (Phase 3+), auto-discovered
+    modules/         module manifest, discovery, registry, /v1/modules, availability gate
+  modules/           feature modules, auto-discovered (expenses ... journal: coming soon)
 tests/               pytest suite (real MongoDB)
 scripts/             seed.py, reset_password.py, export_openapi.py, hooks/venv-run.sh
 docs/                plan, ADRs, architecture, reference analysis, free-tier limits

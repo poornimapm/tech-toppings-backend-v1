@@ -38,9 +38,9 @@ def test_page_metadata() -> None:
 async def test_page_size_is_capped_by_configuration(client: AsyncClient) -> None:
     account = await register(client)
 
-    response = await client.get("/v1/test-notes?page_size=5000", headers=account.headers)
-    default = await client.get("/v1/test-notes", headers=account.headers)
-    invalid = await client.get("/v1/test-notes?page=0", headers=account.headers)
+    response = await client.get("/v1/notes?page_size=5000", headers=account.headers)
+    default = await client.get("/v1/notes", headers=account.headers)
+    invalid = await client.get("/v1/notes?page=0", headers=account.headers)
 
     assert response.json()["page_size"] == 100
     assert default.json()["page_size"] == 20

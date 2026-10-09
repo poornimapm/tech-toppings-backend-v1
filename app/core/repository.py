@@ -99,6 +99,10 @@ class ScopedRepository(Generic[TDoc]):
         )
         return items, total
 
+    def module_key_for(self, fields: Mapping[str, Any]) -> str:  # noqa: ARG002 - override hook
+        """Module owning a new record: the model's MODULE_KEY unless a subclass says otherwise."""
+        return self.model.MODULE_KEY
+
     async def create(self, fields: Mapping[str, Any]) -> TDoc:
         """Validate and insert a record for the scope's owner. Ownership and audit fields are
         always set here (overriding anything in ``fields``), never trusted from the caller."""
@@ -109,7 +113,7 @@ class ScopedRepository(Generic[TDoc]):
             **{
                 **fields,
                 "user_id": self.scope.owner_id,
-                "module_key": self.model.MODULE_KEY,
+                "module_key": self.module_key_for(fields),
                 "created_by": self.scope.actor_id,
                 "updated_by": self.scope.actor_id,
                 "created_at": now,

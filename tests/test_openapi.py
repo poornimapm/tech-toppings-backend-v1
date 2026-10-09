@@ -58,4 +58,4 @@ def test_export_script_writes_schema(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert exit_code == 0
     schema = json.loads(output.read_text(encoding="utf-8"))
     assert {"/healthz", "/readyz", "/v1/auth/login", "/v1/me"} <= set(schema["paths"])
-    assert "/v1/test-notes" not in schema["paths"]  # test fixtures never leak into the real app
+    assert "/v1/notes" not in schema["paths"]  # test fixtures never leak into the real app

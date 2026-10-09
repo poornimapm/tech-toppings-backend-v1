@@ -150,6 +150,25 @@ name = "Layers: modules -> platform -> core (never upwards)"
 type = "layers"
 layers = ["(app.modules)", "app.platform", "app.core"]
 
+[[tool.importlinter.contracts]]
+name = "Modules are independent of each other"
+type = "independence"
+modules = ["app.modules.*"]
+
+[[tool.importlinter.contracts]]
+name = "Modules use the platform API (app.platform), not core or platform internals"
+type = "forbidden"
+source_modules = ["app.modules"]
+forbidden_modules = [
+    "app.core",
+    "app.main",
+    "app.platform.auth",
+    "app.platform.health",
+    "app.platform.modules",
+    "app.platform.users",
+]
+allow_indirect_imports = true
+
 # ---------------------------------------------------------------- pytest / coverage
 [tool.pytest.ini_options]
 testpaths = ["tests"]

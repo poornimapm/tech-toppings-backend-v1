@@ -30,6 +30,7 @@ SETTINGS_ENV_PREFIXES = (
     "RATE_LIMIT_",
     "API_",
     "DEFAULT_",
+    "MODULES_",
     "BOOTSTRAP_ADMIN_",
 )
 

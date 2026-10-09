@@ -12,6 +12,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from beanie import Document, init_beanie
+from beanie.odm.fields import ExpressionField
 from pymongo import AsyncMongoClient
 from pymongo.asynchronous.database import AsyncDatabase
 from pymongo.errors import PyMongoError
@@ -20,6 +21,25 @@ from app.core.config import MongoSettings
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+def _clean_abstract_bases(models: Sequence[type[Document]]) -> None:
+    """Undo Beanie's query-field attributes on abstract base documents (e.g. OwnedDocument).
+
+    Beanie initialises every parent of a registered document and sets each field on it as an
+    ``ExpressionField`` class attribute. Pydantic then takes those attributes as the *defaults*
+    of any subclass defined later (``id`` would default to ``"_id"``), which breaks documents
+    of modules loaded after a first initialisation (several apps in one process, e.g. tests).
+    Registered documents keep their attributes: ``Model.field`` query syntax still works.
+    """
+    registered = set(models)
+    for model in models:
+        for base in model.__mro__[1:]:
+            if base is Document or not issubclass(base, Document) or base in registered:
+                continue
+            for name, value in list(vars(base).items()):
+                if isinstance(value, ExpressionField):
+                    delattr(base, name)
 
 
 class Database:
@@ -62,6 +82,7 @@ class Database:
             if self._odm_ready:
                 return
             await init_beanie(database=self._database, document_models=list(self._document_models))
+            _clean_abstract_bases(self._document_models)
             self._odm_ready = True
             logger.info("database_ready", database=self.name, documents=len(self._document_models))
 
