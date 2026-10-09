@@ -24,9 +24,15 @@ logger = get_logger(__name__)
 
 
 class ErrorCode(StrEnum):
+    """Generic codes. Feature areas define their own (e.g. AUTH_*) as plain strings."""
+
     VALIDATION_ERROR = "VALIDATION_ERROR"
+    UNAUTHENTICATED = "UNAUTHENTICATED"
+    FORBIDDEN = "FORBIDDEN"
     NOT_FOUND = "NOT_FOUND"
     METHOD_NOT_ALLOWED = "METHOD_NOT_ALLOWED"
+    CONFLICT = "CONFLICT"
+    RATE_LIMITED = "RATE_LIMITED"
     HTTP_ERROR = "HTTP_ERROR"
     SERVICE_NOT_READY = "SERVICE_NOT_READY"
     INTERNAL_ERROR = "INTERNAL_ERROR"
@@ -45,25 +51,70 @@ class AppError(Exception):
     """Base class for expected, client-facing errors."""
 
     status_code: ClassVar[int] = status.HTTP_500_INTERNAL_SERVER_ERROR
-    code: ClassVar[ErrorCode] = ErrorCode.INTERNAL_ERROR
+    code: ClassVar[str] = ErrorCode.INTERNAL_ERROR
     default_message: ClassVar[str] = "Internal server error."
+    default_headers: ClassVar[dict[str, str]] = {}
 
-    def __init__(self, message: str | None = None, *, details: Any = None) -> None:
+    def __init__(
+        self,
+        message: str | None = None,
+        *,
+        details: Any = None,
+        headers: dict[str, str] | None = None,
+    ) -> None:
         self.message = message or self.default_message
         self.details = details
+        self.headers = {**self.default_headers, **(headers or {})}
         super().__init__(self.message)
+
+
+class UnauthenticatedError(AppError):
+    status_code = status.HTTP_401_UNAUTHORIZED
+    code: ClassVar[str] = ErrorCode.UNAUTHENTICATED
+    default_message = "Authentication required."
+    default_headers: ClassVar[dict[str, str]] = {"WWW-Authenticate": "Bearer"}
+
+
+class ForbiddenError(AppError):
+    status_code = status.HTTP_403_FORBIDDEN
+    code: ClassVar[str] = ErrorCode.FORBIDDEN
+    default_message = "You do not have permission to do this."
 
 
 class NotFoundError(AppError):
     status_code = status.HTTP_404_NOT_FOUND
-    code = ErrorCode.NOT_FOUND
+    code: ClassVar[str] = ErrorCode.NOT_FOUND
     default_message = "Resource not found."
+
+
+class ConflictError(AppError):
+    status_code = status.HTTP_409_CONFLICT
+    code: ClassVar[str] = ErrorCode.CONFLICT
+    default_message = "The request conflicts with the current state."
+
+
+class RateLimitedError(AppError):
+    status_code = status.HTTP_429_TOO_MANY_REQUESTS
+    code: ClassVar[str] = ErrorCode.RATE_LIMITED
+    default_message = "Too many requests. Please slow down."
+
+    def __init__(self, retry_after_seconds: int, message: str | None = None) -> None:
+        super().__init__(
+            message,
+            details={"retry_after_seconds": retry_after_seconds},
+            headers={"Retry-After": str(retry_after_seconds)},
+        )
 
 
 class ServiceNotReadyError(AppError):
     status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-    code = ErrorCode.SERVICE_NOT_READY
+    code: ClassVar[str] = ErrorCode.SERVICE_NOT_READY
     default_message = "Service is not ready yet. Please retry shortly."
+
+
+def error_responses(*status_codes: int) -> dict[int | str, dict[str, Any]]:
+    """OpenAPI ``responses=`` entries documenting the error envelope for these statuses."""
+    return {code: {"model": ErrorResponse} for code in status_codes}
 
 
 # Used as the app-wide default so OpenAPI documents the envelope instead of FastAPI's
@@ -110,6 +161,7 @@ async def _app_error_handler(request: Request, exc: Exception) -> JSONResponse:
         code=exc.code,
         message=exc.message,
         details=exc.details,
+        headers=exc.headers or None,
     )
 
 

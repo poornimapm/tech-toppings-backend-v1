@@ -19,3 +19,24 @@ No tokens in `localStorage` (a weakness seen in the reference). The cookie stays
 ## Alternatives considered
 
 Tokens in localStorage: exposed to XSS. Cross-site cookies with `SameSite=None`: blocked by modern browsers. A custom domain for both apps: costs money.
+
+## Implementation notes (Phase 2, 2026-10-08)
+
+- **Sessions.** A *session* is one signed-in device: a single `auth_sessions` document holds
+  the digest of the current refresh token plus the last 50 replaced digests.
+  - Presenting a replaced token after the 10 s grace window revokes the session
+    (`AUTH_REFRESH_REUSED`).
+  - Within the grace window it is treated as two tabs racing (`409 AUTH_REFRESH_RACE`), and
+    the client retries with the cookie the browser now holds.
+  - The frontend also serialises refreshes across tabs with the Web Locks API.
+- **`sid` claim.** Access tokens carry a `sid` (session id) claim, so `GET /v1/me/sessions`
+  can mark the current device without the refresh cookie. The cookie is scoped to the auth
+  path and never reaches `/v1/me`.
+- **Revocation timing.**
+  - Signing out one *other* device ends its refresh session at once. Its access token stays
+    valid until it expires (at most `AUTH_ACCESS_TOKEN_TTL_SECONDS`, 15 min by default), so a
+    request never needs an extra session lookup.
+  - Password change, logout-all, admin reset, disable and role change take effect
+    immediately: the user is reloaded on every request and the `tv` claim must match.
+- **CSRF.** `/refresh` and `/logout` (cookie-authenticated) require the `X-TT-CSRF` header
+  (`AUTH_CSRF_HEADER`). The SPA sends it on every request.

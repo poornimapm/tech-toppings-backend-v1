@@ -9,25 +9,62 @@ annotated-doc==0.0.5
 annotated-types==0.8.0
     # via pydantic
 anyio==4.15.1
-    # via starlette
+    # via
+    #   httpx
+    #   starlette
+argon2-cffi==25.1.0
+    # via tech-toppings-backend (pyproject.toml)
+argon2-cffi-bindings==26.1.0
+    # via argon2-cffi
 beanie==2.2.0
     # via tech-toppings-backend (pyproject.toml)
+certifi==2026.7.22
+    # via
+    #   httpcore
+    #   httpx
+cffi==2.1.1
+    # via
+    #   argon2-cffi-bindings
+    #   cryptography
 click==8.5.0
     # via
     #   beanie
     #   uvicorn
+cryptography==50.0.2
+    # via pyjwt
+deprecated==1.3.1
+    # via limits
 dnspython==2.8.0
-    # via pymongo
+    # via
+    #   email-validator
+    #   pymongo
+email-validator==2.3.0
+    # via tech-toppings-backend (pyproject.toml)
 fastapi==0.142.4
     # via tech-toppings-backend (pyproject.toml)
 h11==0.16.0
-    # via uvicorn
+    # via
+    #   httpcore
+    #   uvicorn
+httpcore==1.0.9
+    # via httpx
+httpx==0.28.1
+    # via tech-toppings-backend (pyproject.toml)
 idna==3.20
-    # via anyio
+    # via
+    #   anyio
+    #   email-validator
+    #   httpx
 lazy-model==0.4.0
     # via beanie
+limits==5.8.0
+    # via tech-toppings-backend (pyproject.toml)
 opentelemetry-api==1.45.1
     # via fastapi
+packaging==26.3
+    # via limits
+pycparser==3.1
+    # via cffi
 pydantic==2.13.5
     # via
     #   beanie
@@ -38,6 +75,8 @@ pydantic==2.13.5
 pydantic-core==2.46.5
     # via pydantic
 pydantic-settings==2.15.0
+    # via tech-toppings-backend (pyproject.toml)
+pyjwt==2.15.1
     # via tech-toppings-backend (pyproject.toml)
 pymongo==4.18.2
     # via
@@ -54,6 +93,7 @@ typing-extensions==4.16.0
     #   anyio
     #   beanie
     #   fastapi
+    #   limits
     #   opentelemetry-api
     #   pydantic
     #   pydantic-core
@@ -64,5 +104,9 @@ typing-inspection==0.4.4
     #   fastapi
     #   pydantic
     #   pydantic-settings
+tzdata==2026.5
+    # via tech-toppings-backend (pyproject.toml)
 uvicorn==0.54.0
     # via tech-toppings-backend (pyproject.toml)
+wrapt==2.5.0
+    # via deprecated

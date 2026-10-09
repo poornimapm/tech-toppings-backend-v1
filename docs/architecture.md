@@ -56,6 +56,77 @@ Render cold starts.
 
 **Shutdown.** The lifespan closes the client.
 
+## Authentication and sessions
+
+```mermaid
+sequenceDiagram
+  participant B as Browser (SPA)
+  participant A as API
+  B->>A: POST /v1/auth/login (email, password)
+  A-->>B: {access_token (15 min), user} + Set-Cookie tt_refresh (HttpOnly, path /api/v1/auth)
+  B->>A: GET /v1/me  Authorization: Bearer access_token
+  A-->>B: 401 AUTH_TOKEN_EXPIRED (after 15 min)
+  B->>A: POST /v1/auth/refresh  (cookie + X-TT-CSRF)
+  A-->>B: new access_token + rotated cookie
+  B->>A: replay GET /v1/me with the new token
+```
+
+**Access token.** A JWT signed with `AUTH_JWT_SECRET`. Claims:
+
+| Claim | Meaning |
+|---|---|
+| `sub` | user id |
+| `role` | user role |
+| `tv` | token version |
+| `sid` | session id |
+| `exp` | expiry: 15 minutes |
+
+`authenticated_user` reloads the user on every request and checks `disabled_at`, `deleted_at`
+and `tv`. Bumping `token_version` (password change, logout-all, admin reset) therefore
+invalidates every outstanding access token at once.
+
+**Refresh sessions** (`auth_sessions`, one per device):
+- The record stores only SHA-256 digests.
+- Each refresh swaps in a new token and keeps the previous digest.
+- A replaced token coming back revokes the session. Within 10 s it is a two-tab race instead
+  (409, retry).
+- Expiry slides 30 days per use and is capped at 90 days.
+- A TTL index purges records a week after the session ends.
+
+**Dependencies:**
+
+| Dependency | Who passes |
+|---|---|
+| `CurrentUser` | Signed in, no pending password change (the default) |
+| `CurrentUserAllowingPasswordChange` | Also accounts with a pending change. Only `GET /v1/me`, password change and logout-all use it |
+| `AdminUser` | Admin role |
+| `UserScope` | Provides the caller's data `Scope` |
+
+**Lockout and rate limits.**
+- Failed logins count per account. At `AUTH_LOCKOUT_THRESHOLD` the account locks for 60 s,
+  doubling with each further failure up to 1 h.
+- Auth endpoints are also rate-limited per client IP.
+
+## Data access and isolation
+
+User-owned documents extend `OwnedDocument`: `user_id`, `module_key`, `created_by` /
+`updated_by`, timestamps and `deleted_at`.
+
+They are read and written only through `ScopedRepository`, which:
+- ANDs `{user_id: scope.owner}` and `{deleted_at: null}` into every query;
+- stamps ownership on create, whatever the caller passed;
+- answers 404 for records that are missing, malformed or owned by someone else.
+
+`Scope.unrestricted()` (admin, no owner filter) is allowed only under `app/platform/admin/`.
+
+Three test suites enforce these rules:
+- `tests/isolation/test_route_matrix.py`: user B gets 404 on user A's resource for **every**
+  `/v1` route with an id. New routes must register a resource factory there.
+- `tests/architecture/test_access_rules.py`: every non-public `/v1` route returns 401 to an
+  anonymous caller, and the unrestricted-scope rule holds.
+- Both suites read the route inventory from the OpenAPI schema. FastAPI keeps included
+  routers nested, so `app.routes` alone would miss routes.
+
 ## Configuration
 
 `app.core.config` is the only module that reads the environment.
@@ -69,6 +140,11 @@ Each concern is a frozen `BaseSettings` group with its own prefix:
 | `LOG_` | `LogSettings` |
 | `CORS_` | `CorsSettings` |
 | `SECURITY_` | `SecuritySettings` |
+| `AUTH_` | `AuthSettings` (tokens, cookie, registration, password policy, lockout, Google) |
+| `RATE_LIMIT_` | `RateLimitSettings` |
+| `API_` | `ApiSettings` (page sizes) |
+| `DEFAULT_` | `DefaultsSettings` (new-account locale, currency, time zone) |
+| `BOOTSTRAP_ADMIN_` | `BootstrapSettings` (`poe seed`) |
 
 Sources, from lowest to highest priority:
 1. `.env`

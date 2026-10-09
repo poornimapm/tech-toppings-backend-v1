@@ -15,10 +15,12 @@ from collections.abc import Sequence
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from urllib.parse import urlsplit
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
+from limits import parse as parse_rate_limit
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -33,6 +35,20 @@ class Environment(StrEnum):
 class LogFormat(StrEnum):
     JSON = "json"
     CONSOLE = "console"
+
+
+class Locale(StrEnum):
+    """UI languages the platform supports (ADR-0009)."""
+
+    EN = "en"
+    TA = "ta"
+    HI = "hi"
+
+
+class RegistrationMode(StrEnum):
+    OPEN = "open"
+    ALLOWLIST = "allowlist"  # only emails in AUTH_ALLOWED_EMAILS (ADR-0011)
+    CLOSED = "closed"
 
 
 def _group_config(prefix: str) -> SettingsConfigDict:
@@ -58,6 +74,8 @@ class AppSettings(BaseSettings):
     name: str = "Tech-Toppings API"
     version: str = "0.1.0"
     docs_enabled: bool = True
+    # Timeout for outbound HTTP calls (e.g. Google sign-in keys).
+    http_timeout_seconds: float = Field(default=10.0, gt=0)
 
 
 class MongoSettings(BaseSettings):
@@ -135,6 +153,130 @@ class SecuritySettings(BaseSettings):
     hsts_max_age_seconds: int = Field(default=0, ge=0)
 
 
+class AuthSettings(BaseSettings):
+    model_config = _group_config("AUTH_")
+
+    # Signing key for access tokens. Generate one with:
+    #   python -c "import secrets; print(secrets.token_urlsafe(48))"
+    jwt_secret: SecretStr = Field(min_length=32)
+    jwt_issuer: str = "tech-toppings-api"
+    jwt_audience: str = "tech-toppings-web"
+    access_token_ttl_seconds: int = Field(default=900, ge=60)
+    # Refresh sessions slide forward on every use but never outlive the absolute limit.
+    refresh_token_ttl_seconds: int = Field(default=30 * 86400, ge=3600)
+    refresh_absolute_ttl_seconds: int = Field(default=90 * 86400, ge=3600)
+    # Two tabs refreshing at once: a just-rotated token inside this window is a race, not theft.
+    refresh_reuse_grace_seconds: int = Field(default=10, ge=0)
+    refresh_cookie_name: str = "tt_refresh"
+    # Path as the browser sees it (requests arrive through the same-origin /api proxy).
+    refresh_cookie_path: str = "/api/v1/auth"
+    refresh_cookie_secure: bool = True
+    refresh_cookie_samesite: Literal["strict", "lax"] = "strict"
+    # Cookie-authenticated endpoints require this header (cross-site forms cannot send it).
+    csrf_header: str = "X-TT-CSRF"
+
+    registration_mode: RegistrationMode = RegistrationMode.ALLOWLIST
+    allowed_emails: Annotated[tuple[str, ...], NoDecode] = ()
+
+    password_min_length: int = Field(default=10, ge=8)
+    password_max_length: int = Field(default=128, ge=16, le=1024)
+    # Required character classes out of: lowercase, uppercase, digit, symbol.
+    password_min_classes: int = Field(default=2, ge=1, le=4)
+
+    lockout_threshold: int = Field(default=5, ge=1)
+    lockout_base_seconds: int = Field(default=60, ge=1)
+    lockout_max_seconds: int = Field(default=3600, ge=1)
+
+    # Argon2id cost; defaults follow OWASP guidance and stay light enough for a 512 MB instance.
+    argon2_time_cost: int = Field(default=2, ge=1)
+    argon2_memory_kib: int = Field(default=19456, ge=8192)
+    argon2_parallelism: int = Field(default=1, ge=1)
+
+    # Google sign-in is enabled only when a client id is configured.
+    google_client_id: str | None = None
+    google_jwks_url: str = "https://www.googleapis.com/oauth2/v3/certs"
+    google_issuers: Annotated[tuple[str, ...], NoDecode] = (
+        "accounts.google.com",
+        "https://accounts.google.com",
+    )
+    google_jwks_cache_seconds: int = Field(default=3600, ge=60)
+
+    @field_validator("allowed_emails", mode="before")
+    @classmethod
+    def normalise_emails(cls, value: Any) -> Any:
+        items = _split_csv(value)
+        return [item.lower() for item in items] if isinstance(items, list) else items
+
+    @field_validator("google_issuers", mode="before")
+    @classmethod
+    def split_issuers(cls, value: Any) -> Any:
+        return _split_csv(value)
+
+    @field_validator("google_client_id")
+    @classmethod
+    def blank_is_none(cls, value: str | None) -> str | None:
+        return value or None
+
+
+class RateLimitSettings(BaseSettings):
+    model_config = _group_config("RATE_LIMIT_")
+
+    enabled: bool = True
+    # limits storage URI; in-memory suits a single instance (Render free).
+    storage_uri: str = "async+memory://"
+    auth_login: str = "10/minute"
+    auth_register: str = "5/minute"
+    auth_refresh: str = "60/minute"
+    auth_password_change: str = "10/minute"  # noqa: S105 - a request rate, not a password
+
+    @field_validator("auth_login", "auth_register", "auth_refresh", "auth_password_change")
+    @classmethod
+    def valid_rate(cls, value: str) -> str:
+        parse_rate_limit(value)  # raises ValueError on e.g. "ten per minute"
+        return value
+
+
+class ApiSettings(BaseSettings):
+    model_config = _group_config("API_")
+
+    default_page_size: int = Field(default=20, ge=1)
+    max_page_size: int = Field(default=100, ge=1)
+
+
+class DefaultsSettings(BaseSettings):
+    """Defaults applied to new user accounts."""
+
+    model_config = _group_config("DEFAULT_")
+
+    locale: Locale = Locale.EN
+    currency: str = Field(default="INR", pattern=r"^[A-Z]{3}$")
+    timezone: str = "Asia/Kolkata"
+
+    @field_validator("timezone")
+    @classmethod
+    def known_timezone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError(f"unknown time zone {value!r}") from exc
+        return value
+
+
+class BootstrapSettings(BaseSettings):
+    """First admin account, created or promoted by `poe seed` (skipped when unset)."""
+
+    model_config = _group_config("BOOTSTRAP_ADMIN_")
+
+    email: EmailStr | None = None
+    password: SecretStr | None = None
+    name: str = "Administrator"
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def blank_email_is_none(cls, value: Any) -> Any:
+        return value or None
+
+
 class Settings(BaseModel):
     """Root settings object; one attribute per configuration group."""
 
@@ -145,6 +287,11 @@ class Settings(BaseModel):
     log: LogSettings
     cors: CorsSettings
     security: SecuritySettings
+    auth: AuthSettings
+    rate_limit: RateLimitSettings
+    api: ApiSettings
+    defaults: DefaultsSettings
+    bootstrap: BootstrapSettings
 
 
 def default_env_files() -> tuple[Path, ...]:
@@ -162,6 +309,11 @@ def load_settings(env_files: Sequence[Path] | None = None) -> Settings:
         log=LogSettings(_env_file=existing),
         cors=CorsSettings(_env_file=existing),
         security=SecuritySettings(_env_file=existing),
+        auth=AuthSettings(_env_file=existing),  # jwt_secret is required
+        rate_limit=RateLimitSettings(_env_file=existing),
+        api=ApiSettings(_env_file=existing),
+        defaults=DefaultsSettings(_env_file=existing),
+        bootstrap=BootstrapSettings(_env_file=existing),
     )
 
 

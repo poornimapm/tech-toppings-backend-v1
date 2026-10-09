@@ -47,6 +47,7 @@ async def test_docs_can_be_disabled(mongo_uri: str) -> None:
 
 def test_export_script_writes_schema(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MONGO_URI", "mongodb://localhost:27017/openapi-export")
+    monkeypatch.setenv("AUTH_JWT_SECRET", "e" * 40)
     get_settings.cache_clear()
     output = tmp_path / "openapi.json"
     try:
@@ -56,4 +57,5 @@ def test_export_script_writes_schema(tmp_path: Path, monkeypatch: pytest.MonkeyP
 
     assert exit_code == 0
     schema = json.loads(output.read_text(encoding="utf-8"))
-    assert {"/healthz", "/readyz"} <= set(schema["paths"])
+    assert {"/healthz", "/readyz", "/v1/auth/login", "/v1/me"} <= set(schema["paths"])
+    assert "/v1/test-notes" not in schema["paths"]  # test fixtures never leak into the real app

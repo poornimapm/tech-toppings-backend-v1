@@ -5,15 +5,33 @@ import uuid
 from collections.abc import AsyncIterator, Iterator
 
 import pytest
-from httpx import AsyncClient
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
 from pymongo import AsyncMongoClient
 from pymongo.errors import PyMongoError
 
 from app.core.config import Settings
-from app.main import create_app
-from tests.helpers import TEST_MONGO_BASE_URI, build_settings, running_client, with_database
+from tests.helpers import (
+    TEST_MONGO_BASE_URI,
+    FrozenClock,
+    build_app,
+    build_settings,
+    running_client,
+    with_database,
+)
 
-SETTINGS_ENV_PREFIXES = ("APP_", "MONGO_", "LOG_", "CORS_", "SECURITY_")
+SETTINGS_ENV_PREFIXES = (
+    "APP_",
+    "MONGO_",
+    "LOG_",
+    "CORS_",
+    "SECURITY_",
+    "AUTH_",
+    "RATE_LIMIT_",
+    "API_",
+    "DEFAULT_",
+    "BOOTSTRAP_ADMIN_",
+)
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -56,6 +74,27 @@ def settings(mongo_uri: str) -> Settings:
 
 
 @pytest.fixture
-async def client(settings: Settings) -> AsyncIterator[AsyncClient]:
-    async with running_client(create_app(settings)) as http:
+def clock() -> FrozenClock:
+    return FrozenClock()
+
+
+@pytest.fixture
+def app(settings: Settings, clock: FrozenClock) -> FastAPI:
+    return build_app(settings, clock)
+
+
+@pytest.fixture
+async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
+    async with running_client(app) as http:
+        yield http
+
+
+@pytest.fixture
+async def other_client(
+    client: AsyncClient,  # noqa: ARG001 - requested so the app lifespan is already running
+    app: FastAPI,
+) -> AsyncIterator[AsyncClient]:
+    """A second browser (own cookie jar) against the same running app."""
+    transport = ASGITransport(app=app, raise_app_exceptions=False)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as http:
         yield http

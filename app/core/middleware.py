@@ -59,7 +59,8 @@ class RequestContextMiddleware:
 
         token = request_id_var.set(request_id)
         try:
-            with structlog.contextvars.bound_contextvars(request_id=request_id):
+            # user_id is bound later by the auth dependency; None here resets it per request.
+            with structlog.contextvars.bound_contextvars(request_id=request_id, user_id=None):
                 try:
                     await self.app(scope, receive, send_with_request_id)
                 finally:

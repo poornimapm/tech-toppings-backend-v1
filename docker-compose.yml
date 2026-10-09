@@ -8,6 +8,9 @@ services:
       - "8000:8000"
     environment:
       MONGO_URI: mongodb://mongo:27017/tech-toppings-v1
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?set AUTH_JWT_SECRET (see .env.example)}
+      AUTH_REGISTRATION_MODE: ${AUTH_REGISTRATION_MODE:-allowlist}
+      AUTH_ALLOWED_EMAILS: ${AUTH_ALLOWED_EMAILS:-}
       APP_ENV: development
       LOG_FORMAT: console
     depends_on:

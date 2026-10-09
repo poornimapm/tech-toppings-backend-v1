@@ -9,12 +9,18 @@ description = "Tech-Toppings API: a modular FastAPI backend hosting independent 
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
 dependencies = [
+  "argon2-cffi>=25.1",
   "beanie>=2.2",
+  "email-validator>=2.3",
   "fastapi>=0.142",
+  "httpx>=0.28",
+  "limits>=5.8",
   "pydantic>=2.13",
   "pydantic-settings>=2.15",
+  "pyjwt[crypto]>=2.15",
   "pymongo>=4.18",
   "structlog>=26.1",
+  "tzdata>=2026.5",
   "uvicorn>=0.54",
 ]
 
@@ -22,7 +28,6 @@ dependencies = [
 dev = [
   "actionlint-py>=1.7",
   "asgi-lifespan>=2.1",
-  "httpx>=0.28",
   "import-linter>=2.15",
   "mypy>=2.4",
   "pip-audit>=2.10",
@@ -32,6 +37,7 @@ dev = [
   "pytest>=9.1",
   "pytest-asyncio>=1.4",
   "pytest-cov>=7.1",
+  "respx>=0.23",
   "ruff>=0.16",
 ]
 
@@ -76,6 +82,11 @@ sync.sequence = ["pip-sync requirements/dev.lock", "pip install --no-deps --edit
 sync.default_item_type = "cmd"
 sync.help = "Make .venv match requirements/dev.lock exactly"
 
+seed.cmd = "python scripts/seed.py"
+seed.help = "Idempotent seed data (bootstrap admin from BOOTSTRAP_ADMIN_*)"
+reset-password.cmd = "python scripts/reset_password.py"
+reset-password.help = "Admin reset: poe reset-password --email someone@example.com"
+
 openapi.cmd = "python scripts/export_openapi.py"
 openapi.help = "Write openapi.json (consumed by the frontend type generator)"
 docker-build.cmd = "docker build --tag tech-toppings-backend:local ."
@@ -115,6 +126,7 @@ ban-relative-imports = "all"
 "tests/helpers.py" = ["S101", "TID251"]  # reads TEST_MONGO_URI
 "tests/conftest.py" = ["TID251"]  # strips settings variables for hermetic tests
 "scripts/**" = ["T20"]
+"app/**/router.py" = ["PLR0913", "PLR0917"]  # FastAPI endpoints receive many injected dependencies
 
 # ---------------------------------------------------------------- mypy
 [tool.mypy]

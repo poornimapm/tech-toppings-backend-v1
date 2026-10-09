@@ -10,6 +10,7 @@ from typing import Annotated, cast
 
 from fastapi import Depends, Request
 
+from app.core.clock import Clock
 from app.core.config import Settings
 from app.core.db import Database
 
@@ -22,5 +23,10 @@ def get_database(request: Request) -> Database:
     return cast(Database, request.app.state.database)
 
 
+def get_clock(request: Request) -> Clock:
+    return cast(Clock, request.app.state.clock)
+
+
 SettingsDep = Annotated[Settings, Depends(get_app_settings)]
 DatabaseDep = Annotated[Database, Depends(get_database)]
+ClockDep = Annotated[Clock, Depends(get_clock)]

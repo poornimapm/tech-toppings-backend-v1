@@ -310,7 +310,7 @@ Every user-owned document extends `OwnedDocument`, which adds these fields:
 |---|---|---|
 | `users` | email (lower-cased, unique), password_hash (nullable for Google-only), name, role (`admin`/`user`), locale (`en`/`ta`/`hi`), theme, ui_mode (`standard`/`simple`), base_currency, timezone, ai_consent_at, token_version, must_change_password, failed_logins, locked_until, auth_providers[{provider, subject}], totp{secret_enc, enabled_at, recovery_hashes[]}, last_login_at, disabled_at, deleted_at | `email` unique; `auth_providers.subject` |
 | `allowed_emails` | email (lower-cased), note, added_by | `email` unique. The effective allowlist is `AUTH_ALLOWED_EMAILS` (env) ∪ this collection. |
-| `refresh_tokens` | user_id, family_id, token_hash, expires_at, revoked_at, replaced_by, user_agent, ip | `token_hash` unique; `{user_id, revoked_at}`; TTL `expires_at` |
+| `auth_sessions` | one per signed-in device: user_id, token_hash (current refresh token), previous_token_hashes[] (reuse detection), last_used_at, rotated_at, expires_at (sliding), absolute_expires_at, purge_at, revoked_at, revoked_reason, user_agent, ip | `token_hash` unique; `previous_token_hashes`; `{user_id, revoked_at, last_used_at}`; TTL `purge_at` |
 | `modules` | key, name_key, icon, color, status, global_enabled, order, overrides{} | `key` unique |
 | `user_modules` | user_id, module_key, enabled, pinned, order, settings{} | `{user_id, module_key}` unique |
 | `module_interest` | user_id, module_key ("Notify me") | `{user_id, module_key}` unique |

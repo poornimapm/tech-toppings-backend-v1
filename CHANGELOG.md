@@ -6,7 +6,63 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Added — Phase 1: foundations (2026-10-08)
+### Added — Phase 2: auth, users, RBAC (2026-10-08)
+
+**Accounts**
+- Registration through an email allowlist (`AUTH_REGISTRATION_MODE` = `allowlist` | `open` |
+  `closed`). The bootstrap admin email is always allowed.
+- Argon2id password hashing (OWASP parameters, rehash on login) and a configurable policy.
+
+**Sign-in**
+- Login with lockout and exponential backoff.
+- Per-client rate limits on login, register, refresh and password change (`limits`).
+
+**Sessions and tokens**
+- 15-minute JWT access tokens with `sub`, `role`, `tv` (token version) and `sid` (session).
+  The user is reloaded on every request, so disable, role change, password change and
+  logout-all apply immediately.
+- One `auth_sessions` document per device. The refresh token is opaque, stored as a SHA-256
+  digest, rotated on every use and sent only as an `HttpOnly; SameSite=Strict` cookie.
+- Reuse detection revokes the session. A 10-second grace window returns a retryable
+  `409 AUTH_REFRESH_RACE` when two tabs refresh at once.
+- Sliding 30-day expiry with a 90-day absolute cap.
+- CSRF header on cookie-authenticated endpoints.
+- Logout, logout-all, and password change (signs out other devices; required after an
+  admin reset).
+
+**Google and profile**
+- Optional Google sign-in: ID-token verification against Google's keys (cached), linking by
+  verified email, allowlist applies.
+- `GET/PATCH /v1/me`: name, language, theme, UI mode, currency, time zone, AI consent.
+  Protected fields are rejected.
+- `GET /v1/me/sessions` (paginated, sortable, current device marked) and
+  `DELETE /v1/me/sessions/{id}`.
+
+**Data access and roles**
+- `ScopedRepository` + `Scope`: owner filter and soft-delete filter on every query. Ownership
+  stamped on create. Other users' records return 404.
+- `CurrentUser`, `AdminUser`, `UserScope` and `require_role` dependencies.
+
+**Operator tasks**
+- `poe seed` (bootstrap admin, idempotent) and `poe reset-password --email …` (one-time
+  password, forced change, signs out everywhere).
+
+**Core building blocks**
+- Clock injection, typed `Page[T]` pagination with whitelisted sort fields, and generic
+  401/403/409/429 error classes with headers.
+
+**Tests (152, 97.8% coverage)**
+- Route-matrix isolation: every id route; user B always gets 404.
+- "Auth by default" check over the OpenAPI inventory.
+- Admin vs user.
+- No secrets in logs.
+- Lockout, rotation, reuse, race, expiry and Google flows.
+
+### Fixed
+- Registration no longer trims whitespace from passwords, which login would not match.
+- Error responses no longer carry `X-Request-ID` twice.
+
+## Phase 1 — foundations (2026-10-08)
 
 **App and config**
 - FastAPI app factory `create_app(settings)` with a lifespan, run via
