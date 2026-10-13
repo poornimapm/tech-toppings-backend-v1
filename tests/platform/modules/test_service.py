@@ -26,7 +26,7 @@ from tests.helpers import FrozenClock
 
 def loaded(key: str, order: int = 1, tile_stat: Any = None) -> LoadedModule:
     manifest = ModuleManifest(key=key, version="1.0.0", status=ModuleStatus.LIVE, order=order)
-    return LoadedModule(manifest, None, None, (), tile_stat)
+    return LoadedModule(f"tests.{key}", manifest, None, None, (), tile_stat)
 
 
 def effective(key: str, rank: int, position: int | None = None) -> EffectiveModule:

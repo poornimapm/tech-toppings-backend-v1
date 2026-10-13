@@ -31,8 +31,8 @@ def test_discovers_the_real_upcoming_modules() -> None:
     assert all(module.manifest.status is ModuleStatus.COMING_SOON for module in modules)
 
 
-def test_orders_by_manifest_order_then_key(module_package: MakePackage) -> None:
-    package = module_package({
+def test_orders_by_manifest_order_then_key(plugin_package: MakePackage) -> None:
+    package = plugin_package({
         "beta_mod": {"manifest.py": manifest("beta_mod", order=2)},
         "alpha_mod": {"manifest.py": manifest("alpha_mod", order=2)},
         "first_mod": {"manifest.py": manifest("first_mod", order=1)},
@@ -43,8 +43,8 @@ def test_orders_by_manifest_order_then_key(module_package: MakePackage) -> None:
     assert keys == ["first_mod", "alpha_mod", "beta_mod"]
 
 
-def test_resolves_routers_documents_and_tile_stats(module_package: MakePackage) -> None:
-    package = module_package({
+def test_resolves_routers_documents_and_tile_stats(plugin_package: MakePackage) -> None:
+    package = plugin_package({
         "demo": {
             "manifest.py": manifest(
                 "demo", router='"PKG.api:router"', documents='("PKG.models:Thing",)',
@@ -105,17 +105,17 @@ def test_resolves_routers_documents_and_tile_stats(module_package: MakePackage) 
     ],
 )
 def test_rejects_broken_modules_with_a_clear_message(
-    module_package: MakePackage, files: dict[str, str], message: str
+    plugin_package: MakePackage, files: dict[str, str], message: str
 ) -> None:
-    package = module_package({"demo": files})
+    package = plugin_package({"demo": files})
 
     with pytest.raises(ModuleDiscoveryError, match=message):
         discover_modules((package,))
 
 
-def test_rejects_the_same_key_in_two_packages(module_package: MakePackage) -> None:
-    first = module_package({"demo": {"manifest.py": manifest("demo")}})
-    second = module_package({"demo": {"manifest.py": manifest("demo")}})
+def test_rejects_the_same_key_in_two_packages(plugin_package: MakePackage) -> None:
+    first = plugin_package({"demo": {"manifest.py": manifest("demo")}})
+    second = plugin_package({"demo": {"manifest.py": manifest("demo")}})
 
     with pytest.raises(ModuleDiscoveryError, match="duplicate module key 'demo'"):
         discover_modules((first, second))

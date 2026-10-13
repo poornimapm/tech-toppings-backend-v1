@@ -19,6 +19,9 @@ from app.core.errors import (
 from app.core.logging import get_logger
 from app.core.pagination import Page, PageParams, PageParamsDep, parse_sort
 from app.core.repository import Scope, ScopedRepository
+from app.platform.agents.catalog import StaticOutcome, StaticRequest
+from app.platform.agents.models import AgentRun, AgentUsage
+from app.platform.agents.tools import ToolBox, ToolContext, tool
 from app.platform.auth.deps import AdminUser, CurrentUser, UserScope
 from app.platform.auth.models import AuthSession
 from app.platform.modules.manifest import ModuleManifest, ModuleStatus, TileStat
@@ -26,7 +29,7 @@ from app.platform.modules.models import ModuleOverride, UserModule
 from app.platform.users.models import User
 
 # Beanie document models owned by the platform; registered with the database at startup.
-PLATFORM_DOCUMENTS = (User, AuthSession, ModuleOverride, UserModule)
+PLATFORM_DOCUMENTS = (User, AuthSession, ModuleOverride, UserModule, AgentRun, AgentUsage)
 
 __all__ = [
     "PLATFORM_DOCUMENTS",
@@ -47,11 +50,16 @@ __all__ = [
     "Scope",
     "ScopedRepository",
     "SettingsDep",
+    "StaticOutcome",
+    "StaticRequest",
     "TileStat",
     "TimestampedDocument",
+    "ToolBox",
+    "ToolContext",
     "User",
     "UserScope",
     "error_responses",
     "get_logger",
     "parse_sort",
+    "tool",
 ]

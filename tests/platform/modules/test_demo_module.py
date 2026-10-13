@@ -71,9 +71,9 @@ async def ping_count(scope: Scope, clock: object) -> TileStat:
 
 
 async def test_a_new_module_folder_is_listed_mounted_and_counted(
-    module_package: MakePackage, mongo_uri: str
+    plugin_package: MakePackage, mongo_uri: str
 ) -> None:
-    package = module_package({"demo": DEMO_MODULE})
+    package = plugin_package({"demo": DEMO_MODULE})
     settings = build_settings(
         mongo_uri,
         modules=ModulesSettings(_env_file=None, packages=(*TEST_MODULE_PACKAGES, package)),
@@ -95,9 +95,9 @@ async def test_a_new_module_folder_is_listed_mounted_and_counted(
 
 
 async def test_a_new_modules_routes_require_sign_in(
-    module_package: MakePackage, mongo_uri: str
+    plugin_package: MakePackage, mongo_uri: str
 ) -> None:
-    package = module_package({"demo": DEMO_MODULE})
+    package = plugin_package({"demo": DEMO_MODULE})
     settings = build_settings(
         mongo_uri, modules=ModulesSettings(_env_file=None, packages=(package,))
     )

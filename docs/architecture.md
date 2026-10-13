@@ -188,6 +188,40 @@ Module keys are a shared catalog, not owned records: every call changes only the
 duplicates. Stored settings that a newer module version no longer accepts fall back to their
 defaults instead of failing.
 
+## Agents
+
+Skill-driven agents (ADR-0013) live in `platform/agents/`. The package only runs them:
+- agents are `agents/<name>.md`;
+- skills are `skills/<name>/SKILL.md` (Agent Skills format) with an optional
+  `scripts/static.py` and `references/`;
+- tools are `@tool` functions in a `tools.py`.
+
+All three are discovered from platform sub-packages and modules with the same folder scan
+as modules.
+
+```mermaid
+flowchart LR
+  Ask["POST /v1/agents/{name}/runs"] --> Plan{"policy.plan<br/>mode + blockers + fallback"}
+  Plan -- agent --> Loop["model + load_skill + tools<br/>(free providers, quota, redaction)"]
+  Plan -- static --> Script["skills/*/scripts/static.py<br/>(same tools, lexicon data)"]
+  Plan -- unavailable --> Honest["status: unavailable + reason"]
+  Loop --> Run[("agent_runs (TTL)")]
+  Script --> Run
+  Run -- "write tools" --> Proposal["proposals"] -- "POST .../confirm" --> Tool["tool runs with the user's Scope"]
+```
+
+| Tool effect | During a run | Afterwards |
+|---|---|---|
+| `read` | runs at once, result goes back to the model | — |
+| `write` | becomes a proposal with a summary | runs only when the user confirms (atomic claim, expires) |
+| `client` | validated, handed to the UI (open a page) | the UI acts |
+
+`AGENT_MODE`, `AGENT_SKILL_MODES` and `AGENT_FALLBACK` decide between agent mode, static
+mode and an honest "unavailable". The blockers are: no consent, quota used up, no
+provider, all providers failing.
+
+Daily budgets are counted per AI call (`agent_usage`, per user and global, by UTC day).
+
 ## Configuration
 
 `app.core.config` is the only module that reads the environment.
@@ -206,6 +240,7 @@ Each concern is a frozen `BaseSettings` group with its own prefix:
 | `API_` | `ApiSettings` (page sizes) |
 | `DEFAULT_` | `DefaultsSettings` (new-account locale, currency, time zone) |
 | `MODULES_` | `ModulesSettings` (packages to discover, tile-stat timeout) |
+| `AGENT_` | `AgentSettings` (mode, fallback, providers, budgets, retention, redaction) |
 | `BOOTSTRAP_ADMIN_` | `BootstrapSettings` (`poe seed`) |
 
 Sources, from lowest to highest priority:

@@ -1,6 +1,6 @@
 # ADR-0005: AI service: provider chain, quotas, caching, PII redaction, rule fallback
 
-- **Status:** Accepted
+- **Status:** Superseded in part by [ADR-0013](0013-skill-driven-agents-with-mode-and-fallback-switches.md) (prompts, fallback, provider protocol); consent, quotas and redaction still apply
 - **Date:** 2026-10-08
 - **Deciders:** project owner (plan approved 2026-10-08)
 

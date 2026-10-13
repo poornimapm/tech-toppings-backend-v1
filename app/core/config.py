@@ -11,6 +11,7 @@ so ``.env.example`` documents every variable by group.
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Sequence
 from enum import StrEnum
 from functools import lru_cache
@@ -228,8 +229,11 @@ class RateLimitSettings(BaseSettings):
     auth_register: str = "5/minute"
     auth_refresh: str = "60/minute"
     auth_password_change: str = "10/minute"  # noqa: S105 - a request rate, not a password
+    agent_run: str = "20/minute"
 
-    @field_validator("auth_login", "auth_register", "auth_refresh", "auth_password_change")
+    @field_validator(
+        "auth_login", "auth_register", "auth_refresh", "auth_password_change", "agent_run"
+    )
     @classmethod
     def valid_rate(cls, value: str) -> str:
         parse_rate_limit(value)  # raises ValueError on e.g. "ten per minute"
@@ -278,6 +282,81 @@ class ModulesSettings(BaseSettings):
         return _split_csv(value)
 
 
+class AgentMode(StrEnum):
+    AGENT = "agent"  # an AI agent runs the skill
+    STATIC = "static"  # the skill's deterministic script runs; no AI involved
+
+
+class ProviderSettings(BaseModel):
+    """One OpenAI-compatible chat-completions endpoint (Gemini, Groq, OpenRouter, Ollama ...)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str = Field(pattern=r"^[a-z0-9-]{1,32}$")
+    base_url: str = Field(pattern=r"^https?://")
+    model: str = Field(min_length=1)
+    api_key: SecretStr | None = None
+    timeout_seconds: float = Field(default=20.0, gt=0, le=120)
+    temperature: float = Field(default=0.2, ge=0, le=2)
+    max_tokens: int = Field(default=800, ge=16, le=8192)
+
+
+class AgentSettings(BaseSettings):
+    """Skill-driven agents (ADR-0013). Mode and fallback are switches, so the app keeps working
+    when free AI quota runs out: ``AGENT_MODE=static`` skips AI entirely, and with
+    ``AGENT_FALLBACK=true`` a run that can't use AI falls back to the skill's static script
+    (otherwise it answers honestly that AI is unavailable)."""
+
+    model_config = _group_config("AGENT_")
+
+    mode: AgentMode = AgentMode.AGENT
+    fallback: bool = True
+    # Per-skill mode overrides: "manage-modules=static,other-skill=agent".
+    skill_modes: Annotated[dict[str, AgentMode], NoDecode] = Field(default_factory=dict)
+    # Tried in order; a provider answering 429 rests for provider_cooldown_seconds.
+    providers: tuple[ProviderSettings, ...] = ()
+    provider_cooldown_seconds: int = Field(default=60, ge=1)
+    # Packages whose sub-packages may contribute agents/, skills/ and tools.py (modules always do).
+    packages: Annotated[tuple[str, ...], NoDecode] = ("app.platform",)
+    max_steps: int = Field(default=6, ge=1, le=20)
+    max_input_chars: int = Field(default=1000, ge=10, le=10000)
+    user_daily_calls: int = Field(default=30, ge=0)
+    global_daily_calls: int = Field(default=800, ge=0)
+    run_retention_days: int = Field(default=7, ge=1)
+    proposal_ttl_minutes: int = Field(default=30, ge=1)
+    # Regexes masked out of user text before it reaches a provider (env value: a JSON list).
+    redact_patterns: tuple[str, ...] = (
+        r"[\w.+-]+@[\w-]+(?:\.[\w-]+)*",  # emails and UPI ids
+        r"\+?\d[\d\s-]{8,}\d",  # phone, account and card numbers
+    )
+
+    @field_validator("skill_modes", mode="before")
+    @classmethod
+    def parse_skill_modes(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            pairs = (item.split("=", 1) for item in _split_csv(value))
+            return {name.strip(): mode.strip() for name, mode in pairs}
+        return value
+
+    @field_validator("packages", mode="before")
+    @classmethod
+    def split_packages(cls, value: Any) -> Any:
+        return _split_csv(value)
+
+    @field_validator("redact_patterns")
+    @classmethod
+    def valid_patterns(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        for pattern in value:
+            try:
+                re.compile(pattern)  # fail at startup, not on the first request
+            except re.error as exc:
+                raise ValueError(f"invalid pattern {pattern!r}: {exc}") from exc
+        return value
+
+    def mode_for(self, skill: str) -> AgentMode:
+        return self.skill_modes.get(skill, self.mode)
+
+
 class BootstrapSettings(BaseSettings):
     """First admin account, created or promoted by `poe seed` (skipped when unset)."""
 
@@ -308,6 +387,7 @@ class Settings(BaseModel):
     api: ApiSettings
     defaults: DefaultsSettings
     modules: ModulesSettings
+    agent: AgentSettings
     bootstrap: BootstrapSettings
 
 
@@ -331,6 +411,7 @@ def load_settings(env_files: Sequence[Path] | None = None) -> Settings:
         api=ApiSettings(_env_file=existing),
         defaults=DefaultsSettings(_env_file=existing),
         modules=ModulesSettings(_env_file=existing),
+        agent=AgentSettings(_env_file=existing),
         bootstrap=BootstrapSettings(_env_file=existing),
     )
 

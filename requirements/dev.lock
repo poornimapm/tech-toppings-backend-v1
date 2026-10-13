@@ -209,6 +209,7 @@ pyyaml==6.0.3
     # via
     #   poethepoet
     #   pre-commit
+    #   tech-toppings-backend (pyproject.toml)
 requests==2.34.2
     # via
     #   cachecontrol
@@ -233,6 +234,8 @@ tomli==2.5.0
     # via pip-audit
 tomli-w==1.2.0
     # via pip-audit
+types-pyyaml==6.0.12.20260906
+    # via tech-toppings-backend (pyproject.toml)
 typing-extensions==4.16.0
     # via
     #   anyio

@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import importlib
 import inspect
-import pkgutil
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import cast
@@ -14,16 +13,18 @@ from beanie import Document
 from fastapi import APIRouter
 
 from app.platform.modules.manifest import ModuleManifest, TileStatProvider
+from app.platform.plugins import PluginError, import_optional, subpackages
 
 MANIFEST_ATTRIBUTE = "MANIFEST"
 
 
-class ModuleDiscoveryError(RuntimeError):
+class ModuleDiscoveryError(PluginError):
     pass
 
 
 @dataclass(frozen=True)
 class LoadedModule:
+    package: str  # e.g. "app.modules.expenses": also scanned for agents, skills and tools
     manifest: ModuleManifest
     router: APIRouter | None
     admin_router: APIRouter | None
@@ -69,14 +70,14 @@ def _tile_stat(path: str | None, owner: str) -> TileStatProvider | None:
     return cast(TileStatProvider, provider)
 
 
-def _load_manifest(package_name: str, folder: str) -> ModuleManifest:
-    owner = f"{package_name}.{folder}"
+def _load_manifest(owner: str) -> ModuleManifest:
+    folder = owner.rsplit(".", 1)[-1]
     try:
-        source = importlib.import_module(f"{owner}.manifest")
-    except ModuleNotFoundError as exc:
-        if exc.name != f"{owner}.manifest":  # the manifest exists but imports something missing
-            raise ModuleDiscoveryError(f"{owner}.manifest cannot be imported: {exc}") from exc
-        raise ModuleDiscoveryError(f"module folder {owner!r} has no manifest.py") from exc
+        source = import_optional(f"{owner}.manifest")
+    except PluginError as exc:
+        raise ModuleDiscoveryError(str(exc)) from exc
+    if source is None:
+        raise ModuleDiscoveryError(f"module folder {owner!r} has no manifest.py")
     manifest = getattr(source, MANIFEST_ATTRIBUTE, None)
     if not isinstance(manifest, ModuleManifest):
         raise ModuleDiscoveryError(f"{owner}.manifest must define MANIFEST = ModuleManifest(...)")
@@ -91,19 +92,16 @@ def _load_manifest(package_name: str, folder: str) -> ModuleManifest:
 def discover_modules(packages: Sequence[str]) -> list[LoadedModule]:
     """Load every module under ``packages``, ordered by manifest ``order`` then key."""
     loaded: dict[str, LoadedModule] = {}
-    for package_name in packages:
-        package = importlib.import_module(package_name)
-        folders = sorted(info.name for info in pkgutil.iter_modules(package.__path__) if info.ispkg)
-        for folder in folders:
-            manifest = _load_manifest(package_name, folder)
-            if manifest.key in loaded:
-                raise ModuleDiscoveryError(f"duplicate module key {manifest.key!r}")
-            owner = f"{package_name}.{folder}"
-            loaded[manifest.key] = LoadedModule(
-                manifest=manifest,
-                router=_router(manifest.router, owner),
-                admin_router=_router(manifest.admin_router, owner),
-                documents=_documents(manifest.documents, owner),
-                tile_stat=_tile_stat(manifest.tile_stat, owner),
-            )
+    for owner in (folder for package in packages for folder in subpackages(package)):
+        manifest = _load_manifest(owner)
+        if manifest.key in loaded:
+            raise ModuleDiscoveryError(f"duplicate module key {manifest.key!r}")
+        loaded[manifest.key] = LoadedModule(
+            package=owner,
+            manifest=manifest,
+            router=_router(manifest.router, owner),
+            admin_router=_router(manifest.admin_router, owner),
+            documents=_documents(manifest.documents, owner),
+            tile_stat=_tile_stat(manifest.tile_stat, owner),
+        )
     return sorted(loaded.values(), key=lambda module: (module.manifest.order, module.manifest.key))

@@ -24,6 +24,7 @@ from pydantic import SecretStr
 
 from app.core.clock import Clock
 from app.core.config import (
+    AgentSettings,
     ApiSettings,
     AppSettings,
     AuthSettings,
@@ -91,6 +92,7 @@ def build_settings(mongo_uri: str, **groups: Any) -> Settings:
         "api": ApiSettings(_env_file=None),
         "defaults": DefaultsSettings(_env_file=None),
         "modules": ModulesSettings(_env_file=None, packages=TEST_MODULE_PACKAGES),
+        "agent": AgentSettings(_env_file=None),
         "bootstrap": BootstrapSettings(_env_file=None),
     }
     return Settings(**(defaults | groups))

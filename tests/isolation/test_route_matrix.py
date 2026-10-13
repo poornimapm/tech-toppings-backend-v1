@@ -13,6 +13,7 @@ from __future__ import annotations
 import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from typing import Any
 
 import pytest
 from fastapi import FastAPI
@@ -29,6 +30,7 @@ WRITE_BODIES: dict[str, dict[str, object]] = {
 ROUTE_BODIES: dict[tuple[str, str], dict[str, object]] = {
     ("PATCH", "/v1/modules/{key}/preferences"): {"pinned": False, "enabled": False},
     ("PUT", "/v1/modules/{key}/settings"): {"default_sort": "newest", "preview_length": 10},
+    ("POST", "/v1/agents/{name}/runs"): {"input": "pin notes"},
 }
 
 
@@ -81,12 +83,47 @@ async def check_session(client: AsyncClient, _owner: Account, _session_id: str) 
     assert (await client.post("/v1/auth/refresh", headers=CSRF)).status_code == 200
 
 
+async def agent_run(client: AsyncClient, owner: Account) -> dict[str, Any]:
+    """A run that proposes a change (static mode: no AI needed in tests)."""
+    response = await client.post(
+        "/v1/agents/assistant/runs", headers=owner.headers, json={"input": "hide journal"}
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["proposals"], response.text
+    return dict(response.json())
+
+
+async def create_run(client: AsyncClient, owner: Account) -> str:
+    return str((await agent_run(client, owner))["id"])
+
+
+async def check_run(client: AsyncClient, owner: Account, run_id: str) -> None:
+    response = await client.get(f"/v1/agents/runs/{run_id}", headers=owner.headers)
+    assert response.status_code == 200
+    assert response.json()["proposals"][0]["status"] == "pending"
+
+
+async def create_proposal(client: AsyncClient, owner: Account) -> str:
+    return str((await agent_run(client, owner))["proposals"][0]["id"])
+
+
+async def check_proposal(client: AsyncClient, owner: Account, proposal_id: str) -> None:
+    journal = (await client.get("/v1/modules/journal", headers=owner.headers)).json()
+    assert journal["enabled"] is True  # the intruder's call never ran it
+    rejected = await client.post(
+        f"/v1/agents/proposals/{proposal_id}/reject", headers=owner.headers
+    )
+    assert rejected.json()["status"] == "rejected"  # and it is still the owner's to decide
+
+
 Factory = Callable[[AsyncClient, Account], Awaitable[str]]
 Checker = Callable[[AsyncClient, Account, str], Awaitable[None]]
 
 RESOURCES: dict[str, tuple[Factory, Checker]] = {
     "note_id": (create_note, check_note),
     "session_id": (current_session, check_session),
+    "run_id": (create_run, check_run),
+    "proposal_id": (create_proposal, check_proposal),
 }
 
 
@@ -105,7 +142,24 @@ async def snapshot_module(client: AsyncClient, owner: Account, key: str) -> dict
     return {"view": view, "settings": settings}
 
 
-CATALOG: dict[str, Factory] = {"key": owner_module_state}
+async def owner_agent_state(client: AsyncClient, owner: Account) -> str:
+    """The owner has a run with a pending proposal."""
+    await create_run(client, owner)
+    return "assistant"
+
+
+async def snapshot_agent(client: AsyncClient, owner: Account, _name: str) -> dict[str, object]:
+    modules = (await client.get("/v1/modules?page_size=100", headers=owner.headers)).json()
+    agents = (await client.get("/v1/agents", headers=owner.headers)).json()
+    return {"modules": modules, "agents": agents}
+
+
+Snapshot = Callable[[AsyncClient, Account, str], Awaitable[dict[str, object]]]
+
+CATALOG: dict[str, tuple[Factory, Snapshot]] = {
+    "key": (owner_module_state, snapshot_module),
+    "name": (owner_agent_state, snapshot_agent),
+}
 
 
 # ------------------------------------------------------------------ tests
@@ -156,8 +210,9 @@ async def test_catalog_routes_only_change_the_callers_own_state(
     assert routes, "expected catalog routes"
 
     for route in routes:
-        key = await CATALOG[route.param](client, owner)
-        before = await snapshot_module(client, owner, key)
+        prepare, snapshot = CATALOG[route.param]
+        key = await prepare(client, owner)
+        before = await snapshot(client, owner, key)
 
         response = await other_client.request(
             route.method,
@@ -167,7 +222,7 @@ async def test_catalog_routes_only_change_the_callers_own_state(
         )
 
         assert response.status_code < 500, f"{route.method} {route.path}: {response.text}"
-        assert await snapshot_module(client, owner, key) == before, f"{route.method} {route.path}"
+        assert await snapshot(client, owner, key) == before, f"{route.method} {route.path}"
 
 
 @pytest.mark.parametrize("bogus_id", ["000000000000000000000000", "nope"])

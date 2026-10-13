@@ -1,0 +1,49 @@
+# Static mode vocabulary for the manage-modules skill (used when AGENT_MODE=static, or as the
+# fallback when AI can't run). The first action whose words appear in the request wins, so
+# more specific actions come first. Matching ignores case; English words match whole words.
+#
+#   tool / arguments   the change to propose (or the client action to show)
+#   already            the module state that means "nothing to do"
+# Message codes (translated by the client, agentMessages.*): manage-modules.change.<action>
+# for proposals, .ready.<action> when done, .already.<action> when there is nothing to do.
+
+match_threshold: 0.72
+
+actions:
+  unpin:
+    words: [unpin, unfavourite, unfavorite, "remove from favourites", "remove from favorites",
+            "விருப்பங்களிலிருந்து நீக்கு", "पसंदीदा से हटा"]
+    tool: modules_set_preferences
+    arguments: {pinned: false}
+    already: {pinned: false}
+  pin:
+    words: [pin, favourite, favorite, star, "விருப்ப", "பின் செய்", "पसंदीदा", "पिन"]
+    tool: modules_set_preferences
+    arguments: {pinned: true}
+    already: {pinned: true}
+  stop-notify:
+    words: ["stop notif", "don't notify", "do not notify", "no notification",
+            "அறிவிப்பு வேண்டாம்", "सूचना बंद", "मत बताना"]
+    tool: modules_set_interest
+    arguments: {wanted: false}
+    already: {notify_requested: false}
+  notify:
+    words: [notify, remind, "tell me when", "let me know", "தெரிவி", "நினைவூட்டு", "बताना",
+            "बताएँ", "सूचना"]
+    tool: modules_set_interest
+    arguments: {wanted: true}
+    already: {notify_requested: true}
+  hide:
+    words: [hide, "turn off", "மறை", "அணை", "छिपा", "बंद कर"]
+    tool: modules_set_preferences
+    arguments: {enabled: false}
+    already: {enabled: false}
+  show:
+    words: [show, unhide, "turn on", "bring back", "காட்டு", "இயக்கு", "दिखा", "चालू"]
+    tool: modules_set_preferences
+    arguments: {enabled: true}
+    already: {enabled: true}
+  open:
+    words: [open, "go to", "திற", "செல்", "खोल", "जाओ"]
+    tool: modules_open
+    arguments: {}

@@ -6,6 +6,39 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added — Phase 4: skill-driven agents (2026-10-09)
+
+**Agent platform (ADR-0013)**
+- Agents (`agents/<name>.md`), skills (`skills/<name>/SKILL.md`, Agent Skills format) and
+  tools (`@tool` in `tools.py`) are discovered from folders. A malformed one stops startup
+  with its path. No prompt text lives in Python.
+- Tools: read, write or client. The schema comes from type hints and the docstring.
+  Mistakes go back to the model as data.
+- Progressive disclosure: the agent sees skill descriptions and loads one with `load_skill`.
+- Switches:
+  - `AGENT_MODE` (agent or static) and `AGENT_SKILL_MODES` (per skill);
+  - `AGENT_FALLBACK`: the static script when AI can't run, or an honest "unavailable" with
+    the reason.
+- An OpenAI-compatible free-provider chain with cooldown on 429; consent; per-user and
+  global daily call budgets; redaction of emails and long numbers; step limit; runs kept 7
+  days (TTL).
+- Writes become proposals: `POST /v1/agents/proposals/{id}/confirm|reject`, an atomic claim
+  so a change can't run twice, and expiry.
+- `GET /v1/agents` (availability, mode, reason, quota left), `POST /v1/agents/{name}/runs`
+  and `GET /v1/agents/runs/{id}`.
+- First skill, `manage-modules`: four small tools over `ModuleService`, and a static script
+  driven by an English/Tamil/Hindi lexicon file.
+- The `assistant` agent (markdown only).
+
+**Platform**
+- `platform/plugins.py`: one folder-discovery helper, now also used by module discovery.
+
+**Tests (294, 98.2% coverage)**
+- Every switch combination, the agent loop with a fake provider, provider failover and
+  cooldown, quota at the start and mid-run, the step limit, redaction, static mode in three
+  languages, proposal confirm/reject/expiry/failure, and catalog validation.
+- Isolation matrix: other users get 404 on runs and proposals.
+
 ### Added — Phase 3: module system (2026-10-09)
 
 **Modules**

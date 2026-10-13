@@ -84,6 +84,8 @@ pymongo==4.18.2
     #   tech-toppings-backend (pyproject.toml)
 python-dotenv==1.2.4
     # via pydantic-settings
+pyyaml==6.0.3
+    # via tech-toppings-backend (pyproject.toml)
 starlette==1.7.0
     # via fastapi
 structlog==26.1.0

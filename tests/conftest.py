@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import os
 import uuid
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
+from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
@@ -31,6 +32,7 @@ SETTINGS_ENV_PREFIXES = (
     "API_",
     "DEFAULT_",
     "MODULES_",
+    "AGENT_",
     "BOOTSTRAP_ADMIN_",
 )
 
@@ -99,3 +101,33 @@ async def other_client(
     transport = ASGITransport(app=app, raise_app_exceptions=False)
     async with AsyncClient(transport=transport, base_url="http://testserver") as http:
         yield http
+
+
+PluginFiles = dict[str, str]
+
+
+@pytest.fixture
+def plugin_package(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Callable[[dict[str, PluginFiles]], str]:
+    """Write a throwaway plugin package: ``{"folder": {"relative/path": source}}``.
+
+    ``PKG`` in a source becomes the folder's import path. Returns the package's importable
+    name; each call gets a unique name so imports never collide."""
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    def create(folders: dict[str, PluginFiles]) -> str:
+        name = f"tt_plugins_{uuid.uuid4().hex[:8]}"
+        root = tmp_path / name
+        root.mkdir()
+        (root / "__init__.py").write_text("", encoding="utf-8")
+        for folder, files in folders.items():
+            (root / folder).mkdir()
+            (root / folder / "__init__.py").write_text("", encoding="utf-8")
+            for relative, source in files.items():
+                path = root / folder / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(source.replace("PKG", f"{name}.{folder}"), encoding="utf-8")
+        return name
+
+    return create

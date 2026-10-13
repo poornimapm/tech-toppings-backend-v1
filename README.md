@@ -163,7 +163,11 @@ app/
     auth/            register/login/refresh/logout, sessions, Google, lockout, operator tasks
     users/           User model, /v1/me
     health/          /healthz, /readyz
-    modules/         module manifest, discovery, registry, /v1/modules, availability gate
+    modules/         module manifest, discovery, registry, /v1/modules, availability gate,
+                     tools.py + skills/manage-modules (agent tools and skill)
+    agents/          skill-driven agent runtime: catalog, tools, policy, providers, /v1/agents
+    assistant/       agents/assistant.md: the agent behind "Ask" in the command palette
+    plugins.py       folder discovery shared by modules, agents, skills and tools
   modules/           feature modules, auto-discovered (expenses ... journal: coming soon)
 tests/               pytest suite (real MongoDB)
 scripts/             seed.py, reset_password.py, export_openapi.py, hooks/venv-run.sh

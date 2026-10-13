@@ -5,7 +5,8 @@ Run locally with ``poe dev`` (uvicorn ``--factory app.main:create_app``). Tests 
 
 Feature modules are discovered from ``MODULES_PACKAGES`` (ADR-0001): dropping a folder with a
 ``manifest.py`` into ``app/modules`` registers its documents, mounts its routes under
-``/v1/<slug>`` and lists it on the Welcome page, with no edit here.
+``/v1/<slug>`` and lists it on the Welcome page, with no edit here. Agents, skills and tools
+are discovered the same way from platform sub-packages and modules (ADR-0013).
 """
 
 from __future__ import annotations
@@ -25,6 +26,10 @@ from app.core.middleware import install_middleware
 from app.core.rate_limit import RateLimiter
 from app.core.security import PasswordHasher
 from app.platform import PLATFORM_DOCUMENTS
+from app.platform.agents.catalog import discover_agents
+from app.platform.agents.providers import ProviderChain
+from app.platform.agents.router import router as agents_router
+from app.platform.agents.runtime import AgentRuntime
 from app.platform.auth.google import GoogleIdTokenVerifier
 from app.platform.auth.router import router as auth_router
 from app.platform.auth.router import sessions_router
@@ -32,6 +37,7 @@ from app.platform.health.router import router as health_router
 from app.platform.modules.discovery import discover_modules
 from app.platform.modules.registry import ModuleRegistry
 from app.platform.modules.router import router as modules_router
+from app.platform.plugins import subpackages
 from app.platform.users.router import router as me_router
 
 logger = get_logger(__name__)
@@ -45,6 +51,17 @@ def create_app(settings: Settings | None = None, *, clock: Clock | None = None) 
     modules = ModuleRegistry(discover_modules(settings.modules.packages))
     database = Database(settings.mongo, document_models=[*PLATFORM_DOCUMENTS, *modules.documents()])
     http_client = build_http_client(settings.app)
+    clock = clock or SystemClock()
+    agent_packages = [
+        *(p for root in settings.agent.packages for p in subpackages(root)),
+        *(module.package for module in modules),
+    ]
+    agents = AgentRuntime(
+        discover_agents(agent_packages),
+        ProviderChain(settings.agent, http_client, clock),
+        settings.agent,
+        clock,
+    )
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
@@ -77,7 +94,8 @@ def create_app(settings: Settings | None = None, *, clock: Clock | None = None) 
     app.state.settings = settings
     app.state.database = database
     app.state.modules = modules
-    app.state.clock = clock or SystemClock()
+    app.state.agents = agents
+    app.state.clock = clock
     app.state.rate_limiter = RateLimiter(settings.rate_limit)
     app.state.password_hasher = PasswordHasher(settings.auth)
     app.state.google_verifier = (
@@ -95,6 +113,7 @@ def create_app(settings: Settings | None = None, *, clock: Clock | None = None) 
     api_v1.include_router(me_router)
     api_v1.include_router(sessions_router)
     api_v1.include_router(modules_router)
+    api_v1.include_router(agents_router)
     modules.mount(api_v1)
     app.include_router(api_v1)
     return app
