@@ -54,6 +54,7 @@ StaticHandler = Callable[[StaticRequest, ToolBox], Awaitable[StaticOutcome | Non
 @dataclass(frozen=True)
 class SkillSpec:
     name: str
+    owner: str  # the package it came from: a platform area or a module key
     description: str
     instructions: str
     allowed_tools: tuple[str, ...]
@@ -84,6 +85,7 @@ class AgentCatalog:
     agents: Mapping[str, AgentSpec]
     skills: Mapping[str, SkillSpec]
     tools: Mapping[str, ToolSpec]
+    tool_owners: Mapping[str, str]  # tool name -> the package it came from
 
     def agent(self, name: str) -> AgentSpec:
         if name not in self.agents:
@@ -132,7 +134,7 @@ def _load_skill(folder: Path, owner: str) -> SkillSpec:
         static = getattr(module, "run", None)
         _check(callable(static), f"{script}: must define async def run(request, tools)")
     return SkillSpec(
-        name, description, doc.body, _names(doc.meta.get("allowed-tools")), folder, static
+        name, owner, description, doc.body, _names(doc.meta.get("allowed-tools")), folder, static
     )
 
 
@@ -160,9 +162,12 @@ def discover_agents(packages: Iterable[str]) -> AgentCatalog:
     agents: list[AgentSpec] = []
     skills: list[SkillSpec] = []
     tools: list[ToolSpec] = []
+    owners: dict[str, str] = {}
     for package in packages:
         owner, folder = package.rsplit(".", 1)[-1], package_dir(package)
-        tools += contributions(package, "tools", TOOL_ATTRIBUTE)
+        found: list[ToolSpec] = contributions(package, "tools", TOOL_ATTRIBUTE)
+        tools += found
+        owners |= {spec.name: owner for spec in found}
         agents += [_load_agent(path) for path in sorted(folder.glob("agents/*.md"))]
         skills += [_load_skill(md.parent, owner) for md in sorted(folder.glob("skills/*/SKILL.md"))]
 
@@ -176,4 +181,4 @@ def discover_agents(packages: Iterable[str]) -> AgentCatalog:
         missing = [name for name in names if name not in skill_map]
         _check(not missing, f"agent {agent.name!r} uses unknown skills {missing}")
         agent_map[agent.name] = AgentSpec(agent.name, agent.description, agent.instructions, names)
-    return AgentCatalog(agents=agent_map, skills=skill_map, tools=tool_map)
+    return AgentCatalog(agents=agent_map, skills=skill_map, tools=tool_map, tool_owners=owners)

@@ -132,6 +132,73 @@ Three test suites enforce these rules:
 - Both suites read the route inventory from the OpenAPI schema. FastAPI keeps included
   routers nested, so `app.routes` alone would miss routes.
 
+## Revisions and idempotent creates
+
+`core/revisions.py` gives any module append-only history without transactions (ADR-0002).
+A module declares a `RevisionedDocument`, a `Revision` collection and a
+`RevisionedRepository`; every write through that repository also writes one revision.
+
+```mermaid
+sequenceDiagram
+  participant R as RevisionedRepository
+  participant D as record
+  participant H as revisions (append-only)
+  R->>D: 1. conditional update: new fields, revision_no n+1, pending_revision
+  R->>H: 2. insert revision n+1 (unique index: repeating is harmless)
+  R->>D: 3. clear pending_revision
+  Note over R,H: a crash after 1 is finished by the next read or write of that record
+```
+
+- A revision holds the action (`create`, `update`, `delete`, `undelete`, `restore`), who and
+  how (`source`), the changed fields (`old` and `new`) and a snapshot of the record's fields.
+- The record's own fields must be JSON values, so a snapshot is exactly what is stored and
+  `restore` can put it back as it is. Restoring writes a new revision; history is never
+  rewritten.
+- An update carries the revision the caller edited (`expected`). If the record has moved on,
+  the answer is `409 VERSION_CONFLICT` with the current revision; two edits at once cannot
+  both win, because step 1 only matches the revision it read.
+- A change that changes nothing writes no revision and no new version.
+- `create_once(fields, client_key)` creates at most one record per user and key (a unique
+  partial index). The key is the request's `Idempotency-Key` header (ADR-0010): a retried or
+  replayed create returns the first record, with `Idempotent-Replayed: true`.
+
+## Expenses
+
+The first real module (`app/modules/expenses`, in beta). It uses only `app.platform`.
+
+```
+manifest.py   router.py   domain.py    stats.py (tile)   widgets.py   tools.py
+data/categories.yaml                  system categories: key, emoji, accent
+features/categories/                  the user's own categories
+features/entries/                     entries, their history, filters, totals
+skills/track-expenses/                SKILL.md, lexicon, static script
+```
+
+- **Money** is `amount_minor` (whole minor units) plus `currency` (ADR-0004); `core/money.py`
+  is the only place that converts. Entries are kept in the user's base currency for now:
+  another currency is `422 EXPENSE_CURRENCY_UNSUPPORTED` until exchange rates arrive.
+- **Dates** are calendar days (`YYYY-MM-DD` text), never instants, so "yesterday" cannot move
+  with a time zone.
+- **Categories:** system ones are data, not records (their `key` is their id and the client's
+  translation key); a user adds their own. Archiving keeps the record, so old entries keep
+  the name, and frees the name. A new or re-filed entry needs a live category of its kind
+  (`422 EXPENSE_CATEGORY_INVALID`).
+- **Entries API** (`/v1/expenses/entries`): `GET` (filters `kind`, `from`, `to`,
+  `category_id`, `tag`, `for_whom`, `payment_mode`, `q`, `min_amount`, `max_amount`,
+  `deleted`; sort by `date`, `amount_minor`, `created_at`, `title`), `POST` (once per
+  `Idempotency-Key`), `GET /summary` (totals per currency for the same filters),
+  `GET /facets` (tags, people and merchants used before), `GET/PUT/DELETE /{id}`,
+  `POST /{id}/undelete`, `GET /{id}/revisions`, `POST /{id}/restore`.
+- **Platform services:** each change is noted in the activity feed; the Welcome tile shows
+  this month's spending; the dashboard gets spent, received and spending per day.
+- **Assistant:** the `track-expenses` skill with four tools (categories, list, add as a
+  confirmed proposal, open). Without AI it can only open the page; the sentence parser comes
+  with voice capture.
+
+A switched-off module is off everywhere: its routes answer `403 MODULE_DISABLED`, its widgets
+leave the dashboard, its skills are not offered to the assistant, and a proposal made
+earlier fails with `MODULE_DISABLED` when confirmed (`ModuleService.usable_owners`).
+
 ## Modules
 
 A module is a folder under a package listed in `MODULES_PACKAGES` (default `app.modules`;

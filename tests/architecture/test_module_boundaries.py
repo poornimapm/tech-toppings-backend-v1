@@ -1,4 +1,4 @@
-"""Modules are written against ``app.platform`` only (ADR-0001).
+"""Modules are written against ``app.platform`` and their own package only (ADR-0001).
 
 import-linter enforces this for the platform sub-packages that exist today; this test also
 catches sub-packages added later and covers the test-only modules, which import-linter does
@@ -12,7 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULE_DIRS = (ROOT / "app" / "modules", ROOT / "tests" / "fixtures" / "modules")
-ALLOWED_APP_IMPORTS = {"app.platform"}
+PLATFORM_API = "app.platform"
 
 
 def app_imports(path: Path) -> list[str]:
@@ -26,7 +26,13 @@ def app_imports(path: Path) -> list[str]:
     return [name for name in names if name == "app" or name.startswith("app.")]
 
 
-def test_modules_import_only_the_platform_api() -> None:
+def own_package(path: Path) -> str:
+    """``app/modules/expenses/features/x.py`` -> ``app.modules.expenses``."""
+    parts = path.relative_to(ROOT).parts
+    return ".".join(parts[:3])
+
+
+def test_modules_import_only_the_platform_api_and_themselves() -> None:
     files = [path for directory in MODULE_DIRS for path in directory.rglob("*.py")]
     assert files, "expected module sources"
 
@@ -34,7 +40,7 @@ def test_modules_import_only_the_platform_api() -> None:
         f"{path.relative_to(ROOT).as_posix()}: {name}"
         for path in files
         for name in app_imports(path)
-        if name not in ALLOWED_APP_IMPORTS
+        if name != PLATFORM_API and not f"{name}.".startswith(f"{own_package(path)}.")
     ]
 
     assert offenders == []

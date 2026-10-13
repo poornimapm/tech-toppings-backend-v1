@@ -11,6 +11,7 @@ those the guarantee is that the call only ever changes the caller's own state.
 from __future__ import annotations
 
 import re
+import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
@@ -34,6 +35,15 @@ ROUTE_BODIES: dict[tuple[str, str], dict[str, object]] = {
     ("PATCH", "/v1/modules/{key}/preferences"): {"pinned": False, "enabled": False},
     ("PUT", "/v1/modules/{key}/settings"): {"default_sort": "newest", "preview_length": 10},
     ("POST", "/v1/agents/{name}/runs"): {"input": "pin notes"},
+    ("PUT", "/v1/expenses/entries/{entry_id}"): {
+        "title": "hijacked",
+        "amount_minor": 1,
+        "category_id": "groceries",
+        "date": "2026-10-08",
+        "revision_no": 1,
+    },
+    ("POST", "/v1/expenses/entries/{entry_id}/restore"): {"revision_no": 1},
+    ("PATCH", "/v1/expenses/categories/{category_id}"): {"name": "hijacked"},
 }
 
 
@@ -136,6 +146,45 @@ async def check_notification(client: AsyncClient, owner: Account, notification_i
     assert mine["read"] is False  # still there, and still unread
 
 
+async def create_entry(client: AsyncClient, owner: Account) -> str:
+    response = await client.post(
+        "/v1/expenses/entries",
+        headers=owner.headers,
+        json={
+            "title": "Rice",
+            "amount_minor": 12500,
+            "category_id": "groceries",
+            "date": "2026-10-08",
+        },
+    )
+    assert response.status_code == 201, response.text
+    return str(response.json()["id"])
+
+
+async def check_entry(client: AsyncClient, owner: Account, entry_id: str) -> None:
+    entry = (await client.get(f"/v1/expenses/entries/{entry_id}", headers=owner.headers)).json()
+    history = await client.get(f"/v1/expenses/entries/{entry_id}/revisions", headers=owner.headers)
+    assert (entry["title"], entry["revision_no"], entry["deleted"]) == ("Rice", 1, False)
+    assert history.json()["total"] == 1  # nobody else added to its history either
+
+
+async def create_category(client: AsyncClient, owner: Account) -> str:
+    response = await client.post(
+        "/v1/expenses/categories",
+        headers=owner.headers,
+        json={"name": f"Pets {uuid.uuid4().hex[:6]}", "icon": "🐶", "accent": "teal"},
+    )
+    assert response.status_code == 201, response.text
+    return str(response.json()["id"])
+
+
+async def check_category(client: AsyncClient, owner: Account, category_id: str) -> None:
+    page = (await client.get("/v1/expenses/categories", headers=owner.headers)).json()
+    mine = next(item for item in page["items"] if item["id"] == category_id)
+    assert mine["name"].startswith("Pets ")
+    assert mine["archived"] is False
+
+
 Factory = Callable[[AsyncClient, Account], Awaitable[str]]
 Checker = Callable[[AsyncClient, Account, str], Awaitable[None]]
 
@@ -145,6 +194,8 @@ RESOURCES: dict[str, tuple[Factory, Checker]] = {
     "run_id": (create_run, check_run),
     "proposal_id": (create_proposal, check_proposal),
     "notification_id": (create_notification, check_notification),
+    "entry_id": (create_entry, check_entry),
+    "category_id": (create_category, check_category),
 }
 
 

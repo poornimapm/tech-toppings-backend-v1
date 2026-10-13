@@ -24,8 +24,7 @@ ToDate = Annotated[
 async def read_dashboard(
     ctx: ActorDep, modules: ModuleServiceDep, start: FromDate = None, end: ToDate = None
 ) -> DashboardOut:
-    module_keys = {module.manifest.key for module in ctx.state.modules}
-    available = {item.key for item in await modules.arranged() if item.available}
     # Platform widgets always; a module's widgets only while that module is available to me.
-    mine = [w for w in ctx.state.widgets if w.owner not in module_keys or w.owner in available]
+    usable = await modules.usable_owners()
+    mine = [item for item in ctx.state.widgets if usable(item.owner)]
     return await build_dashboard(ctx, period_for(ctx, start, end), mine)

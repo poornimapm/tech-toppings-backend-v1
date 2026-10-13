@@ -38,6 +38,8 @@ from app.platform.agents.providers import ProviderChain, ProvidersUnavailableErr
 from app.platform.agents.quota import Quota
 from app.platform.agents.tools import Proposal, ProposalStatus, ToolBox
 from app.platform.context import ActorContext
+from app.platform.modules.errors import ModuleDisabledError
+from app.platform.modules.service import ModuleService
 from app.platform.users.models import User
 
 logger = get_logger(__name__)
@@ -148,9 +150,17 @@ class AgentRuntime:
 
     # ------------------------------------------------------------------ runs
 
+    @staticmethod
+    def _modules(ctx: ActorContext) -> ModuleService:
+        return ModuleService(ctx.state.modules, ctx.scope, ctx.clock, ctx.settings)
+
     async def run(self, request: RunRequest, ctx: ActorContext) -> AgentRun:
         agent = self.catalog.agent(request.agent)
-        skills = self.catalog.skills_of(agent, request.skill)
+        # A module's skills serve the user only while that module is available to them.
+        usable = await self._modules(ctx).usable_owners()
+        skills = [
+            skill for skill in self.catalog.skills_of(agent, request.skill) if usable(skill.owner)
+        ]
         box = ToolBox(
             self.catalog.tools_of(skills),
             ctx,
@@ -169,12 +179,12 @@ class AgentRuntime:
             outcome.status = RunStatus.UNAVAILABLE
         return await self._save(agent, request, ctx, decision, outcome, box)
 
-    def _system_prompt(self, agent: AgentSpec, request: RunRequest, user: User) -> str:
+    def _system_prompt(
+        self, agent: AgentSpec, skills: Sequence[SkillSpec], request: RunRequest, user: User
+    ) -> str:
         today = self.clock.now().astimezone(ZoneInfo(user.timezone)).date().isoformat()
         values = {
-            "skills": "\n".join(
-                f"- {s.name}: {s.description}" for s in self.catalog.skills_of(agent)
-            ),
+            "skills": "\n".join(f"- {skill.name}: {skill.description}" for skill in skills),
             "name": user.name,
             "locale": request.locale,
             "today": today,
@@ -241,7 +251,7 @@ class AgentRuntime:
             skill.name: skill for skill in skills if request.skill
         }  # a named skill is preloaded
         messages: list[dict[str, Any]] = [
-            {"role": "system", "content": self._system_prompt(agent, request, ctx.user)}
+            {"role": "system", "content": self._system_prompt(agent, skills, request, ctx.user)}
         ]
         messages += [{"role": "system", "content": skill.instructions} for skill in loaded.values()]
         messages.append({"role": "user", "content": self.redact(request.input)})
@@ -299,7 +309,10 @@ class AgentRuntime:
         used only if no other skill answers."""
         today = self.clock.now().astimezone(ZoneInfo(ctx.user.timezone)).date()
         fallback: tuple[SkillSpec, StaticOutcome, ToolBox] | None = None
-        for skill in skills:
+        # The more specific skill first: a module knows its own words ("show my expenses")
+        # better than the platform's general skills do.
+        modules = {module.manifest.key for module in ctx.state.modules}
+        for skill in sorted(skills, key=lambda skill: skill.owner not in modules):
             if skill.static is None:
                 continue
             scoped = ToolBox(self.catalog.tools_of([skill]), ctx, box.proposal_ttl)
@@ -385,6 +398,10 @@ class AgentRuntime:
         if confirm:
             spec = self.catalog.tools[proposal.tool]
             try:
+                # The module may have been switched off since the proposal was made.
+                owner = self.catalog.tool_owners[proposal.tool]
+                if not (await self._modules(ctx).usable_owners())(owner):
+                    raise ModuleDisabledError(details={"module": owner})
                 changes["result"] = await spec.run(ctx, spec.parse(proposal.arguments))
             except AppError as exc:
                 changes |= {"status": ProposalStatus.FAILED, "error_code": exc.code}

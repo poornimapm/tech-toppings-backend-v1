@@ -20,15 +20,16 @@ def manifest(key: str, order: int = 1, **extra: str) -> str:
     return MANIFEST.format(key=key, order=order, extra=fields)
 
 
-def test_discovers_the_real_upcoming_modules() -> None:
+def test_discovers_the_real_modules() -> None:
     modules = discover_modules(("app.modules",))
 
-    keys = [module.manifest.key for module in modules]
-    assert keys[0] == "expenses"  # the first module to be built leads the list
-    assert set(keys) == {
-        "expenses", "medicine", "receipts", "study", "gov_docs", "meals", "habits", "journal"
+    statuses = {module.manifest.key: module.manifest.status for module in modules}
+    assert next(iter(statuses)) == "expenses"  # the first module to be built leads the list
+    assert statuses.pop("expenses") is ModuleStatus.BETA
+    assert set(statuses) == {
+        "medicine", "receipts", "study", "gov_docs", "meals", "habits", "journal"
     }  # fmt: skip
-    assert all(module.manifest.status is ModuleStatus.COMING_SOON for module in modules)
+    assert set(statuses.values()) == {ModuleStatus.COMING_SOON}
 
 
 def test_orders_by_manifest_order_then_key(plugin_package: MakePackage) -> None:

@@ -84,3 +84,11 @@ Free tier only.
 - Prompts in Python: hard to review and against the owner's "no hardcode" rule.
 - Skills stored in the database: editable without a deploy, but unreviewed and they need an
   editor UI. Folders were chosen (decision 2026-10-09).
+
+## Implementation notes (Phase 5, 2026-10-13)
+
+- A module's skills and tools serve a user only while the module is available to them: its
+  skills are left out of the run, and confirming an earlier proposal fails with
+  `MODULE_DISABLED`.
+- In static mode a module's skills get their turn before the platform's, so "show my
+  expenses" opens Expenses rather than being read as "show the module".

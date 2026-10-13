@@ -73,14 +73,19 @@ class ScopedRepository(Generic[TDoc]):
             criteria["deleted_at"] = None
         return criteria
 
-    async def find(self, entity_id: str | PydanticObjectId) -> TDoc | None:
+    async def find(
+        self, entity_id: str | PydanticObjectId, *, include_deleted: bool = False
+    ) -> TDoc | None:
         object_id = parse_object_id(entity_id)
         if object_id is None:
             return None
-        return await self.model.find_one(self.query({"_id": object_id}))
+        criteria = self.query({"_id": object_id}, include_deleted=include_deleted)
+        return await self.model.find_one(criteria)
 
-    async def get(self, entity_id: str | PydanticObjectId) -> TDoc:
-        found = await self.find(entity_id)
+    async def get(
+        self, entity_id: str | PydanticObjectId, *, include_deleted: bool = False
+    ) -> TDoc:
+        found = await self.find(entity_id, include_deleted=include_deleted)
         if found is None:
             raise NotFoundError
         return found
@@ -90,8 +95,10 @@ class ScopedRepository(Generic[TDoc]):
         params: PageParams,
         sort: Sequence[tuple[str, int]],
         filters: Mapping[str, Any] | None = None,
+        *,
+        include_deleted: bool = False,
     ) -> tuple[list[TDoc], int]:
-        criteria = self.query(filters)
+        criteria = self.query(filters, include_deleted=include_deleted)
         total = await self.model.find(criteria).count()
         items = (
             await self.model.find(criteria)
@@ -106,13 +113,13 @@ class ScopedRepository(Generic[TDoc]):
         """Module owning a new record: the model's MODULE_KEY unless a subclass says otherwise."""
         return self.model.MODULE_KEY
 
-    async def create(self, fields: Mapping[str, Any]) -> TDoc:
-        """Validate and insert a record for the scope's owner. Ownership and audit fields are
+    def build(self, fields: Mapping[str, Any]) -> TDoc:
+        """A validated, unsaved record for the scope's owner. Ownership and audit fields are
         always set here (overriding anything in ``fields``), never trusted from the caller."""
         if self.scope.owner_id is None:
             raise ValueError("an unrestricted scope cannot create owned records")
         now = self.clock.now()
-        document = self.model(
+        document: TDoc = self.model(
             **{
                 **fields,
                 "user_id": self.scope.owner_id,
@@ -124,6 +131,10 @@ class ScopedRepository(Generic[TDoc]):
                 "deleted_at": None,
             }
         )
+        return document
+
+    async def create(self, fields: Mapping[str, Any]) -> TDoc:
+        document = self.build(fields)
         await document.insert()
         return document
 

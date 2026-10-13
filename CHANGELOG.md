@@ -6,6 +6,46 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added — Phase 5: expense core and revisions (2026-10-13)
+
+**Reusable history (ADR-0002)**
+- `core/revisions.py`: `RevisionedDocument`, `Revision` and `RevisionedRepository`. Every
+  create, update, delete, undelete and restore writes exactly one revision (changed fields
+  and a snapshot), without transactions; a crash between the record and its revision is
+  finished by the next read or write.
+- Updates carry the revision that was edited: a stale one answers `409 VERSION_CONFLICT`.
+- `create_once` and the `Idempotency-Key` header (`core/idempotency.py`): a retried create
+  returns the first record instead of adding another.
+- `core/money.py`: exact conversion between minor units and decimal amounts.
+
+**Expenses module (beta)**
+- Entries with kind (expense or income), category, calendar date, time, merchant, payment
+  mode, for whom, tags, note and link attachments.
+- List with filters, search, sorting and paging; totals per currency for the same filters;
+  suggestions from what was used before.
+- Soft delete and undelete; history per entry; restore any earlier revision.
+- System categories from a data file plus the user's own (add, rename, archive).
+- Welcome-tile figure, three dashboard widgets, and activity entries for every change.
+- `track-expenses` skill and four agent tools; adding is a proposal the user confirms.
+
+**Platform**
+- A switched-off module is off for the assistant too: its skills are not offered and its
+  pending proposals fail with `MODULE_DISABLED`.
+- In static mode a module's own skills answer before the platform's general ones.
+- `ScopedRepository`: `build()`, and `include_deleted` on `find`, `get` and `list`.
+
+**Tests (370, 98.4% coverage)**
+- One revision per change; restore equals the old snapshot; stale and simultaneous edits;
+  two kinds of crash recovery; replay by key (repeated, simultaneous, after a crash, per
+  user).
+- Filters, sorting, totals, categories, the tile and widgets, the assistant's proposal, and
+  the isolation matrix for every expense route.
+
+### Changed
+
+- The module boundary test lets a module import its own package (still nothing else beyond
+  `app.platform`).
+
 ### Added — Phase 4b: dashboard, activity and notifications (2026-10-13)
 
 **Dashboard (ADR-0014)**

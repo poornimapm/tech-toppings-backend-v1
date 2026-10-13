@@ -13,7 +13,7 @@ never what stops a user from reaching a module that is switched off.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
@@ -164,6 +164,14 @@ class ModuleService:
     async def ensure_available(self, key: str) -> None:
         if not (await self.one(key)).available:
             raise ModuleDisabledError(details={"module": key})
+
+    async def usable_owners(self) -> Callable[[str], bool]:
+        """Says whether a plugin's owner may serve this user: a platform package always, a
+        module only while it is available to them. The same rule guards module routes, so a
+        switched-off module is off everywhere (dashboard widgets, agent skills and tools)."""
+        modules = {module.manifest.key for module in self.registry}
+        available = {item.key for item in await self.arranged() if item.available}
+        return lambda owner: owner not in modules or owner in available
 
     async def views(
         self, modules: Sequence[EffectiveModule], arranged: Sequence[EffectiveModule]

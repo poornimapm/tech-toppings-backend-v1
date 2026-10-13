@@ -157,6 +157,9 @@ app/
     documents.py     base documents (timestamps; owned = user_id + module_key + soft delete)
     repository.py    ScopedRepository: every query filtered to the caller's Scope
     pagination.py    page/page_size/sort parameters and the Page[T] response
+    revisions.py     append-only history without transactions; create once per client key
+    idempotency.py   the Idempotency-Key request header
+    money.py         minor units <-> decimal amounts (ISO-4217 exponents)
     daterange.py     DateRange: calendar days in the user's time zone, previous period
     concurrency.py   settle(): optional work with a timeout that never breaks the caller
     security.py      Argon2id hashing, password policy, JWT, token digests
@@ -175,7 +178,9 @@ app/
     admin/           /v1/admin/*: the only place an unrestricted Scope is allowed
     context.py       ActorContext: what tools and widgets receive
     plugins.py       folder discovery shared by modules, agents, skills, tools and widgets
-  modules/           feature modules, auto-discovered (expenses ... journal: coming soon)
+  modules/           feature modules, auto-discovered
+    expenses/        entries with history, categories, tile, widgets, tools, skill (beta)
+    medicine/ ...    the other seven: manifest only, coming soon
 tests/               pytest suite (real MongoDB)
 scripts/             seed.py, reset_password.py, export_openapi.py, hooks/venv-run.sh
 docs/                plan, ADRs, architecture, reference analysis, free-tier limits

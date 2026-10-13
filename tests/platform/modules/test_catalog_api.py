@@ -11,7 +11,8 @@ from httpx import AsyncClient
 from app.platform.modules.models import ModuleOverride, UserModule
 from tests.helpers import Account, FrozenClock, register
 
-UPCOMING = {"expenses", "medicine", "receipts", "study", "gov_docs", "meals", "habits", "journal"}
+UPCOMING = {"medicine", "receipts", "study", "gov_docs", "meals", "habits", "journal"}
+ALL = UPCOMING | {"expenses", "notes"}  # expenses is in beta; notes is the test module
 
 
 async def modules(client: AsyncClient, account: Account, query: str = "") -> list[dict[str, Any]]:
@@ -38,7 +39,7 @@ async def test_lists_every_module_in_default_order(client: AsyncClient) -> None:
     items = await modules(client, account)
 
     assert keys(items)[:2] == ["notes", "expenses"]  # manifest order 5, then 10
-    assert set(keys(items)) == UPCOMING | {"notes"}
+    assert set(keys(items)) == ALL
     assert [item["position"] for item in items] == list(range(len(items)))
     notes = items[0]
     assert notes == {
@@ -89,8 +90,8 @@ async def test_filters_sorts_and_paginates(client: AsyncClient) -> None:
 
     assert set(keys(upcoming)) == UPCOMING
     assert keys(pinned) == ["journal"]
-    assert keys(by_key) == sorted(UPCOMING | {"notes"}, reverse=True)
-    assert first_page.json()["total"] == len(UPCOMING) + 1
+    assert keys(by_key) == sorted(ALL, reverse=True)
+    assert first_page.json()["total"] == len(ALL)
     assert first_page.json()["has_next"] is True
     assert len(first_page.json()["items"]) == 3
     assert bad_sort.status_code == 422

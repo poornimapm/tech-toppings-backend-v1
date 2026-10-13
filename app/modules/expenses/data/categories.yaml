@@ -1,0 +1,35 @@
+# System categories, in display order. Every user has these; they add their own on top.
+#
+#   key     the category's id in the API, and the client's translation key for its name
+#   icon    an emoji shown beside the name
+#   accent  one of the design system's accent colours
+#
+# Adding one here is all it takes on the server; the client needs its name in each language.
+
+expense:
+  - { key: groceries, icon: "🛒", accent: emerald }
+  - { key: food, icon: "🍽️", accent: orange }
+  - { key: transport, icon: "🚌", accent: sky }
+  - { key: fuel, icon: "⛽", accent: amber }
+  - { key: housing, icon: "🏠", accent: indigo }
+  - { key: utilities, icon: "💡", accent: amber }
+  - { key: phone_internet, icon: "📶", accent: sky }
+  - { key: health, icon: "💊", accent: rose }
+  - { key: education, icon: "🎓", accent: violet }
+  - { key: shopping, icon: "🛍️", accent: rose }
+  - { key: entertainment, icon: "🎬", accent: violet }
+  - { key: travel, icon: "✈️", accent: teal }
+  - { key: personal_care, icon: "🧴", accent: teal }
+  - { key: family, icon: "🧸", accent: orange }
+  - { key: gifts_donations, icon: "🎁", accent: rose }
+  - { key: loans_emi, icon: "🏦", accent: slate }
+  - { key: insurance, icon: "🛡️", accent: indigo }
+  - { key: other_expense, icon: "📦", accent: slate }
+
+income:
+  - { key: salary, icon: "💼", accent: emerald }
+  - { key: business, icon: "🏪", accent: teal }
+  - { key: interest, icon: "📈", accent: sky }
+  - { key: gifts_received, icon: "🎁", accent: violet }
+  - { key: refunds, icon: "↩️", accent: amber }
+  - { key: other_income, icon: "💰", accent: slate }

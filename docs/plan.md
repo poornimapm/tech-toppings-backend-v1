@@ -824,7 +824,7 @@ Then I stop until you reply `proceed`.
   - Notifications are scoped per user.
   - The palette is fully keyboard-operable.
 
-### Phase 5 — Expense core + revisions
+### Phase 5 — Expense core + revisions (done 2026-10-13, D16)
 
 - Categories (system expense and income categories plus custom ones).
 - Entries CRUD with `kind` (expense/income — U1 base), `for_whom` (U6), tags, notes and link
@@ -1023,6 +1023,7 @@ Then I stop until you reply `proceed`.
 | D13 | Phase 3 module system details (see ADR-0001 implementation notes): presentation lives only in the frontend manifest; admin overrides are read on demand (no startup sync); notify-me is stored in `user_modules`; widgets/jobs/search/export/erase manifest fields come with their phases; a backend-only module shows with a placeholder tile; the setting is `MODULES_PACKAGES`. | Simpler, fewer writes, one source of truth per concern. Reported 2026-10-09. |
 | D14 | **Agentic architecture (ADR-0013), from the owner's Phase 4 instructions.** AI features are skills run by a shared agent runtime, with no prompts in code. `AGENT_MODE`, `AGENT_SKILL_MODES` and `AGENT_FALLBACK` replace ADR-0005's fixed rule fallback. Writes are confirmed by the user, and skills are folders. Phase 4 becomes the agent platform and command palette; the dashboard and notifications move to **Phase 4b**. New libraries: `pyyaml` (frontmatter) and `cmdk` (palette, already listed in D8). | Owner's decisions, 2026-10-09 |
 | D15 | Phase 4b details (ADR-0014): the admin "All users" view shows aggregates only (no list widgets); launch notices are delivered when the user next loads their modules, not by a job; the activity feed records module changes for now, and each later module adds its own; a "new device signed in" notification is left to Phase 10 (security events); `ToolContext` became `ActorContext`; phones get a bottom navigation bar. | Privacy by construction; no scheduler on the free tier (ADR-0007); one context for tools and widgets. Reported 2026-10-13. |
+| D16 | Phase 5 details: the revision engine is generic (`core/revisions.py`), so the conflict code is `VERSION_CONFLICT`; idempotency is a unique key on the record itself, not an `idempotency_keys` collection with a TTL; an edit is `PUT` with the whole entry and its revision, not `PATCH`; restore is `POST /entries/{id}/restore` with the revision in the body; system categories are a data file, not seeded records; entries are in the base currency only until FX; no pending-revision repair job is needed (reads and writes finish them); the module is `beta`; it already has agent tools and a skill. | Smaller and race-free; one id per route for the isolation matrix; nothing to seed or migrate. Reported 2026-10-13. |
 | D12 | The frontend runs on **Node 24 LTS through fnm**, scoped to this repo via `.node-version`. Your system Node 20 and fnm's default (`system`) are unchanged. **TypeScript 5.9 and ESLint 9** are pinned because typescript-eslint, openapi-typescript and jsx-a11y don't support TS 7 or ESLint 10 yet. | Current React Router 8, Vitest 5 and MSW 3 need Node ≥ 22, and Node 20 reached end of life on 2026-04-30. Approved 2026-10-08. |
 
 ---

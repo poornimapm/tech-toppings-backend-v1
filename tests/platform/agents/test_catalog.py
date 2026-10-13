@@ -61,9 +61,21 @@ def catalog_of(plugin_package: MakePackage, *folders: dict[str, str]):  # type: 
 def test_the_app_ships_the_assistant_and_its_skills(mongo_uri: str) -> None:
     catalog = build_app(build_settings(mongo_uri)).state.agents.catalog
 
-    assert set(catalog.agents["assistant"].skills) == {"manage-modules", "check-notifications"}
+    assert set(catalog.agents["assistant"].skills) == {
+        "manage-modules",
+        "check-notifications",
+        "track-expenses",
+    }
     assert catalog.skills["manage-modules"].static is not None
+    assert (catalog.skills["manage-modules"].owner, catalog.tool_owners["expenses_add"]) == (
+        "modules",
+        "expenses",
+    )
     assert {name: spec.effect for name, spec in catalog.tools.items()} == {
+        "expenses_categories": "read",
+        "expenses_list": "read",
+        "expenses_add": "write",
+        "expenses_open": "client",
         "modules_list": "read",
         "modules_set_preferences": "write",
         "modules_set_interest": "write",

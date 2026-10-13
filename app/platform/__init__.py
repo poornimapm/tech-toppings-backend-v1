@@ -17,9 +17,20 @@ from app.core.errors import (
     NotFoundError,
     error_responses,
 )
+from app.core.idempotency import REPLAYED_HEADER, IdempotencyKey
 from app.core.logging import get_logger
-from app.core.pagination import Page, PageParams, PageParamsDep, parse_sort
+from app.core.money import to_major, to_minor
+from app.core.pagination import Page, PageParams, PageParamsDep, page_params, parse_sort
 from app.core.repository import NEWEST_FIRST, Scope, ScopedRepository
+from app.core.revisions import (
+    CLIENT_KEY_INDEX,
+    REVISION_INDEXES,
+    FieldChange,
+    Revision,
+    RevisionAction,
+    RevisionedDocument,
+    RevisionedRepository,
+)
 from app.platform.activity.log import Activity, ActivityLog
 from app.platform.agents.catalog import StaticOutcome, StaticRequest
 from app.platform.agents.lexicon import load_lexicon, match_action, normalise
@@ -27,7 +38,7 @@ from app.platform.agents.models import AgentRun, AgentUsage
 from app.platform.agents.tools import ToolBox, tool
 from app.platform.auth.deps import AdminUser, CurrentUser, UserScope
 from app.platform.auth.models import AuthSession
-from app.platform.context import ActorContext
+from app.platform.context import ActorContext, ActorDep
 from app.platform.dashboard.contract import (
     Item,
     Items,
@@ -56,10 +67,14 @@ PLATFORM_DOCUMENTS = (
 )
 
 __all__ = [
+    "CLIENT_KEY_INDEX",
     "NEWEST_FIRST",
     "PLATFORM_DOCUMENTS",
+    "REPLAYED_HEADER",
+    "REVISION_INDEXES",
     "ActivityLog",
     "ActorContext",
+    "ActorDep",
     "AdminUser",
     "AppError",
     "Clock",
@@ -67,7 +82,9 @@ __all__ = [
     "ConflictError",
     "CurrentUser",
     "DateRange",
+    "FieldChange",
     "ForbiddenError",
+    "IdempotencyKey",
     "Inbox",
     "Item",
     "Items",
@@ -80,6 +97,10 @@ __all__ = [
     "PageParams",
     "PageParamsDep",
     "Point",
+    "Revision",
+    "RevisionAction",
+    "RevisionedDocument",
+    "RevisionedRepository",
     "Scope",
     "ScopedRepository",
     "Series",
@@ -98,7 +119,10 @@ __all__ = [
     "load_lexicon",
     "match_action",
     "normalise",
+    "page_params",
     "parse_sort",
+    "to_major",
+    "to_minor",
     "tool",
     "widget",
 ]

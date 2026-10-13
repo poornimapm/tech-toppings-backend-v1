@@ -19,3 +19,12 @@ The driver is officially supported. Tests exercise real query semantics. Writes 
 ## Alternatives considered
 
 Motor + Beanie 1.x: deprecated line. mongomock: missing aggregation operators. testcontainers: needs Docker running for every test run.
+
+## Implementation notes (Phase 5, 2026-10-13)
+
+- The mechanism is generic: `core/revisions.py` (`RevisionedDocument`, `Revision`,
+  `RevisionedRepository`). Expenses is its first user; any module can have history.
+- A pending revision is finished by the next read **or write** of the record, so nothing
+  can be lost or written twice. No repair job is needed for correctness; an idle record
+  with a pending revision is simply finished when someone next looks at it.
+- A stale or simultaneous edit answers `409 VERSION_CONFLICT`.

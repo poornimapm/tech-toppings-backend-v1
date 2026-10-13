@@ -19,3 +19,11 @@ There is one parser implementation (Python). Retries never create duplicates. Of
 ## Alternatives considered
 
 A duplicate TypeScript parser: two implementations to keep in sync.
+
+## Implementation notes (Phase 5, 2026-10-13)
+
+- The `Idempotency-Key` is stored on the record it created (`client_key`, unique per user),
+  not in a separate collection. The insert itself is the check, so simultaneous retries
+  cannot both create, and a replay still works after any length of time offline.
+- A replay returns the first record with the header `Idempotent-Replayed: true`, whatever
+  body it carried.
