@@ -1,0 +1,19 @@
+# Static mode vocabulary for the check-notifications skill. The first action whose words
+# appear in the request wins, so the more specific one comes first.
+#
+#   tool   what to do: a write tool is proposed (only when something is unread),
+#          a client tool is shown to the user
+# Message codes (translated by the client, agentMessages.*):
+#   check-notifications.change.<action>  the proposal
+#   check-notifications.ready.<action>   the reply, with {{count}} unread
+#   check-notifications.none-unread      nothing to mark
+
+actions:
+  mark-read:
+    words: ["mark all", "mark as read", "mark them read", "mark read", "clear notifications",
+            "படித்ததாகக் குறி", "அறிவிப்புகளை அழி", "पढ़ा हुआ", "सूचनाएँ साफ़"]
+    tool: notifications_mark_all_read
+  show:
+    words: [notifications, notification, "what's new", "whats new", alerts,
+            "அறிவிப்பு", "புதியது என்ன", "सूचनाएँ", "सूचनाओं", "नया क्या"]
+    tool: notifications_open

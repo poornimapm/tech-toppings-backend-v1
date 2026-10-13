@@ -9,6 +9,7 @@ import pkgutil
 import sys
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 
 class PluginError(RuntimeError):
@@ -37,6 +38,20 @@ def import_optional(name: str) -> ModuleType | None:
         if isinstance(exc, ModuleNotFoundError) and exc.name == name:
             return None
         raise PluginError(f"{name} cannot be imported: {exc}") from exc
+
+
+def contributions(package: str, module: str, attribute: str) -> list[Any]:
+    """What ``<package>.<module>`` contributes: the value a decorator stored under ``attribute``
+    on each of its functions (``@tool`` in tools.py, ``@widget`` in widgets.py ...). Names
+    must start with the package's own key, so the owner is always visible: ``modules_list``.
+    """
+    source, owner = import_optional(f"{package}.{module}"), package.rsplit(".", 1)[-1]
+    found = [getattr(value, attribute, None) for value in vars(source).values()] if source else []
+    specs = [spec for spec in found if spec is not None]
+    for spec in specs:
+        if not spec.name.startswith(f"{owner}_"):
+            raise PluginError(f"{package}.{module}: {spec.name} must start with '{owner}_'")
+    return specs
 
 
 def load_script(path: Path, name: str) -> ModuleType:

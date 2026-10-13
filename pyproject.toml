@@ -59,7 +59,8 @@ lint.sequence = ["lint-ruff", "lint-format", "typecheck", "imports"]
 lint.help = "All static checks (ruff, format, mypy, import-linter)"
 lint-ruff = "ruff check ."
 lint-format = "ruff format --check ."
-typecheck = "mypy"
+typecheck.sequence = ["mypy", "python scripts/typecheck_skills.py"]
+typecheck.default_item_type = "cmd"
 imports = "lint-imports"
 fmt.sequence = ["ruff format .", "ruff check --fix ."]
 fmt.default_item_type = "cmd"
@@ -137,6 +138,9 @@ strict = true
 warn_unreachable = true
 plugins = ["pydantic.mypy"]
 files = ["app", "tests", "scripts"]
+# Skill scripts share file names and sit in non-package folders: scripts/typecheck_skills.py
+# checks them one by one.
+exclude = ["/skills/[^/]+/scripts/"]
 
 [tool.pydantic-mypy]
 init_forbid_extra = true

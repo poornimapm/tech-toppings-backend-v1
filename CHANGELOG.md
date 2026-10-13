@@ -6,6 +6,44 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added — Phase 4b: dashboard, activity and notifications (2026-10-13)
+
+**Dashboard (ADR-0014)**
+- Widget contract: `@widget("kpi" | "series" | "list")` functions in a package's
+  `widgets.py`, discovered like tools and skills. Titles live on the client.
+- `GET /v1/dashboard?from&to`: platform widgets plus those of the modules available to the
+  user, run in parallel with a timeout. A failed widget is `data: null`, never a zero.
+- `GET /v1/admin/dashboard`: the same widgets across all users, aggregates only (no list
+  widgets); 403 for non-admins.
+- `DateRange` in the user's time zone, with the previous period for trends
+  (`422 RANGE_INVALID`).
+- First widgets: actions taken, recent activity, assistant requests per day.
+
+**Activity and notifications**
+- `ActivityLog` and `GET /v1/activity`: module pin, hide, arrange and notify-me changes are
+  recorded as codes and expire by TTL.
+- `Inbox` and `/v1/notifications` (list, unread filter, read one, read all, remove), with a
+  per-user `dedupe_key` so a notice is never delivered twice.
+- Launch notices: a user who asked to hear about a module is notified once, the next time
+  their modules load after it becomes available.
+- `check-notifications` skill (agent and static mode, English/Tamil/Hindi lexicon) with
+  three tools: list, mark all read (a proposal), open the page.
+
+**Platform**
+- `ActorContext` replaces `ToolContext`: tools and widgets take the same context.
+- `plugins.contributions()` collects decorated functions; `agents/lexicon.py` holds the
+  lexicon matching every static script shares; `core/concurrency.settle()` runs optional
+  work with a timeout.
+- A static script may answer tentatively, so a more specific skill wins.
+- Settings: `DASHBOARD_*`, `NOTIFICATIONS_*`.
+- `poe typecheck` also checks each skill's `scripts/` on its own (they share file names).
+
+**Tests (326, 98.3% coverage)**
+- Two users each see only their own figures, activity and notifications; the isolation
+  matrix covers notification ids.
+- Admin view: totals across users, no list widgets, 403 for others.
+- Date ranges across time zones, widget failure and timeout, launch notices delivered once.
+
 ### Added — Phase 4: skill-driven agents (2026-10-09)
 
 **Agent platform (ADR-0013)**

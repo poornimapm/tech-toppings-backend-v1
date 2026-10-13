@@ -357,6 +357,25 @@ class AgentSettings(BaseSettings):
         return self.skill_modes.get(skill, self.mode)
 
 
+class DashboardSettings(BaseSettings):
+    """The global dashboard and the activity feed behind it."""
+
+    model_config = _group_config("DASHBOARD_")
+
+    default_range_days: int = Field(default=30, ge=1)
+    max_range_days: int = Field(default=366, ge=1)
+    # A slow widget must not hold up the dashboard; its card says it couldn't load.
+    widget_timeout_seconds: float = Field(default=3.0, gt=0, le=30)
+    activity_retention_days: int = Field(default=180, ge=1)
+    activity_widget_items: int = Field(default=8, ge=1, le=50)
+
+
+class NotificationSettings(BaseSettings):
+    model_config = _group_config("NOTIFICATIONS_")
+
+    retention_days: int = Field(default=90, ge=1)
+
+
 class BootstrapSettings(BaseSettings):
     """First admin account, created or promoted by `poe seed` (skipped when unset)."""
 
@@ -388,6 +407,8 @@ class Settings(BaseModel):
     defaults: DefaultsSettings
     modules: ModulesSettings
     agent: AgentSettings
+    dashboard: DashboardSettings
+    notifications: NotificationSettings
     bootstrap: BootstrapSettings
 
 
@@ -412,6 +433,8 @@ def load_settings(env_files: Sequence[Path] | None = None) -> Settings:
         defaults=DefaultsSettings(_env_file=existing),
         modules=ModulesSettings(_env_file=existing),
         agent=AgentSettings(_env_file=existing),
+        dashboard=DashboardSettings(_env_file=existing),
+        notifications=NotificationSettings(_env_file=existing),
         bootstrap=BootstrapSettings(_env_file=existing),
     )
 

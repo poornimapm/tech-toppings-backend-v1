@@ -25,12 +25,19 @@ from app.core.documents import OwnedDocument
 from app.core.errors import AppError, ConflictError, NotFoundError
 from app.core.logging import get_logger
 from app.core.repository import ScopedRepository
-from app.platform.agents.catalog import AgentCatalog, AgentSpec, SkillSpec, StaticRequest
+from app.platform.agents.catalog import (
+    AgentCatalog,
+    AgentSpec,
+    SkillSpec,
+    StaticOutcome,
+    StaticRequest,
+)
 from app.platform.agents.models import AgentRun, RunStatus, RunStep
 from app.platform.agents.policy import Blocker, Plan, plan
 from app.platform.agents.providers import ProviderChain, ProvidersUnavailableError, ToolCall
 from app.platform.agents.quota import Quota
-from app.platform.agents.tools import Proposal, ProposalStatus, ToolBox, ToolContext
+from app.platform.agents.tools import Proposal, ProposalStatus, ToolBox
+from app.platform.context import ActorContext
 from app.platform.users.models import User
 
 logger = get_logger(__name__)
@@ -141,7 +148,7 @@ class AgentRuntime:
 
     # ------------------------------------------------------------------ runs
 
-    async def run(self, request: RunRequest, ctx: ToolContext) -> AgentRun:
+    async def run(self, request: RunRequest, ctx: ActorContext) -> AgentRun:
         agent = self.catalog.agent(request.agent)
         skills = self.catalog.skills_of(agent, request.skill)
         box = ToolBox(
@@ -226,7 +233,7 @@ class AgentRuntime:
         skills: list[SkillSpec],
         request: RunRequest,
         box: ToolBox,
-        ctx: ToolContext,
+        ctx: ActorContext,
         out: _Outcome,
     ) -> None:
         by_name = {skill.name: skill for skill in skills}
@@ -284,37 +291,43 @@ class AgentRuntime:
         self,
         skills: list[SkillSpec],
         request: RunRequest,
-        ctx: ToolContext,
+        ctx: ActorContext,
         out: _Outcome,
         box: ToolBox,
     ) -> None:
+        """Each skill's script gets a turn. The first confident answer wins; a tentative one is
+        used only if no other skill answers."""
         today = self.clock.now().astimezone(ZoneInfo(ctx.user.timezone)).date()
+        fallback: tuple[SkillSpec, StaticOutcome, ToolBox] | None = None
         for skill in skills:
             if skill.static is None:
                 continue
             scoped = ToolBox(self.catalog.tools_of([skill]), ctx, box.proposal_ttl)
+            references = skill.folder / "references"
             result = await skill.static(
-                StaticRequest(
-                    request.input,
-                    request.locale,
-                    today,
-                    request.context,
-                    skill.folder / "references",
-                ),
+                StaticRequest(request.input, request.locale, today, request.context, references),
                 scoped,
             )
-            if result is not None:
-                out.skill, out.code, out.params = skill.name, result.code, dict(result.params)
-                box.proposals += scoped.proposals
-                box.client_actions += scoped.client_actions
-                return
-        out.code = NO_MATCH
+            if result is None:
+                continue
+            answer = (skill, result, scoped)
+            if not result.tentative:
+                fallback = answer
+                break
+            fallback = fallback or answer
+        if fallback is None:
+            out.code = NO_MATCH
+            return
+        skill, result, scoped = fallback
+        out.skill, out.code, out.params = skill.name, result.code, dict(result.params)
+        box.proposals += scoped.proposals
+        box.client_actions += scoped.client_actions
 
     async def _save(
         self,
         agent: AgentSpec,
         request: RunRequest,
-        ctx: ToolContext,
+        ctx: ActorContext,
         decision: Plan,
         out: _Outcome,
         box: ToolBox,
@@ -357,7 +370,7 @@ class AgentRuntime:
 
     # ------------------------------------------------------------------ proposals
 
-    async def resolve(self, proposal_id: str, *, confirm: bool, ctx: ToolContext) -> Proposal:
+    async def resolve(self, proposal_id: str, *, confirm: bool, ctx: ActorContext) -> Proposal:
         repository = AgentRunRepository(ctx.scope, self.clock)
         run = await repository.with_proposal(proposal_id)
         proposal = next(item for item in run.proposals if item.id == proposal_id)

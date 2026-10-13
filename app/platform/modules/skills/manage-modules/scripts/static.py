@@ -3,27 +3,18 @@ instead of a model. Returns None when the request isn't about modules."""
 
 from __future__ import annotations
 
-import re
-import unicodedata
 from difflib import SequenceMatcher
-from typing import Any
 
-import yaml
-
-from app.platform import StaticOutcome, StaticRequest, ToolBox
+from app.platform import (
+    StaticOutcome,
+    StaticRequest,
+    ToolBox,
+    load_lexicon,
+    match_action,
+    normalise,
+)
 
 MAX_NAME_WORDS = 4
-
-
-def _normalise(text: str) -> str:
-    return " ".join(unicodedata.normalize("NFKC", text).casefold().split())
-
-
-def _mentions(text: str, word: str) -> bool:
-    word = _normalise(word)
-    if word.isascii():
-        return re.search(rf"(?<!\w){re.escape(word)}(?!\w)", text) is not None
-    return word in text  # Tamil/Hindi words take suffixes: match the stem
 
 
 def _module_in(text: str, aliases: dict[str, set[str]], threshold: float) -> str | None:
@@ -44,18 +35,9 @@ def _module_in(text: str, aliases: dict[str, set[str]], threshold: float) -> str
 
 
 async def run(request: StaticRequest, tools: ToolBox) -> StaticOutcome | None:
-    lexicon: dict[str, Any] = yaml.safe_load(
-        (request.references / "lexicon.yaml").read_text(encoding="utf-8")
-    )
-    text = _normalise(request.input)
-    found = next(
-        (
-            (name, spec)
-            for name, spec in lexicon["actions"].items()
-            if any(_mentions(text, word) for word in spec["words"])
-        ),
-        None,
-    )
+    lexicon = load_lexicon(request.references)
+    text = normalise(request.input)
+    found = match_action(text, lexicon)
     if found is None:
         return None
     action, spec = found
@@ -63,11 +45,12 @@ async def run(request: StaticRequest, tools: ToolBox) -> StaticOutcome | None:
     modules = {item["key"]: item for item in await tools.read("modules_list", {})}
     shown = {item["key"]: item["name"] for item in request.context.get("modules", [])}
     aliases = {
-        key: {_normalise(shown.get(key, "")), key.replace("_", " ")} - {""} for key in modules
+        key: {normalise(shown.get(key, "")), key.replace("_", " ")} - {""} for key in modules
     }
     key = _module_in(text, aliases, float(lexicon["match_threshold"]))
     if key is None:
-        return StaticOutcome("manage-modules.no-module")
+        # A module verb but no module we recognise: another skill may know better.
+        return StaticOutcome("manage-modules.no-module", tentative=True)
     params = {"name": shown.get(key, key.replace("_", " "))}
 
     already = spec.get("already", {})

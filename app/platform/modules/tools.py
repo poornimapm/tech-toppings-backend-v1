@@ -7,19 +7,20 @@ from typing import Annotated, Any
 
 from pydantic import Field
 
-from app.platform.agents.tools import ToolContext, tool
+from app.platform.agents.tools import tool
+from app.platform.context import ActorContext
 from app.platform.modules.schemas import ModuleView, PreferencesIn
 from app.platform.modules.service import ModuleService
 
 ModuleKey = Annotated[str, Field(description="A module key from modules_list")]
 
 
-def _service(ctx: ToolContext) -> ModuleService:
-    return ModuleService(ctx.state.modules, ctx.scope, ctx.clock, ctx.settings.modules)
+def _service(ctx: ActorContext) -> ModuleService:
+    return ModuleService(ctx.state.modules, ctx.scope, ctx.clock, ctx.settings)
 
 
 @tool("read")
-async def modules_list(ctx: ToolContext) -> list[dict[str, Any]]:
+async def modules_list(ctx: ActorContext) -> list[dict[str, Any]]:
     """List the user's modules in their order: key, status (live, beta, coming_soon), whether it
     can be opened (available), pinned (favourite), enabled (shown on their page) and whether a
     launch notice is on."""
@@ -39,7 +40,7 @@ async def modules_list(ctx: ToolContext) -> list[dict[str, Any]]:
 
 @tool("write")
 async def modules_set_preferences(
-    ctx: ToolContext,
+    ctx: ActorContext,
     key: ModuleKey,
     pinned: Annotated[bool | None, Field(description="true = favourite, false = not")] = None,
     enabled: Annotated[
@@ -54,7 +55,7 @@ async def modules_set_preferences(
 
 @tool("write")
 async def modules_set_interest(
-    ctx: ToolContext,
+    ctx: ActorContext,
     key: ModuleKey,
     wanted: Annotated[bool, Field(description="true = notify me at launch, false = stop")],
 ) -> ModuleView:
@@ -63,6 +64,6 @@ async def modules_set_interest(
 
 
 @tool("client")
-async def modules_open(ctx: ToolContext, key: ModuleKey) -> None:
+async def modules_open(ctx: ActorContext, key: ModuleKey) -> None:
     """Open a module for the user: its pages when available, otherwise its details."""
     _service(ctx).registry.get(key)

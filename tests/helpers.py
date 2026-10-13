@@ -18,6 +18,7 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 from asgi_lifespan import LifespanManager
+from beanie import PydanticObjectId
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient, Response
 from pydantic import SecretStr
@@ -30,18 +31,21 @@ from app.core.config import (
     AuthSettings,
     BootstrapSettings,
     CorsSettings,
+    DashboardSettings,
     DefaultsSettings,
     Environment,
     LogFormat,
     LogSettings,
     ModulesSettings,
     MongoSettings,
+    NotificationSettings,
     RateLimitSettings,
     RegistrationMode,
     SecuritySettings,
     Settings,
 )
 from app.main import create_app
+from app.platform.users.models import User
 
 TEST_MONGO_BASE_URI = os.environ.get("TEST_MONGO_URI", "mongodb://localhost:27017")
 UNREACHABLE_MONGO_URI = "mongodb://127.0.0.1:1/tt-unreachable"
@@ -93,6 +97,8 @@ def build_settings(mongo_uri: str, **groups: Any) -> Settings:
         "defaults": DefaultsSettings(_env_file=None),
         "modules": ModulesSettings(_env_file=None, packages=TEST_MODULE_PACKAGES),
         "agent": AgentSettings(_env_file=None),
+        "dashboard": DashboardSettings(_env_file=None),
+        "notifications": NotificationSettings(_env_file=None),
         "bootstrap": BootstrapSettings(_env_file=None),
     }
     return Settings(**(defaults | groups))
@@ -189,3 +195,13 @@ def api_operations(app: FastAPI, prefix: str = "/v1/") -> list[tuple[str, str]]:
         for method in operations
         if method in HTTP_METHODS
     )
+
+
+async def make_admin(client: AsyncClient) -> str:
+    """Register a user, promote them, and return an access token for the admin."""
+    account = await register(client, name="Admin")
+    await User.get_pymongo_collection().update_one(
+        {"_id": PydanticObjectId(account.user_id)}, {"$set": {"role": "admin"}}
+    )
+    # Role is read from the database on every request, but sign in again for a fresh token.
+    return str((await login(client, account.email)).json()["access_token"])

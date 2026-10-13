@@ -108,7 +108,7 @@ Every response carries an `X-Request-ID` header. Send your own (8–128 characte
 |---|---|
 | `poe dev` | Run the API with reload |
 | `poe test` | pytest with coverage (gate: 80%). Needs MongoDB; uses a throwaway database |
-| `poe lint` | ruff check, format check, mypy `--strict`, import-linter |
+| `poe lint` | ruff check, format check, mypy `--strict` (app, tests and each skill's scripts), import-linter |
 | `poe fmt` | Auto-format and auto-fix |
 | `poe audit` | pip-audit on the pinned runtime dependencies |
 | `poe actionlint` | Lint the GitHub Actions workflow |
@@ -157,6 +157,8 @@ app/
     documents.py     base documents (timestamps; owned = user_id + module_key + soft delete)
     repository.py    ScopedRepository: every query filtered to the caller's Scope
     pagination.py    page/page_size/sort parameters and the Page[T] response
+    daterange.py     DateRange: calendar days in the user's time zone, previous period
+    concurrency.py   settle(): optional work with a timeout that never breaks the caller
     security.py      Argon2id hashing, password policy, JWT, token digests
     rate_limit.py    per-client rate limits (limits library)
   platform/          shared capabilities used by every module
@@ -167,7 +169,12 @@ app/
                      tools.py + skills/manage-modules (agent tools and skill)
     agents/          skill-driven agent runtime: catalog, tools, policy, providers, /v1/agents
     assistant/       agents/assistant.md: the agent behind "Ask" in the command palette
-    plugins.py       folder discovery shared by modules, agents, skills and tools
+    dashboard/       widget contract (@widget), /v1/dashboard
+    activity/        ActivityLog, /v1/activity, activity widgets
+    notifications/   Inbox, /v1/notifications, tools.py + skills/check-notifications
+    admin/           /v1/admin/*: the only place an unrestricted Scope is allowed
+    context.py       ActorContext: what tools and widgets receive
+    plugins.py       folder discovery shared by modules, agents, skills, tools and widgets
   modules/           feature modules, auto-discovered (expenses ... journal: coming soon)
 tests/               pytest suite (real MongoDB)
 scripts/             seed.py, reset_password.py, export_openapi.py, hooks/venv-run.sh

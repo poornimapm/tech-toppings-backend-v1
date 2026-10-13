@@ -18,3 +18,4 @@ New ADRs take the next number. Never edit an accepted ADR's decision; supersede 
 | [0011](0011-registration-by-email-allowlist-no-email-sending-in-v1.md) | Registration by email allowlist; no email sending in v1 | Accepted |
 | [0012](0012-reminders-platform-service-with-in-app-and-web-push-channels.md) | Reminders platform service with in-app and Web Push channels | Accepted |
 | [0013](0013-skill-driven-agents-with-mode-and-fallback-switches.md) | Skill-driven agents with mode and fallback switches | Accepted |
+| [0014](0014-dashboard-widgets-activity-log-and-notification-inbox.md) | Dashboard widgets, activity log and notification inbox | Accepted |

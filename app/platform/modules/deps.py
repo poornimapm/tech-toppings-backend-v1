@@ -20,7 +20,7 @@ def get_registry(request: Request) -> ModuleRegistry:
 def get_module_service(
     request: Request, scope: UserScope, clock: ClockDep, settings: SettingsDep
 ) -> ModuleService:
-    return ModuleService(get_registry(request), scope, clock, settings.modules)
+    return ModuleService(get_registry(request), scope, clock, settings)
 
 
 ModuleServiceDep = Annotated[ModuleService, Depends(get_module_service)]

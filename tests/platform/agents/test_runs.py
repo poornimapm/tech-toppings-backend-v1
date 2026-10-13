@@ -47,14 +47,12 @@ async def test_without_consent_static_mode_answers_by_default(agent_client: Agen
 
     assert agents[0]["mode"] == "static"
     assert agents[0]["reason"] == "consent"
-    assert agents[0]["skills"] == [
-        {
-            "name": "manage-modules",
-            "description": agents[0]["skills"][0]["description"],
-            "mode": "agent",
-            "has_static": True,
-        }
-    ]
+    skills = {skill["name"]: skill for skill in agents[0]["skills"]}
+    assert set(skills) == {"manage-modules", "check-notifications"}
+    assert (skills["manage-modules"]["mode"], skills["manage-modules"]["has_static"]) == (
+        "agent",
+        True,
+    )
     assert (run["mode"], run["reason"], run["status"]) == ("static", "consent", "completed")
     assert run["message_code"] == "manage-modules.ready.pin"
     assert run["proposals"][0]["summary_code"] == "manage-modules.change.pin"

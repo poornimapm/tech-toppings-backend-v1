@@ -16,10 +16,13 @@ from dataclasses import dataclass
 from typing import Any
 
 import pytest
+from beanie import PydanticObjectId
 from fastapi import FastAPI
 from httpx import AsyncClient
 
-from tests.helpers import CSRF, Account, api_operations, register
+from app.core.repository import Scope
+from app.platform.notifications.inbox import Inbox
+from tests.helpers import CSRF, Account, FrozenClock, api_operations, build_settings, register
 
 PATH_PARAM = re.compile(r"{(\w+)}")
 WRITE_BODIES: dict[str, dict[str, object]] = {
@@ -116,6 +119,23 @@ async def check_proposal(client: AsyncClient, owner: Account, proposal_id: str) 
     assert rejected.json()["status"] == "rejected"  # and it is still the owner's to decide
 
 
+async def create_notification(client: AsyncClient, owner: Account) -> str:
+    inbox = Inbox(
+        Scope.for_user(PydanticObjectId(owner.user_id)),
+        FrozenClock(),
+        build_settings("mongodb://localhost/unused"),
+    )
+    await inbox.notify("module.launched", module="notes")
+    page = (await client.get("/v1/notifications?unread=true", headers=owner.headers)).json()
+    return str(page["items"][0]["id"])
+
+
+async def check_notification(client: AsyncClient, owner: Account, notification_id: str) -> None:
+    page = (await client.get("/v1/notifications", headers=owner.headers)).json()
+    mine = next(item for item in page["items"] if item["id"] == notification_id)
+    assert mine["read"] is False  # still there, and still unread
+
+
 Factory = Callable[[AsyncClient, Account], Awaitable[str]]
 Checker = Callable[[AsyncClient, Account, str], Awaitable[None]]
 
@@ -124,6 +144,7 @@ RESOURCES: dict[str, tuple[Factory, Checker]] = {
     "session_id": (current_session, check_session),
     "run_id": (create_run, check_run),
     "proposal_id": (create_proposal, check_proposal),
+    "notification_id": (create_notification, check_notification),
 }
 
 

@@ -6,14 +6,14 @@ from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, Request, status
 
-from app.core.deps import ClockDep, SettingsDep
 from app.core.errors import AppError, error_responses
 from app.core.pagination import Page, PageParamsDep
 from app.core.rate_limit import rate_limit
 from app.platform.agents.runtime import AgentRunRepository, AgentRuntime, RunRequest
 from app.platform.agents.schemas import AgentView, RunIn, RunOut, SkillView
-from app.platform.agents.tools import Proposal, ToolContext
-from app.platform.auth.deps import CurrentUser, UserScope
+from app.platform.agents.tools import Proposal
+from app.platform.auth.deps import UserScope
+from app.platform.context import ActorDep
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
@@ -28,22 +28,11 @@ def get_runtime(request: Request) -> AgentRuntime:
     return cast(AgentRuntime, request.app.state.agents)
 
 
-def tool_context(
-    request: Request, user: CurrentUser, scope: UserScope, clock: ClockDep, settings: SettingsDep
-) -> ToolContext:
-    return ToolContext(
-        user=user, scope=scope, clock=clock, settings=settings, state=request.app.state
-    )
-
-
 RuntimeDep = Annotated[AgentRuntime, Depends(get_runtime)]
-ContextDep = Annotated[ToolContext, Depends(tool_context)]
 
 
 @router.get("", summary="Agents, and whether AI can run for me", responses=error_responses(401))
-async def list_agents(
-    runtime: RuntimeDep, ctx: ContextDep, params: PageParamsDep
-) -> Page[AgentView]:
+async def list_agents(runtime: RuntimeDep, ctx: ActorDep, params: PageParamsDep) -> Page[AgentView]:
     catalog, user = runtime.catalog, ctx.user
     remaining = await runtime.quota.remaining(user.id) if user.id else 0
     views = []
@@ -80,7 +69,7 @@ async def list_agents(
     dependencies=[Depends(rate_limit("agent_run"))],
     responses=error_responses(401, 404, 422, 429),
 )
-async def run_agent(name: str, body: RunIn, runtime: RuntimeDep, ctx: ContextDep) -> RunOut:
+async def run_agent(name: str, body: RunIn, runtime: RuntimeDep, ctx: ActorDep) -> RunOut:
     if len(body.input) > runtime.settings.max_input_chars:
         raise InputTooLongError(details={"max": runtime.settings.max_input_chars})
     request = RunRequest(
@@ -103,7 +92,7 @@ async def read_run(run_id: str, runtime: RuntimeDep, scope: UserScope) -> RunOut
     summary="Confirm a proposed change (runs it)",
     responses=error_responses(401, 404, 409),
 )
-async def confirm_proposal(proposal_id: str, runtime: RuntimeDep, ctx: ContextDep) -> Proposal:
+async def confirm_proposal(proposal_id: str, runtime: RuntimeDep, ctx: ActorDep) -> Proposal:
     return await runtime.resolve(proposal_id, confirm=True, ctx=ctx)
 
 
@@ -112,5 +101,5 @@ async def confirm_proposal(proposal_id: str, runtime: RuntimeDep, ctx: ContextDe
     summary="Reject a proposed change",
     responses=error_responses(401, 404, 409),
 )
-async def reject_proposal(proposal_id: str, runtime: RuntimeDep, ctx: ContextDep) -> Proposal:
+async def reject_proposal(proposal_id: str, runtime: RuntimeDep, ctx: ActorDep) -> Proposal:
     return await runtime.resolve(proposal_id, confirm=False, ctx=ctx)

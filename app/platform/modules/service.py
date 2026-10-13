@@ -14,15 +14,17 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ValidationError
 
 from app.core.clock import Clock
-from app.core.config import ModulesSettings
+from app.core.concurrency import settle
+from app.core.config import Settings
 from app.core.logging import get_logger
 from app.core.repository import Scope
+from app.platform.activity.log import ActivityLog
 from app.platform.modules.errors import (
     InvalidModuleSettingsError,
     ModuleDisabledError,
@@ -34,6 +36,7 @@ from app.platform.modules.manifest import ModuleStatus, TileStat
 from app.platform.modules.models import ModuleOverride, UserModule
 from app.platform.modules.repository import UserModuleRepository
 from app.platform.modules.schemas import ModuleView, PreferencesIn
+from app.platform.notifications.inbox import Inbox
 
 if TYPE_CHECKING:
     from app.platform.modules.discovery import LoadedModule
@@ -119,15 +122,26 @@ def _coerce_settings(model: type[BaseModel], stored: Mapping[str, Any]) -> BaseM
     return model()
 
 
+# What a preference change is called in the activity feed.
+_ACTIVITY = {
+    ("pinned", True): "module.pinned",
+    ("pinned", False): "module.unpinned",
+    ("enabled", True): "module.shown",
+    ("enabled", False): "module.hidden",
+}
+
+
 class ModuleService:
     def __init__(
-        self, registry: ModuleRegistry, scope: Scope, clock: Clock, settings: ModulesSettings
+        self, registry: ModuleRegistry, scope: Scope, clock: Clock, settings: Settings
     ) -> None:
         self.registry = registry
         self.scope = scope
         self.clock = clock
-        self.settings = settings
+        self.settings = settings.modules
         self.preferences = UserModuleRepository(scope, clock)
+        self.activity = ActivityLog(scope, clock, settings)
+        self.inbox = Inbox(scope, clock, settings)
 
     # ------------------------------------------------------------------ reading
 
@@ -192,13 +206,12 @@ class ModuleService:
         provider = item.module.tile_stat
         if provider is None or not item.available:
             return None
-        try:
-            return await asyncio.wait_for(
-                provider(self.scope, self.clock), timeout=self.settings.tile_stat_timeout_seconds
-            )
-        except Exception as exc:  # one broken module must not break the Welcome page
-            logger.warning("tile_stat_failed", module=item.key, error_type=type(exc).__name__)
-            return None
+        return await settle(
+            provider(self.scope, self.clock),
+            within=self.settings.tile_stat_timeout_seconds,
+            event="tile_stat_failed",
+            module=item.key,
+        )
 
     # ------------------------------------------------------------------ preferences
 
@@ -207,6 +220,8 @@ class ModuleService:
         values = changes.model_dump(exclude_unset=True, exclude_none=True)
         if values:
             await self.preferences.upsert(key, values)
+        for change in values.items():
+            await self.activity.record(_ACTIVITY[change], module=key)
         return await self.view(key)
 
     async def reorder(self, keys: Sequence[str]) -> None:
@@ -220,6 +235,7 @@ class ModuleService:
         final = [*keys, *(key for key in current if key not in set(keys))]
         for position, key in enumerate(final):
             await self.preferences.upsert(key, {"position": position})
+        await self.activity.record("module.arranged")
 
     async def set_interest(self, key: str, *, wanted: bool) -> ModuleView:
         item = await self.one(key)
@@ -228,9 +244,27 @@ class ModuleService:
                 raise ModuleNotUpcomingError(details={"module": key})
             if not item.notify_requested:  # keep the first request's time
                 await self.preferences.upsert(key, {"notify_requested_at": self.clock.now()})
+                await self.activity.record("module.notify_on", module=key)
         elif item.notify_requested:
             await self.preferences.upsert(key, {"notify_requested_at": None})
+            await self.activity.record("module.notify_off", module=key)
         return await self.view(key)
+
+    async def deliver_launch_notices(
+        self, arranged: Sequence[EffectiveModule]
+    ) -> list[EffectiveModule]:
+        """Keep the "notify me" promise: a module the user asked about that is no longer coming
+        soon becomes a notification, once (ADR-0007: done when the user next loads modules)."""
+        delivered = []
+        for item in arranged:
+            if item.notify_requested and item.status is not ModuleStatus.COMING_SOON:
+                await self.inbox.notify(
+                    "module.launched", module=item.key, dedupe_key=f"module.launched:{item.key}"
+                )
+                await self.preferences.upsert(item.key, {"notify_requested_at": None})
+                item = replace(item, notify_requested=False)  # noqa: PLW2901
+            delivered.append(item)
+        return delivered
 
     # ------------------------------------------------------------------ settings
 

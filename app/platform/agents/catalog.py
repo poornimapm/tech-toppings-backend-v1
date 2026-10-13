@@ -21,7 +21,7 @@ from typing import Any
 from app.core.errors import NotFoundError
 from app.platform.agents import frontmatter
 from app.platform.agents.tools import TOOL_ATTRIBUTE, ToolBox, ToolSpec
-from app.platform.plugins import PluginError, import_optional, load_script, package_dir
+from app.platform.plugins import PluginError, contributions, load_script, package_dir
 
 NAME_PATTERN = r"^[a-z0-9]+(-[a-z0-9]+)*$"
 SKILL_FIELDS = {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}
@@ -44,6 +44,8 @@ class StaticOutcome:
 
     code: str
     params: Mapping[str, Any] = field(default_factory=dict)
+    # "My best answer, but let the other skills try first" (e.g. the right verb, no known object).
+    tentative: bool = False
 
 
 StaticHandler = Callable[[StaticRequest, ToolBox], Awaitable[StaticOutcome | None]]
@@ -146,17 +148,6 @@ def _load_agent(path: Path) -> AgentSpec:
     )
 
 
-def _load_tools(package: str, owner: str) -> list[ToolSpec]:
-    module = import_optional(f"{package}.tools")
-    found = (
-        (getattr(value, TOOL_ATTRIBUTE, None) for value in vars(module).values()) if module else ()
-    )
-    specs = [spec for spec in found if isinstance(spec, ToolSpec)]
-    for spec in specs:
-        _check(spec.name.startswith(f"{owner}_"), f"tool {spec.name} must start with '{owner}_'")
-    return specs
-
-
 def _unique(items: Iterable[Any], kind: str) -> dict[str, Any]:
     found: dict[str, Any] = {}
     for item in items:
@@ -171,7 +162,7 @@ def discover_agents(packages: Iterable[str]) -> AgentCatalog:
     tools: list[ToolSpec] = []
     for package in packages:
         owner, folder = package.rsplit(".", 1)[-1], package_dir(package)
-        tools += _load_tools(package, owner)
+        tools += contributions(package, "tools", TOOL_ATTRIBUTE)
         agents += [_load_agent(path) for path in sorted(folder.glob("agents/*.md"))]
         skills += [_load_skill(md.parent, owner) for md in sorted(folder.glob("skills/*/SKILL.md"))]
 

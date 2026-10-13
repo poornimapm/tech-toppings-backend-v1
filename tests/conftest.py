@@ -12,6 +12,7 @@ from pymongo import AsyncMongoClient
 from pymongo.errors import PyMongoError
 
 from app.core.config import Settings
+from app.platform.modules.models import ModuleOverride
 from tests.helpers import (
     TEST_MONGO_BASE_URI,
     FrozenClock,
@@ -33,6 +34,8 @@ SETTINGS_ENV_PREFIXES = (
     "DEFAULT_",
     "MODULES_",
     "AGENT_",
+    "DASHBOARD_",
+    "NOTIFICATIONS_",
     "BOOTSTRAP_ADMIN_",
 )
 
@@ -131,3 +134,12 @@ def plugin_package(
         return name
 
     return create
+
+
+@pytest.fixture
+async def clean_overrides(
+    client: AsyncClient,  # noqa: ARG001 - torn down before the app stops (database still open)
+) -> AsyncIterator[None]:
+    """Admin overrides are global, so tests that write them remove them afterwards."""
+    yield
+    await ModuleOverride.get_pymongo_collection().delete_many({})

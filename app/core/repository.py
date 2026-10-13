@@ -27,6 +27,9 @@ from app.core.pagination import PageParams
 
 TDoc = TypeVar("TDoc", bound=OwnedDocument)
 
+# Feeds read newest first. The id breaks ties: several records can share a millisecond.
+NEWEST_FIRST: tuple[tuple[str, int], ...] = (("created_at", -1), ("_id", -1))
+
 
 @dataclass(frozen=True)
 class Scope:

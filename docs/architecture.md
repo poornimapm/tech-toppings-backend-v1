@@ -222,6 +222,53 @@ provider, all providers failing.
 
 Daily budgets are counted per AI call (`agent_usage`, per user and global, by UTC day).
 
+## Dashboard, activity and notifications
+
+Three platform services every module shares (ADR-0014). Tools and widgets both receive an
+`ActorContext` (user, scope, clock, settings, app state), so they read through the same
+`Scope` as the API.
+
+**Widgets.** A package contributes dashboard figures with a `widgets.py`:
+
+```python
+@widget("kpi")
+async def expenses_total(ctx: ActorContext, period: DateRange) -> Kpi:
+    return Kpi(value=..., previous=..., format="currency", currency=ctx.user.base_currency)
+```
+
+| Kind | Shape | Drawn as |
+|---|---|---|
+| `kpi` | a value and the previous period's | a figure with its trend |
+| `series` | one value per day | an area chart, also readable as a table |
+| `list` | rows (`title`, or `code` + `params`) | a short feed |
+
+- `GET /v1/dashboard?from&to` runs the platform's widgets and those of the modules available
+  to the user, in parallel. Each has `DASHBOARD_WIDGET_TIMEOUT_SECONDS`; a failed or slow
+  one is logged and sent as `data: null`, never as a zero.
+- `GET /v1/admin/dashboard` runs the same widgets with `Scope.unrestricted` and leaves out
+  `list` widgets: admins see totals, never anyone's rows.
+- `DateRange` (`core/daterange.py`) holds calendar days in the user's time zone. Defaults
+  and the longest range are `DASHBOARD_DEFAULT_RANGE_DAYS` / `DASHBOARD_MAX_RANGE_DAYS`;
+  a bad range is `422 RANGE_INVALID`.
+- `count_in` and `daily_counts` (zero-filled, time-zone aware) cover the common widgets.
+
+**Activity.** `ActivityLog(...).record("module.pinned", module="journal")` stores a code and
+params; `GET /v1/activity` lists the caller's own, newest first. Entries expire after
+`DASHBOARD_ACTIVITY_RETENTION_DAYS`.
+
+**Notifications.** `Inbox(...).notify("module.launched", module=key, dedupe_key=...)`. A
+`dedupe_key` is unique per user, so a repeated trigger never delivers twice.
+
+- `GET /v1/notifications?unread=`, `POST /v1/notifications/read-all`,
+  `POST /v1/notifications/{id}/read`, `DELETE /v1/notifications/{id}`.
+- Notifications expire after `NOTIFICATIONS_RETENTION_DAYS`.
+- A launch notice is delivered the next time the user loads `GET /v1/modules`, which needs
+  no scheduler (ADR-0007).
+- The `check-notifications` skill gives the assistant three tools: list (read), mark all
+  read (write, confirmed by the user) and open the page (client).
+
+In both feeds `params.module` is a module key; the client shows the module's name.
+
 ## Configuration
 
 `app.core.config` is the only module that reads the environment.
@@ -241,6 +288,8 @@ Each concern is a frozen `BaseSettings` group with its own prefix:
 | `DEFAULT_` | `DefaultsSettings` (new-account locale, currency, time zone) |
 | `MODULES_` | `ModulesSettings` (packages to discover, tile-stat timeout) |
 | `AGENT_` | `AgentSettings` (mode, fallback, providers, budgets, retention, redaction) |
+| `DASHBOARD_` | `DashboardSettings` (range defaults and limit, widget timeout, activity retention) |
+| `NOTIFICATIONS_` | `NotificationSettings` (retention) |
 | `BOOTSTRAP_ADMIN_` | `BootstrapSettings` (`poe seed`) |
 
 Sources, from lowest to highest priority:

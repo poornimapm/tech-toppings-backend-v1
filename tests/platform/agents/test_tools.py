@@ -11,13 +11,14 @@ from pydantic import Field
 
 from app.core.errors import NotFoundError
 from app.core.repository import Scope
-from app.platform.agents.tools import SUMMARY_ARGUMENT, ToolBox, ToolContext, ToolSpec, tool
+from app.platform.agents.tools import SUMMARY_ARGUMENT, ToolBox, ToolSpec, tool
+from app.platform.context import ActorContext
 from tests.helpers import FrozenClock
 
 
 @tool("read")
 async def demo_lookup(
-    _ctx: ToolContext, key: Annotated[str, Field(description="Which one")], limit: int = 3
+    _ctx: ActorContext, key: Annotated[str, Field(description="Which one")], limit: int = 3
 ) -> dict[str, Any]:
     """Look something up."""
     if key == "missing":
@@ -26,13 +27,13 @@ async def demo_lookup(
 
 
 @tool("write")
-async def demo_change(_ctx: ToolContext, key: str, on: bool) -> dict[str, Any]:
+async def demo_change(_ctx: ActorContext, key: str, on: bool) -> dict[str, Any]:
     """Change something."""
     return {"key": key, "on": on}
 
 
 @tool("client")
-async def demo_open(ctx: ToolContext, key: str) -> None:
+async def demo_open(ctx: ActorContext, key: str) -> None:
     """Open something."""
 
 
@@ -44,7 +45,7 @@ def spec(fn: Any) -> ToolSpec:
 def box() -> ToolBox:
     clock = FrozenClock()
     stand_ins: dict[str, Any] = {"user": None, "settings": None, "state": None}  # unused here
-    ctx = ToolContext(scope=Scope.for_user(PydanticObjectId()), clock=clock, **stand_ins)
+    ctx = ActorContext(scope=Scope.for_user(PydanticObjectId()), clock=clock, **stand_ins)
     tools = {s.name: s for s in map(spec, (demo_lookup, demo_change, demo_open))}
     return ToolBox(tools, ctx, timedelta(minutes=5))
 
@@ -70,7 +71,7 @@ def test_tools_must_be_async_and_documented() -> None:
     with pytest.raises(TypeError, match="async"):
         tool("read")(lambda _ctx: None)  # type: ignore[type-var]
 
-    async def undocumented(ctx: ToolContext) -> None:
+    async def undocumented(ctx: ActorContext) -> None:
         pass
 
     with pytest.raises(TypeError, match="docstring"):

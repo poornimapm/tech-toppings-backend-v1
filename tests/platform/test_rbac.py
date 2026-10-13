@@ -7,16 +7,7 @@ from beanie import PydanticObjectId
 from httpx import AsyncClient
 
 from app.platform.users.models import User
-from tests.helpers import login, register
-
-
-async def make_admin(client: AsyncClient) -> str:
-    account = await register(client, name="Admin")
-    await User.get_pymongo_collection().update_one(
-        {"_id": PydanticObjectId(account.user_id)}, {"$set": {"role": "admin"}}
-    )
-    # Role is read from the database on every request, but sign in again for a fresh token.
-    return str((await login(client, account.email)).json()["access_token"])
+from tests.helpers import make_admin, register
 
 
 async def test_admin_sees_every_users_records(

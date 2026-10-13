@@ -6,9 +6,9 @@ import asyncio
 from dataclasses import replace
 from typing import Any
 
+import pytest
 from beanie import PydanticObjectId
 from pydantic import BaseModel, ConfigDict, Field
-from structlog.testing import capture_logs
 
 from app.core.config import ModulesSettings
 from app.core.repository import Scope
@@ -21,7 +21,7 @@ from app.platform.modules.service import (
     _arrange,
     _coerce_settings,
 )
-from tests.helpers import FrozenClock
+from tests.helpers import FrozenClock, build_settings
 
 
 def loaded(key: str, order: int = 1, tile_stat: Any = None) -> LoadedModule:
@@ -47,7 +47,10 @@ def service(*modules: LoadedModule, timeout: float = 2.0) -> ModuleService:
         ModuleRegistry(modules),
         Scope.for_user(PydanticObjectId()),
         FrozenClock(),
-        ModulesSettings(_env_file=None, tile_stat_timeout_seconds=timeout),
+        build_settings(
+            "mongodb://localhost/unused",
+            modules=ModulesSettings(_env_file=None, tile_stat_timeout_seconds=timeout),
+        ),
     )
 
 
@@ -62,31 +65,43 @@ def test_modules_added_after_a_custom_arrangement_go_last() -> None:
     assert [item.key for item in arranged] == ["first", "second", "brand_new", "also_new"]
 
 
-async def test_a_failing_tile_stat_is_logged_and_skipped() -> None:
+@pytest.fixture
+def warnings(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    """Warnings logged by the guarded runner (tile stats and widgets share it)."""
+    seen: list[dict[str, Any]] = []
+
+    class Recorder:
+        def warning(self, event: str, **fields: Any) -> None:
+            seen.append({"event": event, **fields})
+
+    monkeypatch.setattr("app.core.concurrency.logger", Recorder())
+    return seen
+
+
+async def test_a_failing_tile_stat_is_logged_and_skipped(warnings: list[dict[str, Any]]) -> None:
     async def broken(_scope: Scope, _clock: Any) -> TileStat:
         raise RuntimeError("database exploded")
 
     module = loaded("demo", tile_stat=broken)
-    with capture_logs() as logs:
-        stat = await service(module)._stat(effective_for(module))
+    stat = await service(module)._stat(effective_for(module))
 
     assert stat is None
-    assert logs[0]["event"] == "tile_stat_failed"
-    assert logs[0]["error_type"] == "RuntimeError"
-    assert "exploded" not in str(logs)
+    assert warnings == [
+        {"event": "tile_stat_failed", "error_type": "RuntimeError", "module": "demo"}
+    ]
+    assert "exploded" not in str(warnings)  # the message may hold data: only the type is logged
 
 
-async def test_a_slow_tile_stat_times_out() -> None:
+async def test_a_slow_tile_stat_times_out(warnings: list[dict[str, Any]]) -> None:
     async def slow(_scope: Scope, _clock: Any) -> TileStat:
         await asyncio.sleep(5)
         return TileStat(value=1, label="never")
 
     module = loaded("demo", tile_stat=slow)
-    with capture_logs() as logs:
-        stat = await service(module, timeout=0.01)._stat(effective_for(module))
+    stat = await service(module, timeout=0.01)._stat(effective_for(module))
 
     assert stat is None
-    assert logs[0]["error_type"] == "TimeoutError"
+    assert warnings[0]["error_type"] == "TimeoutError"
 
 
 def effective_for(module: LoadedModule) -> EffectiveModule:

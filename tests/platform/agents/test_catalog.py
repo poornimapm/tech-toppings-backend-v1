@@ -13,10 +13,10 @@ from tests.helpers import build_app, build_settings
 MakePackage = Callable[[dict[str, dict[str, str]]], str]
 
 TOOLS = '''
-from app.platform import ToolContext, tool
+from app.platform import ActorContext, tool
 
 @tool("read")
-async def demo_count(ctx: ToolContext) -> int:
+async def demo_count(ctx: ActorContext) -> int:
     """Count things."""
     return 1
 '''
@@ -61,13 +61,16 @@ def catalog_of(plugin_package: MakePackage, *folders: dict[str, str]):  # type: 
 def test_the_app_ships_the_assistant_and_its_skills(mongo_uri: str) -> None:
     catalog = build_app(build_settings(mongo_uri)).state.agents.catalog
 
-    assert catalog.agents["assistant"].skills == ("manage-modules",)
+    assert set(catalog.agents["assistant"].skills) == {"manage-modules", "check-notifications"}
     assert catalog.skills["manage-modules"].static is not None
     assert {name: spec.effect for name, spec in catalog.tools.items()} == {
         "modules_list": "read",
         "modules_set_preferences": "write",
         "modules_set_interest": "write",
         "modules_open": "client",
+        "notifications_list": "read",
+        "notifications_mark_all_read": "write",
+        "notifications_open": "client",
     }
 
 

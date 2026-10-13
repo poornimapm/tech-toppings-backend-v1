@@ -30,7 +30,7 @@ async def list_modules(
         str | None, Query(description="position (default) or key; - = descending")
     ] = None,
 ) -> Page[ModuleView]:
-    arranged = await service.arranged()
+    arranged = await service.deliver_launch_notices(await service.arranged())
     matching = [
         item
         for item in arranged

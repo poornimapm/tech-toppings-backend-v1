@@ -19,11 +19,8 @@ from typing import Any, Literal, TypeVar, get_type_hints
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, create_model
 from pydantic_core import to_jsonable_python
 
-from app.core.clock import Clock
-from app.core.config import Settings
 from app.core.errors import AppError
-from app.core.repository import Scope
-from app.platform.users.models import User
+from app.platform.context import ActorContext
 
 Effect = Literal["read", "write", "client"]
 TOOL_ATTRIBUTE = "__agent_tool__"
@@ -36,17 +33,6 @@ SUMMARY_SCHEMA = {
 }
 
 F = TypeVar("F", bound=Callable[..., Awaitable[Any]])
-
-
-@dataclass(frozen=True)
-class ToolContext:
-    """Who is acting, and the app's shared services (``state``: module registry, ...)."""
-
-    user: User
-    scope: Scope
-    clock: Clock
-    settings: Settings
-    state: Any
 
 
 @dataclass(frozen=True)
@@ -74,12 +60,12 @@ class ToolSpec:
     def parse(self, raw: Mapping[str, Any]) -> BaseModel:
         return self.arguments.model_validate(dict(raw))
 
-    async def run(self, ctx: ToolContext, arguments: BaseModel) -> Any:
+    async def run(self, ctx: ActorContext, arguments: BaseModel) -> Any:
         return to_jsonable_python(await self.fn(ctx, **dict(arguments)))
 
 
 def tool(effect: Effect) -> Callable[[F], F]:
-    """Mark an async function ``(ctx: ToolContext, **arguments)`` as an agent tool."""
+    """Mark an async function ``(ctx: ActorContext, **arguments)`` as an agent tool."""
 
     def register(fn: F) -> F:
         target: Callable[..., Any] = fn  # keep fn's own type: the check below narrows it
@@ -137,7 +123,7 @@ class ToolBox:
     """The tools one run may use, with what the run produced (proposals, client actions)."""
 
     tools: Mapping[str, ToolSpec]
-    ctx: ToolContext
+    ctx: ActorContext
     proposal_ttl: timedelta
     proposals: list[Proposal] = field(default_factory=list)
     client_actions: list[ClientAction] = field(default_factory=list)
