@@ -19,3 +19,4 @@ New ADRs take the next number. Never edit an accepted ADR's decision; supersede 
 | [0012](0012-reminders-platform-service-with-in-app-and-web-push-channels.md) | Reminders platform service with in-app and Web Push channels | Accepted |
 | [0013](0013-skill-driven-agents-with-mode-and-fallback-switches.md) | Skill-driven agents with mode and fallback switches | Accepted |
 | [0014](0014-dashboard-widgets-activity-log-and-notification-inbox.md) | Dashboard widgets, activity log and notification inbox | Accepted |
+| [0015](0015-products-group-entries-by-name.md) | Products group entries by name | Accepted |

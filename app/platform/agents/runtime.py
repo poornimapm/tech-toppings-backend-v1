@@ -317,8 +317,11 @@ class AgentRuntime:
                 continue
             scoped = ToolBox(self.catalog.tools_of([skill]), ctx, box.proposal_ttl)
             references = skill.folder / "references"
+            chosen = request.skill == skill.name
             result = await skill.static(
-                StaticRequest(request.input, request.locale, today, request.context, references),
+                StaticRequest(
+                    request.input, request.locale, today, request.context, references, chosen
+                ),
                 scoped,
             )
             if result is None:

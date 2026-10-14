@@ -1,7 +1,7 @@
 # Expenses module
 
-How the module reads what people say, type or paste, and how well it does. The rest of the
-module is described in [architecture.md](../architecture.md#expenses).
+How the module reads what people say, type or paste, how well it does, and how it follows
+prices. The rest of the module is described in [architecture.md](../architecture.md#expenses).
 
 ## Capture
 
@@ -34,15 +34,16 @@ Everything it knows is data in `skills/track-expenses/references/`:
 | File | What it holds |
 |---|---|
 | `numbers.yaml` | number words, multipliers ("lakh", "ஆயிரம்", "सौ") and Hindi shifts ("साढ़े", "पौने") |
-| `words.yaml` | currency, conjunctions, income and spending words, fillers, units, days, weekdays, months |
+| `words.yaml` | currency, conjunctions, income and spending words, fillers, the words for each unit, days, weekdays, months |
 | `categories.yaml` | words that point to a system category, and the "other" category of each kind |
 | `sms.yaml` | how bank and UPI messages are recognised and read |
 | `lexicon.yaml` | the skill's actions, and how sure the parser is of each kind of guess |
 
 It reads Tamil and Devanagari digits, "1,25,000", "2k", "two fifty" (250), "ढाई सौ" (250);
 days such as "yesterday", "நேற்று", "कल", "last Friday", "3 दिन पहले", "5 Oct", "01/10"
-(never in the future); quantities ("2 kg", "அரை கிலோ"), which stay in the title; several
-items ("tea 15 and coffee 20"); income ("salary vandhuchu"); and the merchant after "at".
+(never in the future); quantities ("2 kg", "அரை கிலோ", "a dozen"), as a quantity and a unit
+code of `data/units.yaml`; several items ("tea 15 and coffee 20"); income ("salary
+vandhuchu"); and the merchant after "at".
 
 A category comes from the user's own habit for the same title first (`expenses_habits`),
 then a keyword, then "other" (marked uncertain).
@@ -52,17 +53,20 @@ then a keyword, then "other" (marked uncertain).
 `poe eval-parser` scores the parser by language and field (`--misses` lists the errors).
 CI gates it (`tests/modules/expenses/test_parser.py`).
 
-**Development set** (`tests/modules/expenses/parser_cases.yaml`, 170 inputs). The lexicons
+**Development set** (`tests/modules/expenses/parser_cases.yaml`, 174 inputs). The lexicons
 were written alongside these inputs, so this measures what the parser knows, not how it does
 on new sentences.
 
-| | entries | amount | item | kind | date |
-|---|---|---|---|---|---|
-| English (50) | 100% | 100% | 100% | 100% | 8/8 |
-| Tamil (40) | 100% | 100% | 100% | 100% | 6/6 |
-| Hindi (40) | 100% | 100% | 100% | 100% | 6/6 |
-| Mixed and Latin letters (20) | 100% | 100% | 100% | 100% | 4/4 |
-| Bank and UPI SMS (20) | 100% | 100% | — | 100% | 17/17 |
+| | entries | amount | item | kind | date | quantity |
+|---|---|---|---|---|---|---|
+| English (52) | 100% | 100% | 100% | 100% | 8/8 | 6/6 |
+| Tamil (41) | 100% | 100% | 100% | 100% | 6/6 | 4/4 |
+| Hindi (41) | 100% | 100% | 100% | 100% | 6/6 | 4/4 |
+| Mixed and Latin letters (20) | 100% | 100% | 100% | 100% | 4/4 | 1/1 |
+| Bank and UPI SMS (20) | 100% | 100% | — | 100% | 17/17 | — |
+
+Phase 7 added four inputs with units (packets, grams, a litre, a dozen) and labelled the
+quantity of every input that has one.
 
 Gate: amount ≥ 90% and item ≥ 75% for each language; SMS amount ≥ 98%.
 
@@ -73,6 +77,7 @@ lexicons and scored once):
 |---|---|---|---|
 | First (blind) run, 2026-10-13 | 37/40 (92.5%) | 38/40 (95%) | 36/40 (90%) |
 | After removing "aaya" / "आया" ("came") from the income words | 37/40 | 38/40 | 38/40 (95%) |
+| Phase 7: quantities labelled on the two inputs that have one | 37/40 | 38/40 | 38/40 (95%); quantity 2/2 |
 
 Gate: amount and item ≥ 85% overall (a floor against regressions, not a target).
 
@@ -86,8 +91,40 @@ Known gaps, from the held-out misses:
 To measure one, set `AGENT_PROVIDERS`, give consent, and ask the assistant the same inputs
 (`skill: track-expenses`); record the results in this table.
 
+## Products and prices
+
+A product is something the user buys again and again, known by one or more names
+(ADR-0015). An expense belongs to the product whose names hold its title, so "Tomato",
+"tomato" and, once learned, "Thakkali" are one product.
+
+- **Starting.** An expense with a quantity ("1 kg tomato 40") starts a product when no
+  product has its name yet. Anything else can be followed from its entry page ("Follow its
+  price"); without a quantity, each purchase counts as one ("coffee 25" is ₹25 a cup).
+- **Price per unit.** Worked out when read, in the product's price unit: grams are priced per
+  kg and ml per litre; a unit of one or more is priced per itself (per dozen, per packet).
+  The user can choose another unit of the same kind (`PATCH price_unit`).
+- **What is shown** (`GET /v1/expenses/products`, `GET /v1/expenses/products/{id}`): every
+  purchase with its price per unit, lowest / highest / average / last, the change since the
+  purchase before, each place's average, and the cheapest place among those noted.
+- **Names.** A product's names can be edited; a name another product has is refused with that
+  product's id (combine them instead). Merging moves the other product's names over;
+  stopping gives the names up and keeps them from starting a product again on their own.
+- **Finding duplicates** is the `tidy-products` skill. In agent mode a model reads
+  `expenses_products` and `expenses_items` (titles nothing follows yet) and suggests matches;
+  in static mode the same comes from `references/products.yaml` (one group per thing, in
+  English, Tamil and Hindi) and spelling (`references/lexicon.yaml`: similarity 0.9 after
+  English plurals: onion/onions and thakkali/thakali match, rice/price doesn't). The user
+  confirms each match; "not the same" is remembered (`apart`).
+- **Price alert.** A limit per price unit. An expense above it sends the notification
+  `expenses.price_alert` once per entry; the notification leads to the product.
+
+Acceptance (plan, Phase 7) is a test: "1 kg tomato ₹40 @A", "500 g tomato ₹25 @B" and
+"thakkali 2 kg ₹70", once Thakkali is combined into Tomato, are one product charted at ₹40,
+₹50 and ₹35 per kg (`tests/modules/expenses/test_products.py`).
+
 ## Not yet
 
 - Lending and borrowing ("gave Ravi 500", "கடன்") arrive with IOUs (Phase 9a).
 - Corrections ("change the last entry to 300") are not understood yet.
-- Quantity and unit stay in the title until products and unit prices (Phase 7).
+- Prices are in the user's base currency; entries in other currencies wait for exchange
+  rates.

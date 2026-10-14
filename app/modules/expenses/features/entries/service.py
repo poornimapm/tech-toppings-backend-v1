@@ -16,6 +16,7 @@ from app.modules.expenses.features.entries.schemas import (
     FacetsOut,
     SummaryOut,
 )
+from app.modules.expenses.features.products.service import Products
 from app.platform import ActivityLog, ActorContext, AppError
 
 MAX_SUGGESTIONS = 50
@@ -54,6 +55,7 @@ class EntryService:
         self.ctx = ctx
         self.entries = EntryRepository(ctx.scope, ctx.clock)
         self.categories = Categories(ctx.scope, ctx.clock)
+        self.products = Products(ctx)
         self.activity = ActivityLog(ctx.scope, ctx.clock, ctx.settings)
 
     async def _stored(self, body: EntryIn, current: Entry | None = None) -> dict[str, Any]:
@@ -89,7 +91,10 @@ class EntryService:
         """The new entry, or the one an earlier request with this key made (then ``False``)."""
         fields = {**await self._stored(body), "source": source}
         entry, created = await self.entries.create_once(fields, client_key, source=source)
-        return (await self._changed("added", None, entry) if created else entry), created
+        if not created:
+            return entry, False
+        await self.products.observe(entry)
+        return await self._changed("added", None, entry), True
 
     async def update(self, entry_id: str, body: EntryIn, expected: int) -> Entry:
         current = await self.entries.get(entry_id)
@@ -97,6 +102,8 @@ class EntryService:
         entry = await self.entries.update(
             entry_id, fields, expected=expected, source=EntrySource.MANUAL
         )
+        if entry.revision_no != current.revision_no:
+            await self.products.observe(entry)
         return await self._changed("updated", current, entry)
 
     async def delete(self, entry_id: str) -> None:

@@ -58,6 +58,8 @@ async def test_what_was_typed_becomes_drafts_and_nothing_is_saved(
             "amount": amount,
             "category_id": "groceries",
             "date": yesterday,
+            "quantity": None,
+            "unit": None,
             "merchant": None,
             "for_whom": None,
             "uncertain": [],
@@ -65,6 +67,17 @@ async def test_what_was_typed_becomes_drafts_and_nothing_is_saved(
         for title, amount in (("தக்காளி", 40.0), ("பால்", 30.0))
     ]
     assert (run["proposals"], saved["total"]) == ([], 0)
+
+
+async def test_how_much_was_bought_is_its_own_field(agent_client: AgentClient) -> None:
+    async with agent_client(mode="static") as client:
+        account = await register(client)
+        (tomatoes,) = drafts_of(await ask(client, account, "2 kg tomatoes 80", **HERE))
+        (eggs,) = drafts_of(await ask(client, account, "dozen eggs 84", **HERE))
+
+    assert (tomatoes["title"], tomatoes["amount"]) == ("Tomatoes", 80.0)
+    assert (tomatoes["quantity"], tomatoes["unit"]) == (2.0, "kg")
+    assert (eggs["title"], eggs["quantity"], eggs["unit"]) == ("Eggs", 1.0, "dozen")
 
 
 async def test_fields_the_parser_guessed_are_marked_for_checking(
@@ -201,7 +214,8 @@ async def test_ai_looks_things_up_and_hands_over_drafts(agent_client: AgentClien
     ]
     assert existing["id"] in looked_up[2]
     assert drafts_of(run) == [
-        VEGETABLES | {"kind": "expense", "date": None, "for_whom": None},
+        VEGETABLES
+        | {"kind": "expense", "date": None, "quantity": None, "unit": None, "for_whom": None},
     ]
     assert (run["proposals"], saved["total"]) == ([], 1)  # only the entry that was already there
 

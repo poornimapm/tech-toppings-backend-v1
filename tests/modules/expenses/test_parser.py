@@ -15,6 +15,7 @@ from app.modules.expenses.features.categories.service import system_categories
 from app.modules.expenses.parsing import numbers, when
 from app.modules.expenses.parsing.scoring import report, score
 from app.modules.expenses.parsing.sentence import tokenise
+from app.modules.expenses.units import units
 
 HERE = Path(__file__).parent
 REFERENCES = (
@@ -124,11 +125,19 @@ def test_one_draft_per_thing_when_each_has_its_own_amount() -> None:
     assert [(d.title, d.amount) for d in shared] == [("Bread and butter", Decimal(80))]
 
 
-def test_a_quantity_is_not_the_price_and_stays_in_the_title() -> None:
+def test_how_much_was_bought_is_read_apart_from_the_price() -> None:
     (draft,) = read("bought 2 kg onions for 90 rupees at Big Bazaar")
+    (half,) = read("பருப்பு அரை கிலோ 70")
+    (counted,) = read("3 coffees 240")  # no unit: a number, not a quantity
 
-    assert (draft.title, draft.amount, draft.merchant) == ("2 kg onions", Decimal(90), "Big Bazaar")
-    assert draft.category_id == "groceries"
+    assert (draft.title, draft.amount, draft.merchant) == ("Onions", Decimal(90), "Big Bazaar")
+    assert (draft.quantity, draft.unit, draft.category_id) == (Decimal(2), "kg", "groceries")
+    assert (half.title, half.quantity, half.unit) == ("பருப்பு", Decimal("0.5"), "kg")
+    assert (counted.title, counted.quantity) == ("3 coffees", None)
+
+
+def test_every_unit_the_parser_knows_is_in_the_unit_table() -> None:
+    assert set(LEXICON.units.values()) <= set(units())
 
 
 def test_money_coming_in_is_income_with_an_income_category() -> None:
@@ -224,7 +233,7 @@ def test_there_are_enough_labelled_inputs_in_every_language() -> None:
     for case in cases("parser_cases.yaml"):
         counts[case["lang"]] = counts.get(case["lang"], 0) + 1
 
-    assert counts == {"en": 50, "ta": 40, "hi": 40, "mixed": 20, "sms": 20}
+    assert counts == {"en": 52, "ta": 41, "hi": 41, "mixed": 20, "sms": 20}
 
 
 def test_the_parser_meets_its_targets_on_the_labelled_inputs() -> None:

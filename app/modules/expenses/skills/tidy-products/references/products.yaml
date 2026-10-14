@@ -1,0 +1,41 @@
+# Things people buy, each with the names it goes by in English, Tamil and Hindi (in their
+# own scripts and as typed in Latin letters). Two names in one group are suggested as the
+# same product; the user confirms before anything is combined.
+#
+# Grow this from real purchases: add a name to its group, or a new group, as people use them.
+# English plurals ("onions") need not be listed.
+
+- [tomato, தக்காளி, thakkali, takkali, thakali, टमाटर, tamatar, tamater]
+- [onion, வெங்காயம், vengayam, vengaayam, प्याज, प्याज़, pyaz, pyaaz, kanda]
+- [potato, உருளைக்கிழங்கு, urulaikilangu, urulai, आलू, aloo, alu]
+- [milk, பால், paal, दूध, doodh, dudh]
+- [rice, அரிசி, arisi, चावल, chawal, chaval]
+- [sugar, சர்க்கரை, sakkarai, sarkarai, चीनी, cheeni, chini, शक्कर, shakkar]
+- [salt, உப்பு, uppu, नमक, namak]
+- [oil, cooking oil, எண்ணெய், ennai, ennei, तेल, tel]
+- [egg, முட்டை, muttai, अंडा, अंडे, anda, ande]
+- [curd, yogurt, yoghurt, தயிர், thayir, dahi, दही]
+- [dal, dhal, lentils, பருப்பு, paruppu, दाल]
+- [atta, wheat flour, கோதுமை மாவு, gothumai maavu, आटा]
+- [banana, வாழைப்பழம், vazhaipazham, valaipalam, केला, केले, kela]
+- [chilli, chili, green chilli, மிளகாய், milagai, मिर्च, mirch, mirchi]
+- [garlic, பூண்டு, poondu, लहसुन, lahsun, lehsun]
+- [ginger, இஞ்சி, inji, अदरक, adrak]
+- [coriander, coriander leaves, கொத்தமல்லி, kothamalli, धनिया, dhaniya]
+- [coconut, தேங்காய், thengai, thenkai, नारियल, nariyal]
+- [tea, chai, டீ, தேநீர், theneer, चाय]
+- [coffee, காபி, kaapi, kapi, कॉफी, कॉफ़ी]
+- [bread, ரொட்டி, rotti, ब्रेड, डबलरोटी]
+- [ghee, நெய், nei, घी]
+- [paneer, பனீர், पनीर]
+- [carrot, கேரட், gajar, गाजर]
+- [brinjal, eggplant, கத்தரிக்காய், kathirikai, kathirikkai, बैंगन, baingan]
+- [okra, ladies finger, lady finger, வெண்டைக்காய், vendakkai, vendaikkai, भिंडी, bhindi]
+- [cabbage, முட்டைக்கோஸ், muttaikose, पत्ता गोभी, patta gobhi, band gobhi]
+- [cauliflower, காலிஃபிளவர், फूलगोभी, phool gobhi, gobhi]
+- [spinach, பசலைக் கீரை, pasalai keerai, पालक, palak]
+- [lemon, எலுமிச்சை, elumichai, नींबू, nimbu, neembu]
+- [chicken, கோழி, kozhi, சிக்கன், मुर्गा, murga, चिकन]
+- [fish, மீன், meen, मछली, machli]
+- [petrol, gasoline, பெட்ரோல், पेट्रोल]
+- [water, water can, தண்ணீர், thanneer, पानी, paani]

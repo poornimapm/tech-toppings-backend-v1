@@ -1,0 +1,23 @@
+# Units a quantity can be in, grouped by what they measure. Prices are compared per unit, so
+# only units of the same dimension convert into each other.
+#
+#   factor  how many of the dimension's first unit one of these is (500 g = 0.5 kg, a dozen
+#           is 12 pieces)
+#
+# Adding one here is all it takes on the server. The parser's words for it go in the
+# track-expenses skill (references/words.yaml), and the client needs its name in each language.
+
+mass:
+  kg: 1
+  g: 0.001
+volume:
+  l: 1
+  ml: 0.001
+count:
+  piece: 1
+  dozen: 12
+  packet: 1
+  bottle: 1
+  box: 1
+  plate: 1
+  cup: 1

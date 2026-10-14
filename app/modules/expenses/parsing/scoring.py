@@ -13,7 +13,7 @@ from app.modules.expenses.parsing import Lexicon, parse
 from app.modules.expenses.parsing.sentence import EXPENSE, Draft
 from app.platform import normalise
 
-FIELDS = ("entries", "amount", "item", "kind", "date")
+FIELDS = ("entries", "amount", "item", "kind", "date", "quantity")
 
 
 @dataclass
@@ -42,6 +42,12 @@ def _marks(drafts: list[Draft], want: list[dict[str, Any]], today: date) -> dict
         marks["item"] = same and all(
             normalise(str(w["item"])) in normalise(d.title or "") for d, w in pairs
         )
+    if any("qty" in w for w in want):
+        marks["quantity"] = same and all(
+            (d.quantity, d.unit) == (Decimal(str(w["qty"][0])), w["qty"][1])
+            for d, w in pairs
+            if "qty" in w
+        )
     if any("ago" in w for w in want):
         marks["date"] = same and all(
             d.date == today - timedelta(days=w["ago"]) for d, w in pairs if "ago" in w
@@ -67,7 +73,9 @@ def score(
             table[name].right += right
         wrong = [name for name, right in marks.items() if not right]
         if wrong:
-            read = [(str(d.amount), d.title, d.kind, str(d.date)) for d in drafts]
+            read = [
+                (str(d.amount), d.title, d.kind, str(d.date), d.quantity, d.unit) for d in drafts
+            ]
             misses.append(f"[{case['lang']}] {case['text']!r}: {', '.join(wrong)} -> {read}")
     return scores, misses
 

@@ -44,6 +44,9 @@ ROUTE_BODIES: dict[tuple[str, str], dict[str, object]] = {
     },
     ("POST", "/v1/expenses/entries/{entry_id}/restore"): {"revision_no": 1},
     ("PATCH", "/v1/expenses/categories/{category_id}"): {"name": "hijacked"},
+    ("PATCH", "/v1/expenses/products/{product_id}"): {"name": "hijacked"},
+    ("POST", "/v1/expenses/products/{product_id}/merge"): {"product_id": "0" * 24},
+    ("POST", "/v1/expenses/products/{product_id}/apart"): {"product_id": "0" * 24},
 }
 
 
@@ -185,6 +188,32 @@ async def check_category(client: AsyncClient, owner: Account, category_id: str) 
     assert mine["archived"] is False
 
 
+async def create_product(client: AsyncClient, owner: Account) -> str:
+    """Something bought by measure starts a product of its own."""
+    await client.post(
+        "/v1/expenses/entries",
+        headers=owner.headers,
+        json={
+            "title": "Tomato",
+            "amount_minor": 4000,
+            "quantity": 1,
+            "unit": "kg",
+            "category_id": "groceries",
+            "date": "2026-10-08",
+        },
+    )
+    page = (await client.get("/v1/expenses/products?title=Tomato", headers=owner.headers)).json()
+    return str(page["items"][0]["id"])
+
+
+async def check_product(client: AsyncClient, owner: Account, product_id: str) -> None:
+    product = (
+        await client.get(f"/v1/expenses/products/{product_id}", headers=owner.headers)
+    ).json()
+    assert (product["name"], product["aliases"], product["apart"]) == ("Tomato", ["tomato"], [])
+    assert (product["alert_above_minor"], product["price_unit"]) == (None, "kg")
+
+
 Factory = Callable[[AsyncClient, Account], Awaitable[str]]
 Checker = Callable[[AsyncClient, Account, str], Awaitable[None]]
 
@@ -196,6 +225,7 @@ RESOURCES: dict[str, tuple[Factory, Checker]] = {
     "notification_id": (create_notification, check_notification),
     "entry_id": (create_entry, check_entry),
     "category_id": (create_category, check_category),
+    "product_id": (create_product, check_product),
 }
 
 

@@ -9,7 +9,7 @@ from datetime import date
 from decimal import Decimal
 
 from app.modules.expenses.parsing import numbers, when
-from app.modules.expenses.parsing.lexicon import Lexicon, known
+from app.modules.expenses.parsing.lexicon import Lexicon, known, lookup
 from app.modules.expenses.parsing.numbers import Item, Number, Word
 from app.platform import normalise
 
@@ -44,6 +44,8 @@ class Draft:
     category_id: str | None = None
     date: date | None = None
     merchant: str | None = None
+    quantity: Decimal | None = None
+    unit: str | None = None  # a code of the module's unit table
     confidence: dict[str, float] = field(default_factory=dict)
 
 
@@ -83,7 +85,7 @@ def _amount(items: list[Item], lexicon: Lexicon) -> tuple[int | None, float]:
         index
         for index, item in enumerate(items)
         if isinstance(item, Number)
-        and not _is(items[index + 1] if index + 1 < len(items) else None, lexicon.units)
+        and not _is(items[index + 1] if index + 1 < len(items) else None, lexicon.units.keys())
     ]
     marked = [
         index
@@ -100,6 +102,20 @@ def _amount(items: list[Item], lexicon: Lexicon) -> tuple[int | None, float]:
         largest = max(figures, key=lambda index: items[index].value)  # type: ignore[union-attr]
         return largest, sure["amount_guessed"]
     return None, 0.0
+
+
+def _quantity(items: list[Item], lexicon: Lexicon) -> tuple[set[int], Decimal | None, str | None]:
+    """How much was bought: the items saying it ("2 kg", "half kilo", "dozen"), the quantity
+    and its unit. A unit with no number before it is one of it."""
+    for index, item in enumerate(items):
+        unit = lookup(item.text, lexicon.units) if isinstance(item, Word) else None
+        if unit is None:
+            continue
+        before = items[index - 1] if index else None
+        if isinstance(before, Number):
+            return {index - 1, index}, before.value, unit
+        return {index}, Decimal(1), unit
+    return set(), None, None
 
 
 def _category(
@@ -128,6 +144,7 @@ def _draft(
 ) -> Draft:
     sure = lexicon.confidence
     amount_at, amount_sure = _amount(items, lexicon)
+    measure_at, quantity, unit = _quantity(items, lexicon)
     place_at = next((i for i, item in enumerate(items) if _is(item, lexicon.places)), None)
     merchant: list[str] = []
     title: list[str] = []
@@ -140,7 +157,11 @@ def _draft(
             merchant.append(item.raw)
         else:
             naming_place = False
-            if index != amount_at and (plain or isinstance(item, Number)):
+            if (
+                index != amount_at
+                and index not in measure_at
+                and (plain or isinstance(item, Number))
+            ):
                 title.append(item.raw)
     name = " ".join(title).strip(" -") or None
     category, category_sure = _category(
@@ -154,6 +175,8 @@ def _draft(
         category_id=category,
         date=day,
         merchant=" ".join(merchant) or None,
+        quantity=quantity,
+        unit=unit,
         confidence={
             "amount": amount_sure,
             "title": sure["title"] if name else 0.0,

@@ -10,18 +10,19 @@
 #             item    words the title must contain (not checked for sms)
 #             kind    income, when money came in (default: expense)
 #             ago     days before today, when a day was said
+#             qty     [quantity, unit code], when they said how much was bought
 #
 # This is the set the lexicons were grown against, so its scores say what the parser knows,
 # not how it does on sentences it has never seen. Add real misses here before fixing them.
 
-# ---------------------------------------------------------------- English (50)
+# ---------------------------------------------------------------- English (52)
 - { lang: en, text: "spent 250 on vegetables", want: [{ amount: 250, item: vegetables }] }
 - { lang: en, text: "paid 80 for auto", want: [{ amount: 80, item: auto }] }
 - { lang: en, text: "tomatoes 40", want: [{ amount: 40, item: tomatoes }] }
 - { lang: en, text: "milk 30 rupees", want: [{ amount: 30, item: milk }] }
 - { lang: en, text: "Rs 500 petrol", want: [{ amount: 500, item: petrol }] }
 - { lang: en, text: "₹120 lunch at Saravana Bhavan", want: [{ amount: 120, item: lunch }] }
-- { lang: en, text: "bought 2 kg onions for 90", want: [{ amount: 90, item: onions }] }
+- { lang: en, text: "bought 2 kg onions for 90", want: [{ amount: 90, item: onions, qty: [2, kg] }] }
 - { lang: en, text: "coffee 25 and tea 15", want: [{ amount: 25, item: coffee }, { amount: 15, item: tea }] }
 - { lang: en, text: "yesterday dinner 450", want: [{ amount: 450, item: dinner, ago: 1 }] }
 - { lang: en, text: "electricity bill 1,845", want: [{ amount: 1845, item: electricity }] }
@@ -51,15 +52,17 @@
 - { lang: en, text: "250/- for flowers", want: [{ amount: 250, item: flowers }] }
 - { lang: en, text: "tea 15", want: [{ amount: 15, item: tea }] }
 - { lang: en, text: "two fifty for snacks", want: [{ amount: 250, item: snacks }] }
-- { lang: en, text: "half kg sugar 30", want: [{ amount: 30, item: sugar }] }
+- { lang: en, text: "half kg sugar 30", want: [{ amount: 30, item: sugar, qty: [0.5, kg] }] }
 - { lang: en, text: "I paid 1200 rupees for the gas cylinder", want: [{ amount: 1200, item: cylinder }] }
 - { lang: en, text: "shoes 2499", want: [{ amount: 2499, item: shoes }] }
 - { lang: en, text: "bonus credited 10000", want: [{ amount: 10000, item: bonus, kind: income }] }
 - { lang: en, text: "netflix 649", want: [{ amount: 649, item: netflix }] }
 - { lang: en, text: "paid the maid 3000", want: [{ amount: 3000, item: maid }] }
 - { lang: en, text: "petrol 500 and parking 40", want: [{ amount: 500, item: petrol }, { amount: 40, item: parking }] }
-- { lang: en, text: "dozen eggs 84", want: [{ amount: 84, item: eggs }] }
-- { lang: en, text: "2 litres milk 112", want: [{ amount: 112, item: milk }] }
+- { lang: en, text: "dozen eggs 84", want: [{ amount: 84, item: eggs, qty: [1, dozen] }] }
+- { lang: en, text: "2 litres milk 112", want: [{ amount: 112, item: milk, qty: [2, l] }] }
+- { lang: en, text: "3 packets biscuits 60", want: [{ amount: 60, item: biscuits, qty: [3, packet] }] }
+- { lang: en, text: "500 g paneer 220", want: [{ amount: 220, item: paneer, qty: [500, g] }] }
 - { lang: en, text: "lunch today 180", want: [{ amount: 180, item: lunch, ago: 0 }] }
 - { lang: en, text: "interest received 350", want: [{ amount: 350, item: interest, kind: income }] }
 - { lang: en, text: "temple donation 501", want: [{ amount: 501, item: donation }] }
@@ -68,7 +71,7 @@
 - { lang: en, text: "yesterday i bought vegetables for 320 at the market", want: [{ amount: 320, item: vegetables, ago: 1 }] }
 - { lang: en, text: "emi 8500", want: [{ amount: 8500, item: emi }] }
 
-# ---------------------------------------------------------------- Tamil (40)
+# ---------------------------------------------------------------- Tamil (41)
 - { lang: ta, text: "தக்காளி 40 ரூபாய்", want: [{ amount: 40, item: தக்காளி }] }
 - { lang: ta, text: "பால் 30", want: [{ amount: 30, item: பால் }] }
 - { lang: ta, text: "நேற்று காய்கறி 250", want: [{ amount: 250, item: காய்கறி, ago: 1 }] }
@@ -76,7 +79,7 @@
 - { lang: ta, text: "அரிசி வாங்கினேன் 1200", want: [{ amount: 1200, item: அரிசி }] }
 - { lang: ta, text: "சம்பளம் வந்தது 50000", want: [{ amount: 50000, item: சம்பளம், kind: income }] }
 - { lang: ta, text: "இருநூற்று ஐம்பது ரூபாய்க்கு மளிகை", want: [{ amount: 250, item: மளிகை }] }
-- { lang: ta, text: "2 கிலோ தக்காளி 80", want: [{ amount: 80, item: தக்காளி }] }
+- { lang: ta, text: "2 கிலோ தக்காளி 80", want: [{ amount: 80, item: தக்காளி, qty: [2, kg] }] }
 - { lang: ta, text: "பெட்ரோல் 500 ரூபாய்", want: [{ amount: 500, item: பெட்ரோல் }] }
 - { lang: ta, text: "டீ 15 மற்றும் காபி 20", want: [{ amount: 15, item: டீ }, { amount: 20, item: காபி }] }
 - { lang: ta, text: "மருந்து 640", want: [{ amount: 640, item: மருந்து }] }
@@ -94,7 +97,8 @@
 - { lang: ta, text: "படம் பார்க்க 400 செலவு", want: [{ amount: 400, item: படம் }] }
 - { lang: ta, text: "3 நாட்களுக்கு முன் டாக்டர் கட்டணம் 500", want: [{ amount: 500, item: டாக்டர், ago: 3 }] }
 - { lang: ta, text: "தண்ணீர் கேன் 40", want: [{ amount: 40, item: தண்ணீர் }] }
-- { lang: ta, text: "சர்க்கரை 1 கிலோ 45", want: [{ amount: 45, item: சர்க்கரை }] }
+- { lang: ta, text: "சர்க்கரை 1 கிலோ 45", want: [{ amount: 45, item: சர்க்கரை, qty: [1, kg] }] }
+- { lang: ta, text: "ஒரு லிட்டர் பால் 60", want: [{ amount: 60, item: பால், qty: [1, l] }] }
 - { lang: ta, text: "வெங்காயம் 60, உருளைக்கிழங்கு 50", want: [{ amount: 60, item: வெங்காயம் }, { amount: 50, item: உருளைக்கிழங்கு }] }
 - { lang: ta, text: "வட்டி கிடைத்தது 350", want: [{ amount: 350, item: வட்டி, kind: income }] }
 - { lang: ta, text: "புத்தகம் 399", want: [{ amount: 399, item: புத்தகம் }] }
@@ -105,12 +109,12 @@
 - { lang: ta, text: "டிபன் 60 ரூபாய்", want: [{ amount: 60, item: டிபன் }] }
 - { lang: ta, text: "வெள்ளிக்கிழமை சினிமா 600", want: [{ amount: 600, item: சினிமா, ago: 6 }] }
 - { lang: ta, text: "மாத்திரை வாங்கினேன் 120 ரூபாய்", want: [{ amount: 120, item: மாத்திரை }] }
-- { lang: ta, text: "பருப்பு அரை கிலோ 70", want: [{ amount: 70, item: பருப்பு }] }
+- { lang: ta, text: "பருப்பு அரை கிலோ 70", want: [{ amount: 70, item: பருப்பு, qty: [0.5, kg] }] }
 - { lang: ta, text: "நூறு ரூபாய் பூ", want: [{ amount: 100, item: பூ }] }
 - { lang: ta, text: "காப்பீடு 12500", want: [{ amount: 12500, item: காப்பீடு }] }
 - { lang: ta, text: "தயிர் 25 ரூபாய்", want: [{ amount: 25, item: தயிர் }] }
 
-# ---------------------------------------------------------------- Hindi (40)
+# ---------------------------------------------------------------- Hindi (41)
 - { lang: hi, text: "सब्ज़ी 250 रुपये", want: [{ amount: 250, item: सब्ज़ी }] }
 - { lang: hi, text: "दूध 60", want: [{ amount: 60, item: दूध }] }
 - { lang: hi, text: "कल ऑटो 80", want: [{ amount: 80, item: ऑटो, ago: 1 }] }
@@ -118,7 +122,7 @@
 - { lang: hi, text: "चाय 15 और समोसा 20", want: [{ amount: 15, item: चाय }, { amount: 20, item: समोसा }] }
 - { lang: hi, text: "वेतन मिला 65000", want: [{ amount: 65000, item: वेतन, kind: income }] }
 - { lang: hi, text: "ढाई सौ रुपये की सब्जी", want: [{ amount: 250, item: सब्जी }] }
-- { lang: hi, text: "2 किलो टमाटर 80", want: [{ amount: 80, item: टमाटर }] }
+- { lang: hi, text: "2 किलो टमाटर 80", want: [{ amount: 80, item: टमाटर, qty: [2, kg] }] }
 - { lang: hi, text: "बिजली का बिल 1845", want: [{ amount: 1845, item: बिजली }] }
 - { lang: hi, text: "दवा 640 रुपये", want: [{ amount: 640, item: दवा }] }
 - { lang: hi, text: "आज खाना 180", want: [{ amount: 180, item: खाना, ago: 0 }] }
@@ -133,7 +137,8 @@
 - { lang: hi, text: "₹60 केले", want: [{ amount: 60, item: केले }] }
 - { lang: hi, text: "फिल्म के टिकट 600", want: [{ amount: 600, item: फिल्म }] }
 - { lang: hi, text: "3 दिन पहले डॉक्टर की फीस 500", want: [{ amount: 500, item: डॉक्टर, ago: 3 }] }
-- { lang: hi, text: "चीनी 1 किलो 45", want: [{ amount: 45, item: चीनी }] }
+- { lang: hi, text: "चीनी 1 किलो 45", want: [{ amount: 45, item: चीनी, qty: [1, kg] }] }
+- { lang: hi, text: "एक दर्जन केले 60", want: [{ amount: 60, item: केले, qty: [1, dozen] }] }
 - { lang: hi, text: "प्याज 60, आलू 50", want: [{ amount: 60, item: प्याज }, { amount: 50, item: आलू }] }
 - { lang: hi, text: "ब्याज मिला 350", want: [{ amount: 350, item: ब्याज, kind: income }] }
 - { lang: hi, text: "किताब 399", want: [{ amount: 399, item: किताब }] }
@@ -144,7 +149,7 @@
 - { lang: hi, text: "नाश्ता 60 रुपये", want: [{ amount: 60, item: नाश्ता }] }
 - { lang: hi, text: "शुक्रवार को सिनेमा 600", want: [{ amount: 600, item: सिनेमा, ago: 6 }] }
 - { lang: hi, text: "दवाई खरीदी 120 रुपये", want: [{ amount: 120, item: दवाई }] }
-- { lang: hi, text: "दाल आधा किलो 70", want: [{ amount: 70, item: दाल }] }
+- { lang: hi, text: "दाल आधा किलो 70", want: [{ amount: 70, item: दाल, qty: [0.5, kg] }] }
 - { lang: hi, text: "सौ रुपये के फूल", want: [{ amount: 100, item: फूल }] }
 - { lang: hi, text: "बीमा 12500", want: [{ amount: 12500, item: बीमा }] }
 - { lang: hi, text: "दही 25 रुपये", want: [{ amount: 25, item: दही }] }
@@ -163,7 +168,7 @@
 - { lang: mixed, text: "petrol 500 dala", want: [{ amount: 500, item: petrol }] }
 - { lang: mixed, text: "innaiku lunch 120", want: [{ amount: 120, item: lunch, ago: 0 }] }
 - { lang: mixed, text: "chai 15 aur samosa 20", want: [{ amount: 15, item: chai }, { amount: 20, item: samosa }] }
-- { lang: mixed, text: "arisi 5 kg 400", want: [{ amount: 400, item: arisi }] }
+- { lang: mixed, text: "arisi 5 kg 400", want: [{ amount: 400, item: arisi, qty: [5, kg] }] }
 - { lang: mixed, text: "dhai sau ki sabzi", want: [{ amount: 250, item: sabzi }] }
 - { lang: mixed, text: "aaj auto 80 diya", want: [{ amount: 80, item: auto, ago: 0 }] }
 - { lang: mixed, text: "EB bill கட்டினேன் 1845", want: [{ amount: 1845, item: bill }] }

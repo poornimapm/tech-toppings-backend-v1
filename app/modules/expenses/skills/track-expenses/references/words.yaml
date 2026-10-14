@@ -39,11 +39,21 @@ fillers: [i, we, my, our, the, a, an, for, "on", of, to, in, it, is, was, were, 
           kharcha, kharch, kharida, kharidi, kharide, diya, diye, bhara, mila, mili, mile,
           aaya, aayi, dala, daala]
 
-# A number followed by one of these is how much was bought, not what it cost.
-units: [kg, kgs, kilo, kilos, kilogram, kilograms, g, gm, gms, gram, grams, l, lt, ltr, litre,
-        litres, liter, liters, ml, dozen, packet, packets, pack, packs, piece, pieces, pcs,
-        bottle, bottles, box, boxes, plate, plates, cup, cups,
-        கிலோ, கிராம், லிட்டர், டஜன், பாக்கெட், பாட்டில், किलो, ग्राम, लीटर, दर्जन, पैकेट, बोतल]
+# How much was bought ("2 kg", "half kilo", "a dozen"), not what it cost: the words for each
+# unit of the module's unit table (data/units.yaml), by its code. English plurals need not be
+# listed.
+units:
+  kg: [kg, kilo, kilogram, கிலோ, किलो]
+  g: [g, gm, gram, கிராம், ग्राम]
+  l: [l, lt, ltr, litre, liter, லிட்டர், लीटर]
+  ml: [ml]
+  dozen: [dozen, டஜன், दर्जन]
+  packet: [packet, pack, pkt, பாக்கெட், पैकेट]
+  piece: [piece, pcs, pc]
+  bottle: [bottle, பாட்டில், बोतल]
+  box: [box, boxes]
+  plate: [plate]
+  cup: [cup]
 
 # English only: what follows is where it was paid ("at Big Bazaar").
 places: [at, from]

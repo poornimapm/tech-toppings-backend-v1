@@ -6,6 +6,23 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added — Phase 7: products and prices (2026-10-14)
+
+- **Quantity and unit** on entries (`quantity`, `unit`), from a unit table in
+  `data/units.yaml` (`GET /v1/expenses/units`). The rule parser reads them ("2 kg", "அரை
+  கிலோ", "एक दर्जन") into their own fields instead of the title; drafts carry them.
+- **Products** (`/v1/expenses/products`): what the user buys, grouped by name (ADR-0015);
+  price per unit, lowest / highest / average / last, change since the purchase before, prices
+  by place and the cheapest place. Products start on their own for expenses with a quantity,
+  or by `POST /products` ("Track price"); names can be edited, products merged, kept apart or
+  no longer followed.
+- **Price alerts**: a limit per unit; an expense above it sends `expenses.price_alert` once.
+- **`tidy-products` skill**: suggests products and titles that are the same thing (AI, or
+  word groups in English, Tamil and Hindi plus spelling); the user confirms each. Tools
+  `expenses_products`, `expenses_items`, `expenses_product_matches` (client).
+- `StaticRequest.chosen`: a static script can tell that a page asked for its skill by name.
+- Parser cases: 174 (four with units), with quantities labelled and scored.
+
 ### Added — Phase 6: capture by voice, text and SMS (2026-10-14)
 
 **Capture through the assistant**

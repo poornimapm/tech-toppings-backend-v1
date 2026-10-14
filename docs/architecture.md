@@ -167,11 +167,14 @@ sequenceDiagram
 The first real module (`app/modules/expenses`, in beta). It uses only `app.platform`.
 
 ```
-manifest.py   router.py   domain.py    stats.py (tile)   widgets.py   tools.py
+manifest.py   router.py   domain.py    stats.py (tile)   widgets.py   tools.py   units.py
 data/categories.yaml                  system categories: key, emoji, accent
+data/units.yaml                       units by dimension, with their factor
 features/categories/                  the user's own categories
 features/entries/                     entries, their history, filters, totals
-skills/track-expenses/                SKILL.md, lexicon, static script
+features/products/                    products (names), prices per unit, alerts
+skills/track-expenses/                SKILL.md, lexicon, static script (the rule parser)
+skills/tidy-products/                 SKILL.md, word groups, static script
 ```
 
 - **Money** is `amount_minor` (whole minor units) plus `currency` (ADR-0004); `core/money.py`
@@ -189,14 +192,25 @@ skills/track-expenses/                SKILL.md, lexicon, static script
   `Idempotency-Key`), `GET /summary` (totals per currency for the same filters),
   `GET /facets` (tags, people and merchants used before), `GET/PUT/DELETE /{id}`,
   `POST /{id}/undelete`, `GET /{id}/revisions`, `POST /{id}/restore`.
+- **Quantity** is `quantity` + `unit` (a code of `data/units.yaml`, `GET /v1/expenses/units`),
+  both or neither.
+- **Products** (`/v1/expenses/products`, ADR-0015): a product is a set of names; an expense
+  belongs to the product that has its title, worked out when read, so merging or learning a
+  name never rewrites entries. `GET` (with `title` for the one that claims it), `POST` (follow
+  a title), `GET/PATCH/DELETE /{id}` (prices per unit, places and cheapest; names, price unit,
+  alert; stop), `POST /{id}/merge`, `POST /{id}/apart`. Saving an expense with a quantity
+  starts a product for a new name and checks the price alert (one notification per entry).
 - **Platform services:** each change is noted in the activity feed; the Welcome tile shows
-  this month's spending; the dashboard gets spent, received and spending per day.
+  this month's spending; the dashboard gets spent, received and spending per day; a price
+  over a product's alert goes to the notification inbox.
 - **Capture and the assistant:** the `track-expenses` skill reads what the user says, types
   or pastes into drafts (the client tool `expenses_draft`); the user checks them on a confirm
   card and saves them through the API. Its tools: categories, habits (the user's usual
   category per title), list, draft, open; none of them writes. Without AI, its static script
-  is the rule parser (`parsing/`, vocabulary in the skill's `references/`). See
-  [modules/expenses.md](modules/expenses.md) for the flow and the accuracy report.
+  is the rule parser (`parsing/`, vocabulary in the skill's `references/`). The
+  `tidy-products` skill suggests products and titles that are the same thing (client tool
+  `expenses_product_matches`) for the user to combine. See
+  [modules/expenses.md](modules/expenses.md) for the flows and the accuracy report.
 
 A switched-off module is off everywhere: its routes answer `403 MODULE_DISABLED`, its widgets
 leave the dashboard, its skills are not offered to the assistant, and a proposal made

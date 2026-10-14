@@ -12,14 +12,17 @@ from pydantic import (
     Field,
     HttpUrl,
     StringConstraints,
+    model_validator,
 )
 
 from app.modules.expenses.domain import EntryKind, EntrySource, PaymentMode
 from app.modules.expenses.features.entries.models import Entry
+from app.modules.expenses.units import known_unit
 from app.platform import FieldChange, Revision, RevisionAction
 
 MAX_TAGS = 10
 MAX_ATTACHMENTS = 5
+MAX_QUANTITY = 10**6
 
 
 def _upto(max_length: int) -> StringConstraints:
@@ -44,6 +47,7 @@ Merchant = Annotated[Annotated[str, _upto(80)] | None, Blank]
 Person = Annotated[Annotated[str, _upto(60)] | None, Blank]
 Label = Annotated[Annotated[str, _upto(60)] | None, Blank]
 Note = Annotated[Annotated[str, _upto(1000)] | None, Blank]
+UnitCode = Annotated[Annotated[str, AfterValidator(known_unit)] | None, Blank]
 
 
 class AttachmentIn(BaseModel):
@@ -60,6 +64,10 @@ class EntryFields(BaseModel):
     currency: str | None = Field(
         default=None, pattern=r"^[A-Z]{3}$", description="Default: my base currency"
     )
+    quantity: float | None = Field(
+        default=None, gt=0, le=MAX_QUANTITY, description="How much was bought, in `unit`"
+    )
+    unit: UnitCode = Field(default=None, description="A code from GET /units")
     category_id: CategoryId
     date: dt.date = Field(description="The calendar day it happened")
     time: dt.time | None = None
@@ -69,6 +77,12 @@ class EntryFields(BaseModel):
     tags: Annotated[list[Tag], Field(max_length=MAX_TAGS), AfterValidator(_clean_tags)] = []
     note: Note = None
     attachments: Annotated[list[AttachmentIn], Field(max_length=MAX_ATTACHMENTS)] = []
+
+    @model_validator(mode="after")
+    def quantity_with_unit(self) -> EntryFields:
+        if (self.quantity is None) != (self.unit is None):
+            raise ValueError("give the quantity and its unit together")
+        return self
 
 
 class EntryIn(EntryFields):

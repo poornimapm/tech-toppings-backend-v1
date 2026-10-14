@@ -1,8 +1,9 @@
 """Agent tools for expenses: thin wrappers over the same services as the API, so the
 assistant follows the same rules and sees only the caller's own entries.
 
-The assistant never writes an entry itself. It hands over drafts (``expenses_draft``); the
-user checks them on a confirm card and saves them through the API like any other entry.
+The assistant never writes anything itself. It hands over drafts (``expenses_draft``) and
+product matches (``expenses_product_matches``); the user checks them and saves them through the
+API like anything else.
 """
 
 from __future__ import annotations
@@ -10,17 +11,20 @@ from __future__ import annotations
 from datetime import date
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
 from app.modules.expenses.domain import EntryKind
 from app.modules.expenses.features.categories.service import Categories
 from app.modules.expenses.features.entries.models import Entry, EntryRepository
 from app.modules.expenses.features.entries.schemas import EntryFilters, EntryOut
 from app.modules.expenses.features.entries.service import EntryService
+from app.modules.expenses.features.products.service import MAX_PRODUCTS, Products
+from app.modules.expenses.units import known_unit, units
 from app.platform import ActorContext, PageParams, to_major, tool
 
 Day = Annotated[date | None, Field(description="YYYY-MM-DD")]
 MAX_DRAFTS = 10
+MAX_MATCHES = 20
 
 
 class DraftIn(BaseModel):
@@ -39,6 +43,13 @@ class DraftIn(BaseModel):
     date: Annotated[
         str | None,
         Field(pattern=r"^\d{4}-\d{2}-\d{2}$", description="YYYY-MM-DD; leave out for today"),
+    ] = None
+    quantity: Annotated[
+        float | None, Field(gt=0, description='How much was bought (2 in "2 kg"), with unit')
+    ] = None
+    unit: Annotated[
+        Annotated[str, AfterValidator(known_unit)] | None,
+        Field(description=f"The quantity's unit: one of {', '.join(units())}"),
     ] = None
     merchant: Annotated[str | None, Field(max_length=80, description="Where it was paid")] = None
     for_whom: Annotated[str | None, Field(max_length=60, description="Who it was for")] = None
@@ -125,3 +136,49 @@ async def expenses_draft(
 @tool("client")
 async def expenses_open(ctx: ActorContext) -> None:
     """Show the user their expenses page."""
+
+
+class MatchIn(BaseModel):
+    """Products and titles that are the same thing as one product."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    product_id: Annotated[str, Field(description="The product to keep, from expenses_products")]
+    products: Annotated[
+        list[str], Field(max_length=MAX_DRAFTS, description="Ids of products to combine into it")
+    ] = []
+    titles: Annotated[
+        list[str], Field(max_length=MAX_DRAFTS, description="Titles from expenses_items it covers")
+    ] = []
+
+
+@tool("read")
+async def expenses_products(ctx: ActorContext) -> list[dict[str, Any]]:
+    """The products the user follows: id, name, the names it goes by (aliases), what it is
+    measured by (mass, volume or count), how many purchases, and the ids of products the user
+    said are different things (apart)."""
+    found, _ = await Products(ctx).overview(PageParams(1, MAX_PRODUCTS))
+    fields = {"id", "name", "aliases", "dimension", "purchases", "apart"}
+    return [item.model_dump(include=fields) for item in found]
+
+
+@tool("read")
+async def expenses_items(
+    ctx: ActorContext, limit: Annotated[int, Field(ge=1, le=200)] = 100
+) -> list[dict[str, Any]]:
+    """What the user buys that no product follows yet: title and how many times, most often
+    bought first."""
+    return await Products(ctx).unclaimed(limit)
+
+
+@tool("client")
+async def expenses_product_matches(
+    ctx: ActorContext,
+    matches: Annotated[list[MatchIn], Field(min_length=1, max_length=MAX_MATCHES)],
+) -> None:
+    """Show the user products and titles that look like the same thing, to combine. Nothing
+    changes until they confirm each match."""
+    products = Products(ctx)
+    for match in matches:
+        for product_id in [match.product_id, *match.products]:
+            await products.repo.get(product_id)

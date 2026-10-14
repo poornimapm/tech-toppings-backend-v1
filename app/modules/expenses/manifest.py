@@ -10,6 +10,7 @@ MANIFEST = ModuleManifest(
         "app.modules.expenses.features.entries.models:Entry",
         "app.modules.expenses.features.entries.models:EntryRevision",
         "app.modules.expenses.features.categories.models:Category",
+        "app.modules.expenses.features.products.models:Product",
     ),
     tile_stat="app.modules.expenses.stats:month_total",
 )

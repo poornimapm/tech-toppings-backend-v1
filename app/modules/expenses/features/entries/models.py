@@ -33,6 +33,8 @@ class Entry(RevisionedDocument):
     title: str
     amount_minor: int
     currency: str
+    quantity: float | None = None  # how much was bought, in ``unit`` (data/units.yaml)
+    unit: str | None = None
     category_id: str  # a system category's key or the id of one of the user's own
     date: str  # the calendar day (YYYY-MM-DD) the user means, never shifted by time zones
     time: str | None = None  # their wall-clock time, if they gave one

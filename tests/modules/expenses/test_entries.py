@@ -35,6 +35,8 @@ async def test_an_entry_is_stored_as_given_and_read_back(client: AsyncClient) ->
         "title": "Vegetables",
         "amount_minor": 12500,
         "currency": "INR",  # the user's base currency
+        "quantity": None,
+        "unit": None,
         "category_id": "groceries",
         "date": "2026-10-08",
         "time": "09:30:00",

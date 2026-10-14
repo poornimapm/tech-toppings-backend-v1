@@ -102,3 +102,11 @@ Free tier only.
   takes only text that speaks of money and has an amount.
 - The rule parser is the skill's static mode, so the mode and fallback switches decide
   between AI and rules for capture exactly as for every other skill.
+
+## Implementation notes (Phase 7, 2026-10-14)
+
+- A page's own button names the skill it runs. `StaticRequest.chosen` tells that skill's
+  static script so (the Prices page's "Find matches" runs `tidy-products` whatever its
+  wording); from the general assistant the script still answers only to its own words.
+- Suggestions are a client tool too (`expenses_product_matches`): the user confirms each
+  match through the API, so tidying needs no write tool either.

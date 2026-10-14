@@ -30,7 +30,7 @@
 - { lang: hi, text: "आज सब्जी वाले को 150 दिए", want: [{ amount: 150, item: सब्जी, ago: 0 }] }
 - { lang: hi, text: "बच्चों की ट्यूशन फीस 2500 भरी", want: [{ amount: 2500, item: ट्यूशन }] }
 - { lang: hi, text: "ऑटो में 70 रुपये लगे", want: [{ amount: 70, item: ऑटो }] }
-- { lang: hi, text: "दो किलो आम 240 के", want: [{ amount: 240, item: आम }] }
+- { lang: hi, text: "दो किलो आम 240 के", want: [{ amount: 240, item: आम, qty: [2, kg] }] }
 - { lang: hi, text: "मोबाइल रिचार्ज करवाया 399 का", want: [{ amount: 399, item: रिचार्ज }] }
 - { lang: hi, text: "कल रात का खाना बाहर खाया 850", want: [{ amount: 850, item: खाना, ago: 1 }] }
 - { lang: hi, text: "पापा को 5000 भेजे", want: [{ amount: 5000, item: पापा }] }
@@ -46,5 +46,5 @@
 - { lang: mixed, text: "bijli ka bill 1,960 bhar diya", want: [{ amount: 1960, item: bill }] }
 - { lang: mixed, text: "nethu movie ku 380 aachu", want: [{ amount: 380, item: movie, ago: 1 }] }
 - { lang: mixed, text: "grocery le aaya 1250 ki", want: [{ amount: 1250, item: grocery }] }
-- { lang: mixed, text: "rendu kg thakkali 90 rs", want: [{ amount: 90, item: thakkali }] }
+- { lang: mixed, text: "rendu kg thakkali 90 rs", want: [{ amount: 90, item: thakkali, qty: [2, kg] }] }
 - { lang: mixed, text: "ola se ghar aaya 210 lage", want: [{ amount: 210, item: ola }] }

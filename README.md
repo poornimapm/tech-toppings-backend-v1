@@ -180,7 +180,8 @@ app/
     context.py       ActorContext: what tools and widgets receive
     plugins.py       folder discovery shared by modules, agents, skills, tools and widgets
   modules/           feature modules, auto-discovered
-    expenses/        entries with history, categories, tile, widgets, tools, skill (beta);
+    expenses/        entries with history, categories, products and prices, tile, widgets,
+                     tools, skills track-expenses and tidy-products (beta);
                      parsing/: the rule parser (vocabulary in skills/track-expenses/references)
     medicine/ ...    the other seven: manifest only, coming soon
 tests/               pytest suite (real MongoDB)

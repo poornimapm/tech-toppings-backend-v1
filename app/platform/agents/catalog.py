@@ -36,6 +36,7 @@ class StaticRequest:
     today: date
     context: Mapping[str, Any]
     references: Path  # the skill's references/ folder
+    chosen: bool = False  # the caller asked for this skill by name (a page's own button)
 
 
 @dataclass(frozen=True)

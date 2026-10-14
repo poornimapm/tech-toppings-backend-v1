@@ -29,7 +29,7 @@ def _stem(word: str) -> bool:
     return not word.isascii() and len(word) >= STEM_LENGTH
 
 
-def _singular(token: str) -> str:
+def singular(token: str) -> str:
     """An English plural without its ending ("coffees" -> "coffee"); anything else as it is."""
     plural = token.isascii() and len(token) > PLURAL_LENGTH and token.endswith("s")
     return token[:-1] if plural else token
@@ -38,14 +38,14 @@ def _singular(token: str) -> str:
 def known(token: str, words: Collection[str]) -> bool:
     """Is the token one of the words? English: the word or its plural; Tamil and Hindi: also
     the word with an ending."""
-    if token in words or _singular(token) in words:
+    if token in words or singular(token) in words:
         return True
     return any(token.startswith(word) for word in words if _stem(word))
 
 
 def lookup(token: str, table: Mapping[str, T]) -> T | None:
     """The table's value for the token, matching words the way ``known`` does."""
-    for form in (token, _singular(token)):
+    for form in (token, singular(token)):
         if form in table:
             return table[form]
     return next(
@@ -87,7 +87,7 @@ class Lexicon:
     income: frozenset[str]
     spend: frozenset[str]
     fillers: frozenset[str]
-    units: frozenset[str]
+    units: Mapping[str, str]  # word -> unit code (data/units.yaml)
     places: frozenset[str]
     last: frozenset[str]
     days: Mapping[str, int]  # word -> how many days ago
@@ -139,7 +139,7 @@ def load(folder: Path) -> Lexicon:
         income=_words(words["income"]),
         spend=_words(words["spend"]),
         fillers=_words(words["fillers"]),
-        units=_words(words["units"]),
+        units={normalise(word): code for code, group in words["units"].items() for word in group},
         places=_words(words["places"]),
         last=_words(words["last"]),
         days={normalise(word): int(ago) for ago, group in words["days"].items() for word in group},

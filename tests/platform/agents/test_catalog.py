@@ -65,6 +65,7 @@ def test_the_app_ships_the_assistant_and_its_skills(mongo_uri: str) -> None:
         "manage-modules",
         "check-notifications",
         "track-expenses",
+        "tidy-products",
         "take-notes",  # from the test module
     }
     assert catalog.skills["manage-modules"].static is not None
@@ -78,6 +79,9 @@ def test_the_app_ships_the_assistant_and_its_skills(mongo_uri: str) -> None:
         "expenses_list": "read",
         "expenses_draft": "client",
         "expenses_open": "client",
+        "expenses_products": "read",
+        "expenses_items": "read",
+        "expenses_product_matches": "client",
         "notes_add": "write",
         "modules_list": "read",
         "modules_set_preferences": "write",

@@ -23,6 +23,8 @@ def _argument(draft: parsing.Draft, uncertain_below: float) -> dict[str, Any]:
         "category_id": draft.category_id,
         "date": draft.date.isoformat() if draft.date else None,
         "merchant": draft.merchant,
+        "quantity": float(draft.quantity) if draft.quantity is not None else None,
+        "unit": draft.unit,
         "uncertain": [name for name, sure in draft.confidence.items() if sure < uncertain_below],
     }
 

@@ -1,0 +1,22 @@
+# Static mode for the tidy-products skill: what it does without AI.
+#
+# Asked for by name (the Prices page's button) or with one of the words below, it looks for
+# products and titles that are the same thing: names in one group of products.yaml, or
+# spelled almost alike.
+#
+# Message codes (worded by the module's frontend manifest, strings.replies):
+#   tidy-products.ready.find   matches were found and shown to the user
+#   tidy-products.none         nothing looks alike
+
+actions:
+  find:
+    words: ["duplicate products", "same products", "combine products", "merge products",
+            "tidy products", "tidy up products", "tidy my products", "duplicate prices",
+            "ஒரே பொருள்", "பொருட்களை இணை", "நகல் பொருட்கள்",
+            "एक ही चीज़", "डुप्लिकेट चीज़ें", "चीज़ें मिलाएँ"]
+    tool: expenses_product_matches
+
+match:
+  # How alike two names must be spelled to be suggested (0 to 1, after English plurals are
+  # dropped): 0.9 matches onion/onions and thakkali/thakali, but not rice/price.
+  similarity: 0.9
