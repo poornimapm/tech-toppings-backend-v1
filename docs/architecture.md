@@ -191,9 +191,12 @@ skills/track-expenses/                SKILL.md, lexicon, static script
   `POST /{id}/undelete`, `GET /{id}/revisions`, `POST /{id}/restore`.
 - **Platform services:** each change is noted in the activity feed; the Welcome tile shows
   this month's spending; the dashboard gets spent, received and spending per day.
-- **Assistant:** the `track-expenses` skill with four tools (categories, list, add as a
-  confirmed proposal, open). Without AI it can only open the page; the sentence parser comes
-  with voice capture.
+- **Capture and the assistant:** the `track-expenses` skill reads what the user says, types
+  or pastes into drafts (the client tool `expenses_draft`); the user checks them on a confirm
+  card and saves them through the API. Its tools: categories, habits (the user's usual
+  category per title), list, draft, open; none of them writes. Without AI, its static script
+  is the rule parser (`parsing/`, vocabulary in the skill's `references/`). See
+  [modules/expenses.md](modules/expenses.md) for the flow and the accuracy report.
 
 A switched-off module is off everywhere: its routes answer `403 MODULE_DISABLED`, its widgets
 leave the dashboard, its skills are not offered to the assistant, and a proposal made

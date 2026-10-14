@@ -1,0 +1,50 @@
+# Held-out inputs: written without looking at what the parser knows, and scored as they are.
+# The main file (parser_cases.yaml) is the set the lexicons were grown against, so it flatters
+# the parser; this one is the honest estimate for sentences it has not seen.
+#
+# Do not tune the lexicons to these. When a miss here is fixed, move that case to the main
+# file and add a fresh one here. Same format, same "today" (Thursday 2026-10-08).
+
+- { lang: en, text: "grabbed a coffee for 180 at starbucks", want: [{ amount: 180, item: coffee }] }
+- { lang: en, text: "auto fare was 65", want: [{ amount: 65, item: auto }] }
+- { lang: en, text: "bought shirt 899 and jeans 1499 from myntra", want: [{ amount: 899, item: shirt }, { amount: 1499, item: jeans }] }
+- { lang: en, text: "paid electricity 2,340 yesterday", want: [{ amount: 2340, item: electricity, ago: 1 }] }
+- { lang: en, text: "spent around 400 rupees on fruits", want: [{ amount: 400, item: fruits }] }
+- { lang: en, text: "gave 200 to the watchman", want: [{ amount: 200, item: watchman }] }
+- { lang: en, text: "movie 2 tickets 500", want: [{ amount: 500, item: movie }] }
+- { lang: en, text: "my salary of 45,000 got credited", want: [{ amount: 45000, item: salary, kind: income }] }
+- { lang: en, text: "paid 1 lakh 20 thousand for bike", want: [{ amount: 120000, item: bike }] }
+- { lang: en, text: "water can 40 bucks", want: [{ amount: 40, item: water }] }
+
+- { lang: ta, text: "கடையில் பால் வாங்கினேன் 54 ரூபாய்", want: [{ amount: 54, item: பால் }] }
+- { lang: ta, text: "இன்னைக்கு ஆட்டோ 120 ஆச்சு", want: [{ amount: 120, item: ஆட்டோ, ago: 0 }] }
+- { lang: ta, text: "மீன் 300 ரூபாய்க்கு வாங்கினோம்", want: [{ amount: 300, item: மீன் }] }
+- { lang: ta, text: "பசங்க ஸ்கூல் பீஸ் 8000 கட்டினேன்", want: [{ amount: 8000, item: ஸ்கூல் }] }
+- { lang: ta, text: "ரெண்டு காபி 40", want: [{ amount: 40, item: காபி }] }
+- { lang: ta, text: "நேற்று ஹோட்டல்ல சாப்பிட்டேன் 450", want: [{ amount: 450, item: ஹோட்டல், ago: 1 }] }
+- { lang: ta, text: "மூவாயிரம் ரூபாய் வீட்டு வேலைக்காரிக்கு", want: [{ amount: 3000, item: வேலைக்காரி }] }
+- { lang: ta, text: "பூ 20 பழம் 60", want: [{ amount: 20, item: பூ }, { amount: 60, item: பழம் }] }
+- { lang: ta, text: "கேஸ் புக் பண்ணேன் 1050", want: [{ amount: 1050, item: கேஸ் }] }
+- { lang: ta, text: "பஸ் பாஸ் ஆயிரம் ரூபாய்", want: [{ amount: 1000, item: பஸ் }] }
+
+- { lang: hi, text: "आज सब्जी वाले को 150 दिए", want: [{ amount: 150, item: सब्जी, ago: 0 }] }
+- { lang: hi, text: "बच्चों की ट्यूशन फीस 2500 भरी", want: [{ amount: 2500, item: ट्यूशन }] }
+- { lang: hi, text: "ऑटो में 70 रुपये लगे", want: [{ amount: 70, item: ऑटो }] }
+- { lang: hi, text: "दो किलो आम 240 के", want: [{ amount: 240, item: आम }] }
+- { lang: hi, text: "मोबाइल रिचार्ज करवाया 399 का", want: [{ amount: 399, item: रिचार्ज }] }
+- { lang: hi, text: "कल रात का खाना बाहर खाया 850", want: [{ amount: 850, item: खाना, ago: 1 }] }
+- { lang: hi, text: "पापा को 5000 भेजे", want: [{ amount: 5000, item: पापा }] }
+- { lang: hi, text: "तनख्वाह आ गई 48000", want: [{ amount: 48000, item: तनख्वाह, kind: income }] }
+- { lang: hi, text: "दूध 66 ब्रेड 45", want: [{ amount: 66, item: दूध }, { amount: 45, item: ब्रेड }] }
+- { lang: hi, text: "पौने दो सौ की मिठाई", want: [{ amount: 175, item: मिठाई }] }
+
+- { lang: mixed, text: "office lunch ku 150 selavu", want: [{ amount: 150, item: lunch }] }
+- { lang: mixed, text: "petrol pottaen 300", want: [{ amount: 300, item: petrol }] }
+- { lang: mixed, text: "amma ku marundhu 420 rupees", want: [{ amount: 420, item: marundhu }] }
+- { lang: mixed, text: "bhaiya ko 500 diye chai nashte ke", want: [{ amount: 500, item: chai }] }
+- { lang: mixed, text: "swiggy la order panninen 349", want: [{ amount: 349, item: swiggy }] }
+- { lang: mixed, text: "bijli ka bill 1,960 bhar diya", want: [{ amount: 1960, item: bill }] }
+- { lang: mixed, text: "nethu movie ku 380 aachu", want: [{ amount: 380, item: movie, ago: 1 }] }
+- { lang: mixed, text: "grocery le aaya 1250 ki", want: [{ amount: 1250, item: grocery }] }
+- { lang: mixed, text: "rendu kg thakkali 90 rs", want: [{ amount: 90, item: thakkali }] }
+- { lang: mixed, text: "ola se ghar aaya 210 lage", want: [{ amount: 210, item: ola }] }

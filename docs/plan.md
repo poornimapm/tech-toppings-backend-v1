@@ -839,7 +839,7 @@ Then I stop until you reply `proceed`.
   - Idempotent replay is tested.
   - Isolation passes on every expense route.
 
-### Phase 6 — Voice + AI parsing
+### Phase 6 — Voice + AI parsing (done 2026-10-14, D17)
 
 - Speech hook and typed quick-add.
 - `AIService`: Gemini + Groq, chain, cooldown, cache, quota, PII redaction, usage log.
@@ -1024,6 +1024,7 @@ Then I stop until you reply `proceed`.
 | D14 | **Agentic architecture (ADR-0013), from the owner's Phase 4 instructions.** AI features are skills run by a shared agent runtime, with no prompts in code. `AGENT_MODE`, `AGENT_SKILL_MODES` and `AGENT_FALLBACK` replace ADR-0005's fixed rule fallback. Writes are confirmed by the user, and skills are folders. Phase 4 becomes the agent platform and command palette; the dashboard and notifications move to **Phase 4b**. New libraries: `pyyaml` (frontmatter) and `cmdk` (palette, already listed in D8). | Owner's decisions, 2026-10-09 |
 | D15 | Phase 4b details (ADR-0014): the admin "All users" view shows aggregates only (no list widgets); launch notices are delivered when the user next loads their modules, not by a job; the activity feed records module changes for now, and each later module adds its own; a "new device signed in" notification is left to Phase 10 (security events); `ToolContext` became `ActorContext`; phones get a bottom navigation bar. | Privacy by construction; no scheduler on the free tier (ADR-0007); one context for tools and widgets. Reported 2026-10-13. |
 | D16 | Phase 5 details: the revision engine is generic (`core/revisions.py`), so the conflict code is `VERSION_CONFLICT`; idempotency is a unique key on the record itself, not an `idempotency_keys` collection with a TTL; an edit is `PUT` with the whole entry and its revision, not `PATCH`; restore is `POST /entries/{id}/restore` with the revision in the body; system categories are a data file, not seeded records; entries are in the base currency only until FX; no pending-revision repair job is needed (reads and writes finish them); the module is `beta`; it already has agent tools and a skill. | Smaller and race-free; one id per route for the isolation matrix; nothing to seed or migrate. Reported 2026-10-13. |
+| D17 | Phase 6 details: capture is the `track-expenses` skill on the agent runtime (no `/capture/interpret` endpoint, no separate AIService); the assistant hands over editable drafts instead of write proposals, and every save is the user's; drafts are saved one request each with their own `Idempotency-Key` (no `/entries/batch`); IOU and correction intents wait for IOUs (Phase 9a) and a later phase; quantity and unit stay in the title until Phase 7; the accuracy report covers the rules only, because no provider key is configured here; a 40-input held-out set is added to the 170. | One AI path with one set of switches; nothing written without the user; honest numbers. Reported 2026-10-14. |
 | D12 | The frontend runs on **Node 24 LTS through fnm**, scoped to this repo via `.node-version`. Your system Node 20 and fnm's default (`system`) are unchanged. **TypeScript 5.9 and ESLint 9** are pinned because typescript-eslint, openapi-typescript and jsx-a11y don't support TS 7 or ESLint 10 yet. | Current React Router 8, Vitest 5 and MSW 3 need Node ≥ 22, and Node 20 reached end of life on 2026-04-30. Approved 2026-10-08. |
 
 ---

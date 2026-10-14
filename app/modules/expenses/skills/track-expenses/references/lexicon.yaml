@@ -1,12 +1,12 @@
-# Static mode vocabulary for the track-expenses skill.
+# Static mode for the track-expenses skill: what it does without AI.
 #
-# Without AI this skill can only open the expenses page: recording an entry from a sentence
-# needs the parser that arrives with voice capture. The first action whose words appear in
-# the request wins.
+# A request that names one of the actions below is answered with that action. Anything else
+# is read by the rule parser (numbers.yaml, words.yaml, categories.yaml, sms.yaml) into draft
+# entries, which the user checks and saves.
 #
-#   tool   a client tool: what is shown to the user
-# Message codes (translated by the client, agentMessages.*):
-#   track-expenses.ready.<action>   the reply
+# Message codes (worded by the module's frontend manifest, strings.replies):
+#   track-expenses.ready.<action>   an action below
+#   track-expenses.ready.draft      drafts were prepared
 
 actions:
   open:
@@ -14,3 +14,20 @@ actions:
             "செலவுகளைத் திற", "செலவுகளைக் காட்டு", "என் செலவுகள்",
             "खर्च खोलें", "खर्च दिखाएँ", "मेरे खर्च"]
     tool: expenses_open
+
+capture:
+  # The client tool that hands the drafts to the user.
+  tool: expenses_draft
+  # A field the parser is less sure of than this is marked for the user to check.
+  uncertain_below: 0.6
+  # How sure the parser is of each kind of guess (0 to 1).
+  confidence:
+    amount_marked: 0.95 # the number beside a currency word
+    amount_only: 0.85 # the only number that isn't a quantity
+    amount_guessed: 0.5 # the largest of several numbers
+    title: 0.8
+    category_history: 0.9 # what this user files this title under
+    category_keyword: 0.75 # a known word (categories.yaml)
+    category_default: 0.3 # nothing to go on: "other"
+    date_said: 0.95
+    date_assumed: 0.7 # no day mentioned: today

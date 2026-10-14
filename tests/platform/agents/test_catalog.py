@@ -65,17 +65,20 @@ def test_the_app_ships_the_assistant_and_its_skills(mongo_uri: str) -> None:
         "manage-modules",
         "check-notifications",
         "track-expenses",
+        "take-notes",  # from the test module
     }
     assert catalog.skills["manage-modules"].static is not None
-    assert (catalog.skills["manage-modules"].owner, catalog.tool_owners["expenses_add"]) == (
+    assert (catalog.skills["manage-modules"].owner, catalog.tool_owners["expenses_draft"]) == (
         "modules",
         "expenses",
     )
     assert {name: spec.effect for name, spec in catalog.tools.items()} == {
         "expenses_categories": "read",
+        "expenses_habits": "read",
         "expenses_list": "read",
-        "expenses_add": "write",
+        "expenses_draft": "client",
         "expenses_open": "client",
+        "notes_add": "write",
         "modules_list": "read",
         "modules_set_preferences": "write",
         "modules_set_interest": "write",

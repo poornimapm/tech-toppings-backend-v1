@@ -1,0 +1,28 @@
+# Bank and UPI messages (India). Patterns are tried in order and the first match wins; all are
+# matched without regard to case.
+
+# A message is read as a bank SMS when it has an amount and at least this many of the words.
+min_hits: 2
+detect: [debited, credited, "a/c", acct, account, upi, txn, "ref no", "avl bal", "available balance",
+         neft, imps, "spent on", "card ending", "card xx", withdrawn, "sent to", "received from",
+         "paid to", vpa, bal]
+
+# The first amount in a message is the transaction; a balance, if any, comes later.
+amount:
+  - '(?:rs\.?|inr|₹)\s*([\d,]+(?:\.\d{1,2})?)'
+
+# Whichever kind's word comes first says which way the money went.
+credit: [credited, received, deposited, refund, refunded, "added to"]
+debit: [debited, spent, paid, withdrawn, purchase, sent, deducted]
+
+# Who was paid, or who paid: group 1. A name ends at a word like "on" or "ref", at a figure,
+# or at punctuation.
+merchant:
+  - '(?:paid to|sent to|transferred to|received from|credited by|from vpa|to vpa)\s+([\w .&@-]{2,40}?)(?=\s+(?:on|ref|upi|via|avl|bal|for|thru|through|a/c|ac|is|has)\b|[.,;(]|$)'
+  # "spent on <card> at <shop>": the shop, not the card.
+  - '\bat\s+([A-Za-z][\w .&@-]{1,39}?)(?=\s+(?:on|ref|upi|via|avl|bal|for|thru|through|a/c|ac|is|has|dt)\b|\s+\d|[.,;(]|$)'
+  - '(?:spent on|to|towards|from)\s+([A-Za-z][\w .&@-]{1,39}?)(?=\s+(?:on|ref|upi|via|avl|bal|for|thru|through|a/c|ac|is|has|dt)\b|\s+\d|[.,;(]|$)'
+
+# Day, month (number or name) and year: 13-10-26, 13/10/2026, 13-Oct-26, 13 Oct 2026.
+date:
+  - '\b(\d{1,2})[-/ ]([A-Za-z]{3,9}|\d{1,2})[-/ ](\d{2,4})\b'

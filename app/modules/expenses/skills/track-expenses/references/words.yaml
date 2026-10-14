@@ -1,0 +1,88 @@
+# The words the rule parser knows, in English, Tamil and Hindi and in Latin letters. English
+# words match whole words; Tamil and Hindi words also match with an ending attached
+# ("ரூபாய்க்கு", "दुकान से"). A phrase of several words is matched as a whole.
+
+# A number next to one of these is the amount.
+currency: ["₹", rs, inr, rupee, rupees, rupay, rupaye, rupiya, bucks, ரூபாய், ரூ, रुपये, रुपए, रुपया, रुपयों, रु]
+
+# These, and commas, separate the things in "tomatoes 40 and onions 60".
+conjunctions: [and, plus, "&", also, மற்றும், और, aur]
+
+# Any of these means money came in.
+income: [received, got paid, salary, credited, refund, refunded, earned, income, bonus, cashback,
+         வந்தது, வந்துச்சு, வந்துவிட்டது, கிடைத்தது, சம்பளம், வருமானம்,
+         मिला, मिली, मिले, वेतन, तनख्वाह, आमदनी,
+         vandhuchu, vandhadhu, vandhathu, vanthuchu, kidaichadhu, kedachadhu, sambalam,
+         mila, mili, mile, tankhwah]
+
+# With one of these (or a currency word) a sentence is about money even when nobody asked for
+# an expense: used when the request comes from the general assistant.
+spend: [spent, spend, paid, pay, bought, buy, purchased, cost, costs, bill,
+        செலவு, வாங்கினேன், வாங்கினோம், கொடுத்தேன், கட்டினேன், செலுத்தினேன்,
+        खर्च, खरीदा, खरीदी, खरीदे, दिया, दिए, भरा, चुकाया,
+        vaanginen, vanginen, vangiten, kuduthen, kudutthen, katinen, selavu,
+        kharcha, kharch, kharida, kharidi, kharide, diya, diye, bhara]
+
+# Left out of the title: they say that something was bought, not what.
+# ("on" is quoted because YAML reads a bare on, off, yes or no as true or false.)
+fillers: [i, we, my, our, the, a, an, for, "on", of, to, in, it, is, was, were, have, had, just,
+          some, worth, about, around, total, got, get, gave, give, took,
+          spent, spend, paid, pay, bought, buy, purchased, cost, costs, received, credited,
+          earned, got paid, today, yesterday, this, that, me, us, with, by, as,
+          நான், நாங்கள், எனக்கு, ஆனது, ஆச்சு, செலவு, செலவானது, வாங்கினேன், வாங்கினோம்,
+          கொடுத்தேன், கட்டினேன், செலுத்தினேன், வந்தது, வந்துச்சு, வந்துவிட்டது, கிடைத்தது,
+          मैंने, हमने, मुझे, के, का, की, को, में, ने, पर, से, लिए, लिया, ली, लिये, किया, किए, किये, हुआ, हुए,
+          खर्च, खरीदा, खरीदी, खरीदे, दिया, दिए, भरा, चुकाया, मिला, मिली, मिले, आया, आई,
+          ku, kku, la, ke, ka, ki, ko, mein, me, ne, par, se, liye, liya, li, kiya, hua,
+          vaanginen, vanginen, vangiten, kuduthen, kudutthen, katinen, selavu,
+          vandhuchu, vandhadhu, vandhathu, vanthuchu, kidaichadhu, kedachadhu,
+          kharcha, kharch, kharida, kharidi, kharide, diya, diye, bhara, mila, mili, mile,
+          aaya, aayi, dala, daala]
+
+# A number followed by one of these is how much was bought, not what it cost.
+units: [kg, kgs, kilo, kilos, kilogram, kilograms, g, gm, gms, gram, grams, l, lt, ltr, litre,
+        litres, liter, liters, ml, dozen, packet, packets, pack, packs, piece, pieces, pcs,
+        bottle, bottles, box, boxes, plate, plates, cup, cups,
+        கிலோ, கிராம், லிட்டர், டஜன், பாக்கெட், பாட்டில், किलो, ग्राम, लीटर, दर्जन, पैकेट, बोतल]
+
+# English only: what follows is where it was paid ("at Big Bazaar").
+places: [at, from]
+
+# Days, by how many days ago they are. In expenses "कल" means yesterday.
+days:
+  0: [today, இன்று, இன்னைக்கு, आज, innaiku, inniku, indru, aaj]
+  1: [yesterday, நேற்று, நேத்து, कल, netru, nethu, nethikku, kal]
+  2: [day before yesterday, முந்தாநாள், परसों, parso, parson, munthanaal]
+
+# Monday first. "last Friday" and "Friday" both mean the most recent one.
+weekdays:
+  - [monday, mon, திங்கள், திங்கட்கிழமை, सोमवार, somvar, somwar]
+  - [tuesday, tue, tues, செவ்வாய், செவ்வாய்க்கிழமை, मंगलवार, mangalvar, mangalwar]
+  - [wednesday, wed, புதன், புதன்கிழமை, बुधवार, budhvar, budhwar]
+  - [thursday, thu, thurs, வியாழன், வியாழக்கிழமை, गुरुवार, guruvar, guruwar]
+  - [friday, fri, வெள்ளி, வெள்ளிக்கிழமை, शुक्रवार, shukravar, shukrawar]
+  - [saturday, சனி, சனிக்கிழமை, शनिवार, shanivar, shaniwar]
+  - [sunday, ஞாயிறு, ஞாயிற்றுக்கிழமை, रविवार, ravivar, raviwar]
+
+# January first: "5 oct", "oct 5th".
+months:
+  - [january, jan]
+  - [february, feb]
+  - [march, mar]
+  - [april, apr]
+  - [may]
+  - [june, jun]
+  - [july, jul]
+  - [august, aug]
+  - [september, sep, sept]
+  - [october, oct]
+  - [november, nov]
+  - [december, dec]
+
+# "3 days ago", "3 நாட்களுக்கு முன்", "3 दिन पहले": a number, a day word, then a mark.
+ago:
+  days: [day, days, நாள், நாட்கள், நாளுக்கு, நாட்களுக்கு, दिन, din, naal]
+  marks: [ago, before, back, முன், முன்பு, முன்னாடி, पहले, pehle, munnadi]
+
+# Said before a weekday; adds nothing, so it is dropped.
+last: [last, past, கடந்த, போன, पिछले, पिछला, pichhle, pona]

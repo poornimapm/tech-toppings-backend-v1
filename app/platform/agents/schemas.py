@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -22,6 +22,9 @@ class RunContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     modules: list[ModuleName] = Field(default_factory=list, max_length=100)
+    input_type: Literal["text", "speech", "sms"] | None = Field(
+        default=None, description="How the input was given, when a page asks on purpose"
+    )
 
 
 class RunIn(BaseModel):

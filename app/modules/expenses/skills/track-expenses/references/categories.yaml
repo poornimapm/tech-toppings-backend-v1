@@ -1,0 +1,48 @@
+# Words that point to a system category (ids from data/categories.yaml), used when the user's
+# own history has nothing to say. The first category with a matching word wins, so the more
+# specific ones come first. Only categories of the entry's kind (expense or income) are tried.
+
+defaults:
+  expense: other_expense
+  income: other_income
+
+keywords:
+  fuel: [petrol, diesel, fuel, cng, பெட்ரோல், டீசல், पेट्रोल, डीज़ल, डीजल]
+  utilities: [electricity, current bill, eb bill, water bill, gas bill, cylinder, மின்சாரம், கரண்ட்,
+              தண்ணீர், சிலிண்டர், बिजली, पानी का बिल, सिलेंडर, bijli]
+  phone_internet: [recharge, mobile bill, phone bill, internet, wifi, broadband, jio, airtel,
+                   ரீசார்ஜ், रिचार्ज]
+  housing: [rent, maintenance, வாடகை, किराया, kiraya, vaadagai]
+  health: [medicine, medicines, tablet, tablets, doctor, hospital, pharmacy, clinic, medical,
+           மருந்து, மாத்திரை, டாக்டர், மருத்துவமனை, दवा, दवाई, डॉक्टर, अस्पताल,
+           marundhu, mathirai, dawa, dawai]
+  education: [school, fees, tuition, college, course, book, books, notebook, பள்ளி, கட்டணம்,
+              புத்தகம், स्कूल, फीस, किताब, kitab]
+  loans_emi: [emi, loan, கடன், लोन, किस्त]
+  insurance: [insurance, premium, காப்பீடு, बीमा]
+  groceries: [grocery, groceries, vegetable, vegetables, veggies, tomato, tomatoes, onion,
+              onions, potato, potatoes, rice, dal, atta, flour, milk, curd, egg, eggs, oil,
+              sugar, salt, fruit, fruits, banana, bananas, apple, apples, bread, butter, ghee,
+              தக்காளி, வெங்காயம், உருளைக்கிழங்கு, காய்கறி, அரிசி, பருப்பு, பால், தயிர், முட்டை,
+              எண்ணெய், சர்க்கரை, பழம், வாழைப்பழம், மளிகை,
+              सब्ज़ी, सब्जी, टमाटर, प्याज, आलू, चावल, दाल, आटा, दूध, दही, अंडे, तेल, चीनी, फल,
+              किराना, राशन,
+              thakkali, vengayam, kaikari, kaai, arisi, paruppu, paal, thayir, muttai, ennai,
+              maligai, sabzi, sabji, tamatar, pyaz, pyaaz, aloo, chawal, doodh, dahi, ande,
+              kirana, rashan, ration]
+  food: [lunch, dinner, breakfast, tea, coffee, snack, snacks, restaurant, tiffin, meal, meals,
+         biryani, dosa, idli, pizza, burger, juice, swiggy, zomato, canteen,
+         சாப்பாடு, டீ, காபி, டிபன், உணவு, பிரியாணி, தோசை, खाना, चाय, कॉफी, नाश्ता, बिरयानी,
+         saapadu, sapadu, chai, khana, nashta]
+  transport: [auto, bus, cab, taxi, uber, ola, metro, train, rickshaw, rapido, parking, toll,
+              ஆட்டோ, பஸ், பேருந்து, டாக்சி, ரயில், மெட்ரோ, ऑटो, बस, टैक्सी, मेट्रो, रिक्शा, ट्रेन]
+  travel: [flight, hotel, trip, tour, பயணம், यात्रा]
+  entertainment: [movie, cinema, netflix, game, concert, படம், சினிமா, फिल्म, सिनेमा]
+  personal_care: [haircut, salon, parlour, soap, shampoo, சலூன், सैलून]
+  shopping: [clothes, shirt, dress, shoes, saree, amazon, flipkart, துணி, சட்டை, புடவை, कपड़े,
+             जूते, साड़ी]
+  gifts_donations: [gift, donation, temple, கோயில், பரிசு, நன்கொடை, मंदिर, दान, उपहार]
+  salary: [salary, சம்பளம், वेतन, तनख्वाह, sambalam, tankhwah]
+  refunds: [refund, refunded, cashback]
+  interest: [interest, dividend, வட்டி, ब्याज]
+  business: [business, sales, client, வியாபாரம், व्यापार]

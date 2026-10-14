@@ -118,6 +118,7 @@ Every response carries an `X-Request-ID` header. Send your own (8–128 characte
 | `poe seed` | Create or promote the bootstrap admin (idempotent) |
 | `poe reset-password --email …` | Admin password reset: prints a one-time password, forces a change |
 | `poe openapi` | Write `openapi.json` for the frontend type generator |
+| `poe eval-parser` | Accuracy of the expenses rule parser by language and field (`--misses` lists errors) |
 | `poe docker-build` | Build the production image locally |
 
 Prefix each command with `.venv\Scripts\` if the venv is not activated.
@@ -179,7 +180,8 @@ app/
     context.py       ActorContext: what tools and widgets receive
     plugins.py       folder discovery shared by modules, agents, skills, tools and widgets
   modules/           feature modules, auto-discovered
-    expenses/        entries with history, categories, tile, widgets, tools, skill (beta)
+    expenses/        entries with history, categories, tile, widgets, tools, skill (beta);
+                     parsing/: the rule parser (vocabulary in skills/track-expenses/references)
     medicine/ ...    the other seven: manifest only, coming soon
 tests/               pytest suite (real MongoDB)
 scripts/             seed.py, reset_password.py, export_openapi.py, hooks/venv-run.sh

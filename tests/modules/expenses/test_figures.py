@@ -7,22 +7,12 @@ from datetime import date, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
-import respx
 from httpx import AsyncClient
 
 from app.core.money import to_major, to_minor
-from tests.helpers import Account, FrozenClock, make_admin, register
-from tests.modules.expenses.conftest import ENTRIES, add, listed
-from tests.platform.agents.conftest import (
-    LLM_URL,
-    PRIMARY,
-    AgentClient,
-    ask,
-    calls,
-    give_consent,
-    reply,
-    sent,
-)
+from tests.helpers import FrozenClock, make_admin, register
+from tests.modules.expenses.conftest import ENTRIES, add
+from tests.platform.agents.conftest import AgentClient, ask
 
 
 def today_of(clock: FrozenClock) -> date:
@@ -143,91 +133,3 @@ async def test_a_switched_off_module_is_off_everywhere(agent_client: AgentClient
     # Its own skill is gone too, so the platform's module skill offers to bring it back.
     assert (asked["skill"], asked["client_actions"]) == ("manage-modules", [])
     assert asked["proposals"][0]["summary_code"] == "manage-modules.change.show"
-
-
-async def ask_to_add(client: AsyncClient, account: Account) -> tuple[dict[str, Any], Any]:
-    """An AI conversation that looks things up, then proposes one entry."""
-    route = respx.post(LLM_URL).mock(
-        side_effect=[
-            calls(("load_skill", {"name": "track-expenses"})),
-            calls(("expenses_categories", {}), ("expenses_list", {"limit": 5})),
-            calls(
-                (
-                    "expenses_add",
-                    {
-                        "title": "Vegetables",
-                        "amount": 250.5,
-                        "category_id": "groceries",
-                        "merchant": "Big Bazaar",
-                        "summary": "Add ₹250.50 for vegetables",
-                    },
-                )
-            ),
-            reply("I prepared the entry for you to confirm."),
-        ]
-    )
-    return await ask(client, account, "I spent 250.50 on vegetables at Big Bazaar"), route
-
-
-@respx.mock
-async def test_the_assistant_proposes_an_entry_and_the_user_confirms_it(
-    agent_client: AgentClient, clock: FrozenClock
-) -> None:
-    async with agent_client(providers=[PRIMARY]) as client:
-        account = await register(client)
-        await give_consent(client, account)
-        existing = await add(client, account, title="Tea", amount_minor=2000)
-        run, route = await ask_to_add(client, account)
-        before = await listed(client, account)
-        proposal = run["proposals"][0]
-        confirmed = await client.post(
-            f"/v1/agents/proposals/{proposal['id']}/confirm", headers=account.headers
-        )
-        after = await listed(client, account)
-
-    looked_up = [m["content"] for m in sent(route, 2)["messages"] if m["role"] == "tool"]
-    assert (run["mode"], run["skill"], run["message"]) == (
-        "agent",
-        "track-expenses",
-        "I prepared the entry for you to confirm.",
-    )
-    assert '"id": "groceries"' in looked_up[1]  # what expenses_categories told the model
-    assert existing["id"] in looked_up[2]
-    assert '"amount": 20.0' in looked_up[2]  # in the currency's main unit
-    assert (proposal["tool"], proposal["summary"]) == ("expenses_add", "Add ₹250.50 for vegetables")
-    assert before["total"] == 1  # nothing is written until the user says so
-    assert confirmed.json()["status"] == "confirmed"
-    added = next(item for item in after["items"] if item["title"] == "Vegetables")
-    assert (added["amount_minor"], added["currency"], added["merchant"], added["source"]) == (
-        25050,
-        "INR",
-        "Big Bazaar",
-        "assistant",
-    )
-    assert added["date"] == today_of(clock).isoformat()
-
-
-@respx.mock
-async def test_a_proposal_cannot_be_confirmed_once_the_module_is_off(
-    agent_client: AgentClient,
-) -> None:
-    async with agent_client(providers=[PRIMARY]) as client:
-        account = await register(client)
-        await give_consent(client, account)
-        run, _ = await ask_to_add(client, account)
-        await client.patch(
-            "/v1/modules/expenses/preferences", headers=account.headers, json={"enabled": False}
-        )
-        confirmed = await client.post(
-            f"/v1/agents/proposals/{run['proposals'][0]['id']}/confirm", headers=account.headers
-        )
-        await client.patch(
-            "/v1/modules/expenses/preferences", headers=account.headers, json={"enabled": True}
-        )
-        after = await listed(client, account)
-
-    assert (confirmed.json()["status"], confirmed.json()["error_code"]) == (
-        "failed",
-        "MODULE_DISABLED",
-    )
-    assert after["total"] == 0

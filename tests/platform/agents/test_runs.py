@@ -48,7 +48,7 @@ async def test_without_consent_static_mode_answers_by_default(agent_client: Agen
     assert agents[0]["mode"] == "static"
     assert agents[0]["reason"] == "consent"
     skills = {skill["name"]: skill for skill in agents[0]["skills"]}
-    assert set(skills) == {"manage-modules", "check-notifications", "track-expenses"}
+    assert set(skills) == {"manage-modules", "check-notifications", "track-expenses", "take-notes"}
     assert (skills["manage-modules"]["mode"], skills["manage-modules"]["has_static"]) == (
         "agent",
         True,

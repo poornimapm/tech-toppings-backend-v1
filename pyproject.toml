@@ -92,6 +92,9 @@ reset-password.help = "Admin reset: poe reset-password --email someone@example.c
 
 openapi.cmd = "python scripts/export_openapi.py"
 openapi.help = "Write openapi.json (consumed by the frontend type generator)"
+eval-parser.cmd = "python scripts/eval_parser.py"
+eval-parser.help = "Accuracy of the expenses rule parser by language and field (--misses lists errors)"
+
 docker-build.cmd = "docker build --tag tech-toppings-backend:local ."
 
 # ---------------------------------------------------------------- ruff

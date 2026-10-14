@@ -6,6 +6,32 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added — Phase 6: capture by voice, text and SMS (2026-10-14)
+
+**Capture through the assistant**
+- The `track-expenses` skill turns a sentence, a list or a pasted bank SMS into draft entries
+  for the user to check (client tool `expenses_draft`); nothing is written by the assistant.
+  `expenses_add` (a write proposal) is gone.
+- New read tool `expenses_habits`: what the user logs most and its category.
+- Runs take `context.input_type` (`text`, `speech`, `sms`) when a page asks on purpose.
+
+**Rule parser** (`app/modules/expenses/parsing`, the skill's static mode)
+- English, Tamil, Hindi and mixed text: digits in any script, number words, "2k", lakh and
+  crore, Hindi fractions; relative and written dates; quantities; several items; income;
+  merchant after "at"; categories from the user's habits, then keywords.
+- Bank and UPI messages: amount, debit or credit, date and the other party.
+- All vocabulary and formats are YAML in the skill's `references/`.
+- 170 labelled inputs (50 English, 40 Tamil, 40 Hindi, 20 mixed, 20 SMS) plus 40 held out;
+  `poe eval-parser` reports accuracy by language and field, and CI gates it.
+
+**Tests (432, 98.6% coverage)**
+- Parser units, the accuracy gate, capture in static and agent mode, AI failures (429, 5xx,
+  timeout, invalid JSON, used-up quota) falling back to the rules or saying so, an invalid
+  category returned to the model, an instruction inside an SMS treated as text, and no
+  typed or pasted text in the logs.
+- The test module gained a write tool and skill, so proposals and the module switch are
+  tested on the platform's own fixture.
+
 ### Added — Phase 5: expense core and revisions (2026-10-13)
 
 **Reusable history (ADR-0002)**

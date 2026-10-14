@@ -92,3 +92,13 @@ Free tier only.
   `MODULE_DISABLED`.
 - In static mode a module's skills get their turn before the platform's, so "show my
   expenses" opens Expenses rather than being read as "show the module".
+
+## Implementation notes (Phase 6, 2026-10-14)
+
+- Capture is a skill like any other. Its client tool `expenses_draft` hands the page draft
+  entries; the user saves them, so the assistant needs no write tool for capture.
+- A page that asks on purpose says how the input was given (`context.input_type`). The
+  expenses static script then reads anything as an entry; from the general assistant it
+  takes only text that speaks of money and has an amount.
+- The rule parser is the skill's static mode, so the mode and fallback switches decide
+  between AI and rules for capture exactly as for every other skill.
