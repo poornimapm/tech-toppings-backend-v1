@@ -7,6 +7,7 @@ the platform's internals can change without touching every module. Platform code
 """
 
 from app.core.clock import Clock
+from app.core.config import AgentMode
 from app.core.daterange import DateRange
 from app.core.deps import ClockDep, SettingsDep
 from app.core.documents import OwnedDocument, TimestampedDocument
@@ -34,7 +35,8 @@ from app.core.revisions import (
 from app.platform.activity.log import Activity, ActivityLog
 from app.platform.agents.catalog import StaticOutcome, StaticRequest
 from app.platform.agents.lexicon import load_lexicon, match_action, normalise
-from app.platform.agents.models import AgentRun, AgentUsage
+from app.platform.agents.models import AgentRun, AgentUsage, RunStatus
+from app.platform.agents.runtime import run_skill
 from app.platform.agents.tools import ToolBox, tool
 from app.platform.auth.deps import AdminUser, CurrentUser, UserScope
 from app.platform.auth.models import AuthSession
@@ -76,6 +78,7 @@ __all__ = [
     "ActorContext",
     "ActorDep",
     "AdminUser",
+    "AgentMode",
     "AppError",
     "Clock",
     "ClockDep",
@@ -101,6 +104,7 @@ __all__ = [
     "RevisionAction",
     "RevisionedDocument",
     "RevisionedRepository",
+    "RunStatus",
     "Scope",
     "ScopedRepository",
     "Series",
@@ -121,6 +125,7 @@ __all__ = [
     "normalise",
     "page_params",
     "parse_sort",
+    "run_skill",
     "to_major",
     "to_minor",
     "tool",

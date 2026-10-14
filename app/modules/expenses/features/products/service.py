@@ -157,6 +157,33 @@ class Products:
             cheapest=cheapest(places),
         )
 
+    async def spending(self, start: dt.date, end: dt.date, limit: int) -> list[dict[str, Any]]:
+        """What was spent on each product between the days, most first, with its last price."""
+        products = await self.live()
+        owner = {alias: product for product in products for alias in product.aliases}
+        found: dict[str, dict[str, Any]] = {}
+        for row in await self._rows(owner, start, end):
+            product = owner[key(row["title"])]
+            item = found.setdefault(
+                str(product.id),
+                {
+                    "product_id": str(product.id),
+                    "name": product.name,
+                    "amount_minor": 0,
+                    "count": 0,
+                    "price_unit": product.price_unit,
+                    "last_unit_price_minor": None,
+                },
+            )
+            item["amount_minor"] += row["amount_minor"]
+            item["count"] += 1
+            price = purchase(row, product.dimension, product.price_unit).unit_price_minor
+            item["last_unit_price_minor"] = (
+                price if price is not None else item["last_unit_price_minor"]
+            )
+        ranked = sorted(found.values(), key=lambda item: (-item["amount_minor"], item["name"]))
+        return ranked[:limit]
+
     async def unclaimed(self, limit: int) -> list[dict[str, Any]]:
         """What the user buys that no product follows yet, most often bought first."""
         claimed = {alias for product in await self.live() for alias in product.aliases}

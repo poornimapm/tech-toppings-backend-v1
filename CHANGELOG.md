@@ -6,6 +6,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added — Phase 8: overview and insights (2026-10-14)
+
+- **Analytics** (`/v1/expenses/analytics/*`): summary (against the same number of days
+  before), by category, by person (U6), daily, monthly, net savings (U1), top products, top
+  places, weekday heatmap, running total, month-end forecast and unusual spending. Each takes
+  the entries list's filters (ADR-0016); tuning in `data/analytics.yaml`.
+- The entries list filters by exact `merchant`.
+- **Insights** (`/v1/expenses/insights`, `POST /insights/refresh`): a week's or month's facts
+  and a summary by the `explain-spending` skill (AI, or its templates without AI). AI summaries
+  are kept while their facts are unchanged, so a second look makes no AI call. Tool
+  `expenses_insight_facts`.
+- Platform: `run_skill` runs one skill for the caller from module code; `AgentMode` and
+  `RunStatus` are part of the platform API.
+
 ### Added — Phase 7: products and prices (2026-10-14)
 
 - **Quantity and unit** on entries (`quantity`, `unit`), from a unit table in

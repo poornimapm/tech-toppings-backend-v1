@@ -1,0 +1,28 @@
+# Static mode for the explain-spending skill: what it says without AI.
+#
+# Asked from the Overview page (the skill chosen by name, with the period), or from the
+# general assistant with one of the words below, it reads the period's facts and answers with
+# one of these codes, worded by the module's frontend manifest (strings.replies):
+#
+#   explain-spending.<period>.empty   nothing spent yet
+#   explain-spending.<period>.first   spent, with nothing before to compare
+#   explain-spending.<period>.more    more than the same days before
+#   explain-spending.<period>.less    less than the same days before
+#   explain-spending.<period>.same    about the same (within steady_pct)
+#
+# Parameters: spent_minor, category, category_amount_minor, pct, currency.
+
+actions:
+  week:
+    words: ["this week", "my week", "weekly summary", "week so far",
+            "இந்த வாரம்", "இந்த வார", "வாரச் சுருக்கம்",
+            "इस हफ्ते", "इस हफ़्ते", "इस सप्ताह", "हफ्ते का सार"]
+  month:
+    words: ["spending summary", "summary of my spending", "how did i spend", "how am i doing",
+            "monthly summary", "this month so far", "my insights", "spending insights",
+            "செலவு சுருக்கம்", "இந்த மாதம் எப்படி", "மாதச் சுருக்கம்",
+            "खर्च का सार", "इस महीने कैसा", "महीने का सार"]
+
+summary:
+  # A change within this many percent of the same days before counts as "about the same".
+  steady_pct: 5

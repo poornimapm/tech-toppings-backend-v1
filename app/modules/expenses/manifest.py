@@ -11,6 +11,7 @@ MANIFEST = ModuleManifest(
         "app.modules.expenses.features.entries.models:EntryRevision",
         "app.modules.expenses.features.categories.models:Category",
         "app.modules.expenses.features.products.models:Product",
+        "app.modules.expenses.features.insights.models:Insight",
     ),
     tile_stat="app.modules.expenses.stats:month_total",
 )

@@ -161,6 +161,7 @@ class EntryFilters(BaseModel):
     category_id: str | None = Field(default=None, max_length=40)
     tag: str | None = Field(default=None, max_length=30)
     for_whom: str | None = Field(default=None, max_length=60)
+    merchant: str | None = Field(default=None, max_length=80, description="Exactly this place")
     payment_mode: PaymentMode | None = None
     q: str | None = Field(default=None, max_length=80, description="In title, merchant or note")
     min_amount: int | None = Field(default=None, ge=0, description="Minor units")
@@ -171,7 +172,7 @@ class EntryFilters(BaseModel):
         found: dict[str, Any] = self.model_dump(
             mode="json",
             exclude_none=True,
-            include={"kind", "category_id", "for_whom", "payment_mode"},
+            include={"kind", "category_id", "for_whom", "merchant", "payment_mode"},
         )
         if self.tag:
             found["tags"] = self.tag.casefold()

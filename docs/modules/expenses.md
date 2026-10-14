@@ -122,6 +122,32 @@ Acceptance (plan, Phase 7) is a test: "1 kg tomato ₹40 @A", "500 g tomato ₹2
 "thakkali 2 kg ₹70", once Thakkali is combined into Tomato, are one product charted at ₹40,
 ₹50 and ₹35 per kg (`tests/modules/expenses/test_products.py`).
 
+## Overview and insights
+
+Every chart on the Overview page is an endpoint under `/v1/expenses/analytics/` that takes the
+entries list's own filters (ADR-0016). Clicking a bar, a row or a day opens the list with the
+same filters, and its totals match what was clicked; `test_analytics.py` checks this for
+categories, people, places and days on seeded data with known values.
+
+- **Comparisons** (summary, running total): a period that starts a month is compared with
+  the same days of the month before (1-14 October against 1-14 September, as the insights
+  do); any other span with as many days just before it.
+- **Forecast**: spent so far plus the days left at the average day of the last
+  `forecast.lookback_days` (from the first expense when there is less), with a band from
+  that span's quieter and busier weeks (`forecast.band_percentiles` of each whole week's
+  average day: shopping once a week makes most single days zero).
+- **Unusual spending**: an expense at least `anomalies.threshold` robust deviations above the
+  median of its category over `anomalies.lookback_days`, at least `anomalies.min_ratio`
+  times that median, given `anomalies.min_history` earlier expenses.
+
+**Insights.** `GET /v1/expenses/insights?period=month&date=...` works out the facts of the
+week or month so far (against the same days of the one before), then asks the
+`explain-spending` skill for two to four sentences. The AI is given the facts in the
+currency's main unit and only aggregates and the user's own labels. Its summary is kept with
+the hash of the facts and returned again (`cached: true`) until they change. Without AI, the
+skill's templates (`explain-spending.<period>.<more|less|same|first|empty>`, worded in the
+frontend manifest) say the same in one or two sentences.
+
 ## Not yet
 
 - Lending and borrowing ("gave Ravi 500", "கடன்") arrive with IOUs (Phase 9a).

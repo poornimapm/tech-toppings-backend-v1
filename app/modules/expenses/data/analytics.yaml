@@ -1,0 +1,24 @@
+# How the expenses analytics read the user's figures. Change a number here, not in code.
+
+top:
+  limit: 10 # rows in "top merchants", "top products" and "unusual expenses"
+
+monthly:
+  months: 12 # months shown when no range is asked for
+
+forecast:
+  # This month's projection: what was spent so far, plus the days left at the pace of the
+  # last lookback_days (their average day). The band uses that span's quieter and busier
+  # weeks (these percentiles of the average day of each whole week).
+  lookback_days: 56
+  band_percentiles: [25, 75]
+
+anomalies:
+  # An expense is unusual when it is far above what the user usually spends in its category
+  # over the lookback_days before it: its robust score (distance from the median, in median
+  # absolute deviations) reaches threshold, it is at least min_ratio times that median, and
+  # the category had at least min_history expenses to go by.
+  lookback_days: 180
+  min_history: 5
+  threshold: 3.5
+  min_ratio: 2.0

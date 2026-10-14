@@ -31,6 +31,7 @@ from app.platform.agents.catalog import (
     SkillSpec,
     StaticOutcome,
     StaticRequest,
+    UnknownSkillError,
 )
 from app.platform.agents.models import AgentRun, RunStatus, RunStep
 from app.platform.agents.policy import Blocker, Plan, plan
@@ -410,3 +411,22 @@ class AgentRuntime:
                 changes |= {"status": ProposalStatus.FAILED, "error_code": exc.code}
             await repository.set_proposal(run, proposal_id, changes, only_if=None)
         return proposal.model_copy(update=changes)
+
+
+async def run_skill(
+    ctx: ActorContext,
+    skill: str,
+    text: str,
+    *,
+    locale: str,
+    context: Mapping[str, Any] | None = None,
+) -> AgentRun:
+    """Run one skill for the caller, as a page's own button would: by the same switches,
+    quota and consent as any run, and recorded the same way. For module code that keeps its
+    own cache in front (insights), so an unchanged answer costs no AI call."""
+    runtime: AgentRuntime = ctx.state.agents
+    agent = next((spec for spec in runtime.catalog.agents.values() if skill in spec.skills), None)
+    if agent is None:
+        raise UnknownSkillError(details={"skill": skill})
+    request = RunRequest(agent.name, text, skill, locale, dict(context or {}))
+    return await runtime.run(request, ctx)

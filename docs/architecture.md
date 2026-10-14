@@ -173,8 +173,12 @@ data/units.yaml                       units by dimension, with their factor
 features/categories/                  the user's own categories
 features/entries/                     entries, their history, filters, totals
 features/products/                    products (names), prices per unit, alerts
+features/analytics/                   the overview's figures (ADR-0016)
+features/insights/                    a week or month in facts, and its summary
+data/analytics.yaml                   forecast, anomaly and top-N tuning
 skills/track-expenses/                SKILL.md, lexicon, static script (the rule parser)
 skills/tidy-products/                 SKILL.md, word groups, static script
+skills/explain-spending/              SKILL.md, lexicon, static script (templates)
 ```
 
 - **Money** is `amount_minor` (whole minor units) plus `currency` (ADR-0004); `core/money.py`
@@ -200,6 +204,14 @@ skills/tidy-products/                 SKILL.md, word groups, static script
   a title), `GET/PATCH/DELETE /{id}` (prices per unit, places and cheapest; names, price unit,
   alert; stop), `POST /{id}/merge`, `POST /{id}/apart`. Saving an expense with a quantity
   starts a product for a new name and checks the price alert (one notification per entry).
+- **Analytics** (`/v1/expenses/analytics/*`, ADR-0016): summary, by-category, by-person,
+  daily, monthly, net, top-products, top-merchants, weekday-heatmap, cumulative, forecast,
+  anomalies. Each takes the entries list's filters, so a chart's drill-down list shows the
+  same total.
+- **Insights** (`GET /v1/expenses/insights?period=week|month&date=`, `POST .../refresh`): the
+  period's facts and a summary by the `explain-spending` skill. An AI summary is kept with
+  the hash of its facts and shown again until they change; without AI the skill's templates
+  answer. Modules run a skill this way with the platform's `run_skill`.
 - **Platform services:** each change is noted in the activity feed; the Welcome tile shows
   this month's spending; the dashboard gets spent, received and spending per day; a price
   over a product's alert goes to the notification inbox.

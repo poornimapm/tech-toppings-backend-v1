@@ -18,6 +18,8 @@ from app.modules.expenses.features.categories.service import Categories
 from app.modules.expenses.features.entries.models import Entry, EntryRepository
 from app.modules.expenses.features.entries.schemas import EntryFilters, EntryOut
 from app.modules.expenses.features.entries.service import EntryService
+from app.modules.expenses.features.insights.schemas import Period
+from app.modules.expenses.features.insights.service import Insights
 from app.modules.expenses.features.products.service import MAX_PRODUCTS, Products
 from app.modules.expenses.units import known_unit, units
 from app.platform import ActorContext, PageParams, to_major, tool
@@ -136,6 +138,37 @@ async def expenses_draft(
 @tool("client")
 async def expenses_open(ctx: ActorContext) -> None:
     """Show the user their expenses page."""
+
+
+def _in_major(value: Any, currency: str) -> Any:
+    """``{"spent_minor": 25050}`` -> ``{"spent": 250.5}``, all the way down: money as people
+    say it, so the model never has to convert paise."""
+    if isinstance(value, dict):
+        return {
+            (name[: -len("_minor")] if name.endswith("_minor") else name): (
+                to_major(item, currency)
+                if name.endswith("_minor") and isinstance(item, int)
+                else _in_major(item, currency)
+            )
+            for name, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_in_major(item, currency) for item in value]
+    return value
+
+
+@tool("read")
+async def expenses_insight_facts(
+    ctx: ActorContext,
+    period: Annotated[Literal["week", "month"], Field(description="Monday to Sunday, or a month")],
+    date: Annotated[date, Field(description="Its first day (YYYY-MM-DD)")],
+) -> dict[str, Any]:
+    """The figures of a week or month so far, against the same days of the one before: spent,
+    received and kept (net), top categories with their change, the top place, people, the
+    biggest and unusual expenses, a month-end forecast and price changes. Amounts are in the
+    currency's main unit; `partial` means the period isn't over."""
+    facts = await Insights(ctx).facts(Period(period), date)
+    return dict(_in_major(facts, facts["currency"]))
 
 
 class MatchIn(BaseModel):

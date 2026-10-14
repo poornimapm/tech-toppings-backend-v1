@@ -20,3 +20,4 @@ New ADRs take the next number. Never edit an accepted ADR's decision; supersede 
 | [0013](0013-skill-driven-agents-with-mode-and-fallback-switches.md) | Skill-driven agents with mode and fallback switches | Accepted |
 | [0014](0014-dashboard-widgets-activity-log-and-notification-inbox.md) | Dashboard widgets, activity log and notification inbox | Accepted |
 | [0015](0015-products-group-entries-by-name.md) | Products group entries by name | Accepted |
+| [0016](0016-analytics-share-the-list-filters-insights-cached-by-facts.md) | Analytics share the list's filters; insights are cached by their facts | Accepted |
