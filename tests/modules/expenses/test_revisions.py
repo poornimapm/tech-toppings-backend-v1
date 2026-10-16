@@ -56,10 +56,13 @@ async def test_every_change_writes_exactly_one_revision(client: AsyncClient) -> 
     assert revisions[3]["changes"] == [
         {"field": "title", "old": "Rice", "new": "Basmati rice"},
         {"field": "amount_minor", "old": 12500, "new": 18000},
+        # What it counts as moves with it (ADR-0004).
+        {"field": "amount_base_minor", "old": 12500, "new": 18000},
     ]
     assert revisions[0]["changes"] == [
         {"field": "title", "old": "Basmati rice", "new": "Rice"},
         {"field": "amount_minor", "old": 18000, "new": 12500},
+        {"field": "amount_base_minor", "old": 18000, "new": 12500},
     ]
     # Restoring is a new revision whose fields equal the old one's; history is not rewritten.
     assert revisions[0]["snapshot"] == revisions[4]["snapshot"]
