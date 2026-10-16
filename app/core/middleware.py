@@ -1,4 +1,4 @@
-"""ASGI middleware: request context + access log, security headers, CORS.
+"""ASGI middleware: request context + access log, security headers, CORS, body size limit.
 
 Pure ASGI classes (not ``BaseHTTPMiddleware``) so they add no task overhead and work with
 streaming responses.
@@ -14,10 +14,12 @@ import structlog
 from fastapi import FastAPI
 from starlette.datastructures import Headers, MutableHeaders
 from starlette.middleware.cors import CORSMiddleware
+from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.core.config import Settings
 from app.core.context import REQUEST_ID_HEADER, request_id_var
+from app.core.errors import ErrorCode, ErrorResponse
 from app.core.idempotency import REPLAYED_HEADER
 from app.core.logging import get_logger
 
@@ -112,9 +114,66 @@ class SecurityHeadersMiddleware:
         await self.app(scope, receive, send_with_headers)
 
 
+class BodyLimitMiddleware:
+    """Refuses a request body larger than ``max_bytes`` (413, the usual error envelope) before
+    the app reads any of it: by its Content-Length, or, for a body sent in chunks without one,
+    by counting it as it arrives. Such a body is held here (never more than ``max_bytes``) and
+    handed on whole: an error raised while FastAPI reads a body would come out as a 400."""
+
+    def __init__(self, app: ASGIApp, *, max_bytes: int) -> None:
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        headers = Headers(scope=scope)
+        length = headers.get("content-length")
+        if length is not None or "chunked" not in headers.get("transfer-encoding", "").lower():
+            # The server holds a body to its Content-Length, so the header is enough.
+            if length is not None and length.isdigit() and int(length) > self.max_bytes:
+                await self._refuse(scope, receive, send)
+                return
+            await self.app(scope, receive, send)
+            return
+
+        held: list[Message] = []
+        size = 0
+        while True:
+            message = await receive()
+            held.append(message)
+            if message["type"] != "http.request":
+                break  # the client went away: the app hears it as it would
+            size += len(message.get("body", b""))
+            if size > self.max_bytes:
+                await self._refuse(scope, receive, send)
+                return
+            if not message.get("more_body", False):
+                break
+
+        async def replay() -> Message:
+            return held.pop(0) if held else await receive()
+
+        await self.app(scope, replay, send)
+
+    async def _refuse(self, scope: Scope, receive: Receive, send: Send) -> None:
+        request_id = scope.get("state", {}).get("request_id")
+        body = ErrorResponse(
+            code=ErrorCode.REQUEST_TOO_LARGE,
+            message="That request is too large.",
+            details={"max_bytes": self.max_bytes},
+            request_id=request_id,
+        )
+        response = JSONResponse(body.model_dump(), status_code=413)
+        await response(scope, receive, send)
+
+
 def install_middleware(app: FastAPI, settings: Settings) -> None:
     """Register middleware. Starlette runs the last-added one outermost, so the order below
-    is CORS (innermost) -> security headers -> request context (outermost)."""
+    is body limit (innermost) -> CORS -> security headers -> request context (outermost): a
+    refused body still gets CORS and security headers, its request id and its log line."""
+    app.add_middleware(BodyLimitMiddleware, max_bytes=settings.api.max_body_bytes)
     if settings.cors.allowed_origins:
         app.add_middleware(
             CORSMiddleware,
@@ -122,8 +181,9 @@ def install_middleware(app: FastAPI, settings: Settings) -> None:
             allow_credentials=True,
             allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
             allow_headers=["Authorization", "Content-Type", "Idempotency-Key", REQUEST_ID_HEADER],
-            # A client tells a replayed create (a retry after a lost reply) by its header.
-            expose_headers=[REQUEST_ID_HEADER, REPLAYED_HEADER],
+            # A client tells a replayed create (a retry after a lost reply) by its header, and
+            # names a downloaded file (export.csv) as the server did.
+            expose_headers=[REQUEST_ID_HEADER, REPLAYED_HEADER, "Content-Disposition"],
         )
     app.add_middleware(
         SecurityHeadersMiddleware,

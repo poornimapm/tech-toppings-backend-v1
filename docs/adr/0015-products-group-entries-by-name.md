@@ -46,4 +46,5 @@ at a product that no longer exists.
   come later without changing the API.
 - Two different things logged under exactly the same title are one product. The user can
   rename one of the entries' titles; suggestions never combine titles on their own.
-- Entries in another currency are left out of prices until multi-currency entries exist.
+- Entries in another currency are left out of prices: a price is compared in one currency
+  (multi-currency entries exist since Phase 9b; see ADR-0004's notes).

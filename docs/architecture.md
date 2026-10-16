@@ -45,8 +45,14 @@ so it also covers platform sub-packages added later and the test-only modules.
    - `nosniff`, `DENY` framing, `no-referrer`, `no-store`;
    - HSTS when `SECURITY_HSTS_MAX_AGE_SECONDS > 0`.
 3. **`CORSMiddleware`**: only installed when `CORS_ALLOWED_ORIGINS` is set.
-4. **Router → service → repository.** Services raise `AppError` subclasses.
-5. **Exception handlers** render every failure as
+4. **`BodyLimitMiddleware`** (innermost): a body over `API_MAX_BODY_BYTES` is refused with 413
+   `REQUEST_TOO_LARGE` (`details.max_bytes`) before any route reads it, by its Content-Length,
+   or, sent in chunks without one, by counting it as it arrives (held, at most the limit, and
+   handed on whole). Being innermost, the refusal still has CORS and security headers, its
+   request id and its log line. The default (3 MB) fits the CSV import's largest file
+   base64-encoded; a test keeps the two in step.
+5. **Router → service → repository.** Services raise `AppError` subclasses.
+6. **Exception handlers** render every failure as
    `{code, message, details, request_id}`. Unhandled errors are logged with their stack trace
    and returned as a generic `INTERNAL_ERROR`, so internals never leak.
 
@@ -225,6 +231,11 @@ skills/explain-spending/              SKILL.md, lexicon, static script (template
   reminders service. Contributions and payments are ledger lines on their record
   (`ledger.append_once`), each once per `Idempotency-Key`. `POST /entries/duplicates/check`
   lists likely duplicates before a save; it is advice only.
+- **List tools** (`data/listing.yaml`): saved views (`/saved-filters`), one change to many
+  entries (`POST /entries/bulk-update`, each through the usual rules), and the list as a CSV
+  file (`GET /export.csv`, streamed, with the list's filters). CSV import
+  (`features/imports`, words and limits in `data/imports.yaml`) reads a file sent as base64 in
+  JSON (no multipart dependency); the server keeps nothing between the preview and the import.
 - **Platform services:** each change is noted in the activity feed; the Welcome tile shows
   this month's spending; the dashboard gets spent, received and spending per day; a price
   over a product's alert goes to the notification inbox.
@@ -408,6 +419,23 @@ await Reminders(ctx).cancel(module="expenses", ref_id=rule_id)  # paid, settled 
   `POST /v1/reminders/{id}/snooze {days}` tells it once more, `days` from today (at most
   `REMINDERS_MAX_SNOOZE_DAYS`); `POST /v1/reminders/{id}/dismiss` ends it.
 
+**Search** (`app/platform/search`). A package finds the caller's own things in its `search.py`:
+
+```python
+@search
+async def expenses_search(ctx: ActorContext, text: str, limit: int) -> list[SearchHit]:
+    ...  # at most `limit` hits, through ctx.scope, most useful first
+```
+
+- `GET /v1/search?q=` asks every module the caller uses at once, as the dashboard asks
+  widgets: a module switched off is not asked, and one slower than `SEARCH_TIMEOUT_SECONDS`
+  or failing is logged (`search_failed`) and left out. Each answers with at most
+  `SEARCH_MAX_HITS`; a query shorter than `SEARCH_MIN_CHARS` finds nothing.
+- A hit is the user's own `title`, a `kind` the client names (manifest `strings.search`), and a
+  `path` within its module (`entries/<id>`, `?view=<id>`), never a whole URL, so a module can
+  only lead into itself. Money and a day are optional, for the client to show beside it.
+- The route is rate limited per client (`RATE_LIMIT_SEARCH`).
+
 ## Configuration
 
 `app.core.config` is the only module that reads the environment.
@@ -423,7 +451,7 @@ Each concern is a frozen `BaseSettings` group with its own prefix:
 | `SECURITY_` | `SecuritySettings` |
 | `AUTH_` | `AuthSettings` (tokens, cookie, registration, password policy, lockout, Google) |
 | `RATE_LIMIT_` | `RateLimitSettings` |
-| `API_` | `ApiSettings` (page sizes) |
+| `API_` | `ApiSettings` (page sizes, largest request body) |
 | `DEFAULT_` | `DefaultsSettings` (new-account locale, currency, time zone) |
 | `MODULES_` | `ModulesSettings` (packages to discover, tile-stat timeout) |
 | `AGENT_` | `AgentSettings` (mode, fallback, providers, budgets, retention, redaction) |
@@ -431,6 +459,8 @@ Each concern is a frozen `BaseSettings` group with its own prefix:
 | `NOTIFICATIONS_` | `NotificationSettings` (retention) |
 | `JOBS_` | `JobsSettings` (cron token, daily lease, lazy and cron time limits, users per cron run, retention) |
 | `REMINDERS_` | `RemindersSettings` (local send hour, retention, longest snooze, reminders per delivery) |
+| `SEARCH_` | `SearchSettings` (shortest and longest query, hits per module, time limit per module) |
+| `FX_` | `FxSettings` (rates provider URL, how long today's rates are kept, time limit) |
 | `BOOTSTRAP_ADMIN_` | `BootstrapSettings` (`poe seed`) |
 
 Sources, from lowest to highest priority:

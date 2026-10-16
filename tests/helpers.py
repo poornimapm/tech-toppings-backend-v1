@@ -34,6 +34,7 @@ from app.core.config import (
     DashboardSettings,
     DefaultsSettings,
     Environment,
+    FxSettings,
     JobsSettings,
     LogFormat,
     LogSettings,
@@ -43,6 +44,7 @@ from app.core.config import (
     RateLimitSettings,
     RegistrationMode,
     RemindersSettings,
+    SearchSettings,
     SecuritySettings,
     Settings,
 )
@@ -105,6 +107,8 @@ def build_settings(mongo_uri: str, **groups: Any) -> Settings:
         "notifications": NotificationSettings(_env_file=None),
         "jobs": JobsSettings(_env_file=None),
         "reminders": RemindersSettings(_env_file=None),
+        "search": SearchSettings(_env_file=None),
+        "fx": FxSettings(_env_file=None),
         "bootstrap": BootstrapSettings(_env_file=None),
     }
     return Settings(**(defaults | groups))

@@ -19,6 +19,7 @@ MANIFEST = ModuleManifest(
         "app.modules.expenses.features.ious.models:IouRevision",
         "app.modules.expenses.features.recurring.models:RecurringRule",
         "app.modules.expenses.features.recurring.models:RecurringSuggestion",
+        "app.modules.expenses.features.saved_filters.models:SavedFilter",
     ),
     tile_stat="app.modules.expenses.stats:month_total",
 )

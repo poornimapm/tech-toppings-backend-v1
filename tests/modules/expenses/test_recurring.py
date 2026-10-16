@@ -339,11 +339,13 @@ async def test_a_rule_keeps_its_category_even_archived(
     assert (refused.status_code, refused.json()["code"]) == (422, "EXPENSE_CATEGORY_INVALID")
 
 
-async def test_a_rule_adds_in_its_own_currency_or_not_at_all(
+@pytest.mark.usefixtures("fx_rates")
+async def test_a_rule_adds_in_its_own_currency(
     app: FastAPI, client: AsyncClient, clock: FrozenClock
 ) -> None:
-    """After the user changes their base currency, a rule's amounts are never relabelled: its
-    entries are refused (the other rules go on), and so is paying its bill."""
+    """After the user changes their base currency, a rule's amounts are never relabelled: it
+    keeps adding in its own currency, each entry counted in the new base at its day's rate, and
+    paying its bill works the same way."""
     account = await register(client)  # in rupees
     today = today_of(clock)
     milk = await create(client, account, on(today), title="Milk", unit="week", mode="auto_create")
@@ -359,14 +361,16 @@ async def test_a_rule_adds_in_its_own_currency_or_not_at_all(
         json={"due_on": on(today, 3)},
     )
 
-    assert (moved.status_code, made) == (200, 1)
-    assert await made_by(client, account, milk["id"]) == [on(today)]
+    assert (moved.status_code, made) == (200, 2)
+    assert await made_by(client, account, milk["id"]) == [on(today), on(today, 7)]
     assert await made_by(client, account, bread["id"]) == [on(today), on(today, 7)]
-    assert (paid.status_code, paid.json()["code"]) == (422, "EXPENSE_CURRENCY_UNSUPPORTED")
+    assert paid.status_code == 201, paid.text
     page = await listed(client, account)
-    assert {(item["title"], item["currency"]) for item in page["items"]} == {
-        ("Milk", "INR"),
-        ("Bread", "USD"),
+    assert {(item["title"], item["currency"], item["base_currency"]) for item in page["items"]} == {
+        ("Milk", "INR", "INR"),  # added before the change: counted in rupees
+        ("Milk", "INR", "USD"),
+        ("Bread", "USD", "USD"),
+        ("Power", "INR", "USD"),
     }
     assert (await rules(client, account))[milk["id"]]["currency"] == "INR"
 

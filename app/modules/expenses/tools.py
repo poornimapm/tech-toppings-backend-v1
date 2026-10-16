@@ -3,7 +3,8 @@ assistant follows the same rules and sees only the caller's own entries.
 
 The assistant never writes anything itself. It hands over drafts (``expenses_draft``), loans
 (``expenses_iou_draft``) and product matches (``expenses_product_matches``); the user checks
-them and saves them through the API like anything else.
+them and saves them through the API like anything else. Questions about the figures go through
+``expenses_query``, compiled from a whitelist (features/queries/compiler.py).
 """
 
 from __future__ import annotations
@@ -24,6 +25,8 @@ from app.modules.expenses.features.ious.models import IouDirection, IouRepositor
 from app.modules.expenses.features.ious.schemas import IouState
 from app.modules.expenses.features.ious.service import Ious, SettlementInvalidError
 from app.modules.expenses.features.products.service import MAX_PRODUCTS, Products
+from app.modules.expenses.features.queries.schemas import ExpenseQuery
+from app.modules.expenses.features.queries.service import Queries
 from app.modules.expenses.units import known_unit, units
 from app.platform import ActorContext, PageParams, to_major, tool
 
@@ -172,6 +175,26 @@ async def expenses_insight_facts(
     currency's main unit; `partial` means the period isn't over."""
     facts = await Insights(ctx).facts(Period(period), date)
     return dict(_in_major(facts, facts["currency"]))
+
+
+@tool("read")
+async def expenses_query(ctx: ActorContext, query: ExpenseQuery) -> dict[str, Any]:
+    """Figures from the user's entries, to answer a question about them: the total, count,
+    average or largest amount (metric) of expenses or income (kind; leave it out for both and
+    group by kind), optionally grouped by category, merchant, person, tag, day, month or payment
+    mode, between two days, and narrowed by category ids (from expenses_categories), a place, a
+    person, a tag, words or amounts. Rows come sorted and limited; money is in the currency's
+    main unit (money is true), else value is a count."""
+    result = await Queries(ctx).run(query)
+    rows = [
+        {
+            "key": row.key,
+            "value": to_major(row.value, result.currency) if result.money else row.value,
+            "count": row.count,
+        }
+        for row in result.rows
+    ]
+    return {**result.model_dump(mode="json", exclude={"rows"}), "rows": rows}
 
 
 class MatchIn(BaseModel):

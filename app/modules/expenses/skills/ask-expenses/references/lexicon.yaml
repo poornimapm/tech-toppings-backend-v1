@@ -1,0 +1,64 @@
+# Static mode for the ask-expenses skill: questions it reads without AI.
+#
+# A question needs one of the question words; then the words below say the metric, the kind,
+# the grouping and the period (default: this month). A category is found by its name. The
+# answer is one of these codes, worded by the module's frontend manifest (strings.replies):
+#
+#   ask-expenses.total.<kind>   amount_minor              (kind: expense or income)
+#   ask-expenses.count.<kind>   count
+#   ask-expenses.average.<kind> amount_minor, count
+#   ask-expenses.largest.<kind> amount_minor
+#   ask-expenses.top.<n>        first_name, first_minor ... (n = 1 to 3; by category, place
+#                               or person)
+#   ask-expenses.none           nothing in the period
+#
+# Every code also has the period's days, from_on and to_on, and the currency.
+
+question:
+  ask:
+    words: ["how much", "how many", "what did i spend", "where did i spend", "where did my money",
+            "where does my money", "total spent", "total spending", "average", "biggest expense",
+            "largest expense", "most expensive", "top places", "top categories", "spent the most",
+            "எவ்வளவு", "எத்தனை", "சராசரி", "அதிகம் செலவு",
+            "कितना", "कितने", "कितनी", "औसत", "सबसे ज़्यादा", "सबसे ज्यादा"]
+
+metric:
+  count:
+    words: ["how many", "how often", "number of", "times", "எத்தனை முறை", "எத்தனை", "कितनी बार", "कितने"]
+  average:
+    words: ["average", "on average", "சராசரி", "औसत"]
+  largest:
+    words: ["biggest", "largest", "most expensive", "highest", "பெரிய செலவு", "सबसे बड़ा", "सबसे महंगा"]
+
+kind:
+  income:
+    words: ["earn", "earned", "income", "received", "got paid", "come in", "came in",
+            "வரவு", "சம்பாதித்", "வருமானம்", "कमाया", "कमाई", "आमदनी"]
+
+group:
+  category:
+    words: ["by category", "categories", "on what", "what on", "what did i spend on",
+            "வகைவாரியாக", "எதற்கு", "किस पर", "किस चीज़ पर", "श्रेणी"]
+  merchant:
+    words: ["where", "which shop", "which shops", "places", "shops", "எங்கே", "எந்த கடை", "कहाँ", "किस दुकान"]
+  person:
+    words: ["for whom", "who for", "who did i", "யாருக்காக", "किसके लिए"]
+
+period:
+  today:
+    words: ["today", "இன்று", "आज"]
+  yesterday:
+    words: ["yesterday", "நேற்று"]
+  last_week:
+    words: ["last week", "previous week", "போன வாரம்", "கடந்த வாரம்", "पिछले हफ्ते", "पिछले हफ़्ते", "पिछले सप्ताह"]
+  this_week:
+    words: ["this week", "இந்த வாரம்", "इस हफ्ते", "इस हफ़्ते", "इस सप्ताह"]
+  last_month:
+    words: ["last month", "previous month", "போன மாதம்", "கடந்த மாதம்", "पिछले महीने"]
+  this_month:
+    words: ["this month", "இந்த மாதம்", "इस महीने"]
+  this_year:
+    words: ["this year", "இந்த ஆண்டு", "இந்த வருடம்", "इस साल"]
+
+answer:
+  top_rows: 3 # places, categories or people named in one answer

@@ -37,6 +37,7 @@ from app.platform.auth.router import router as auth_router
 from app.platform.auth.router import sessions_router
 from app.platform.dashboard.router import router as dashboard_router
 from app.platform.dashboard.service import discover_widgets
+from app.platform.fx.router import router as fx_router
 from app.platform.health.router import router as health_router
 from app.platform.jobs.router import router as jobs_router
 from app.platform.jobs.runner import discover_jobs
@@ -46,6 +47,8 @@ from app.platform.modules.router import router as modules_router
 from app.platform.notifications.router import router as notifications_router
 from app.platform.plugins import subpackages
 from app.platform.reminders.router import router as reminders_router
+from app.platform.search.router import router as search_router
+from app.platform.search.service import discover_search
 from app.platform.users.router import router as me_router
 
 logger = get_logger(__name__)
@@ -105,7 +108,9 @@ def create_app(settings: Settings | None = None, *, clock: Clock | None = None) 
     app.state.agents = agents
     app.state.widgets = discover_widgets(plugin_packages)
     app.state.jobs = discover_jobs(plugin_packages)
+    app.state.searchers = discover_search(plugin_packages)
     app.state.clock = clock
+    app.state.http = http_client
     app.state.rate_limiter = RateLimiter(settings.rate_limit)
     app.state.password_hasher = PasswordHasher(settings.auth)
     app.state.google_verifier = (
@@ -119,17 +124,22 @@ def create_app(settings: Settings | None = None, *, clock: Clock | None = None) 
     app.include_router(health_router)
 
     api_v1 = APIRouter(prefix=API_V1_PREFIX)
-    api_v1.include_router(auth_router)
-    api_v1.include_router(me_router)
-    api_v1.include_router(sessions_router)
-    api_v1.include_router(modules_router)
-    api_v1.include_router(agents_router)
-    api_v1.include_router(dashboard_router)
-    api_v1.include_router(activity_router)
-    api_v1.include_router(notifications_router)
-    api_v1.include_router(reminders_router)
-    api_v1.include_router(admin_router)
-    api_v1.include_router(jobs_router)
+    for router in (
+        auth_router,
+        me_router,
+        sessions_router,
+        modules_router,
+        agents_router,
+        dashboard_router,
+        activity_router,
+        notifications_router,
+        reminders_router,
+        search_router,
+        fx_router,
+        admin_router,
+        jobs_router,
+    ):
+        api_v1.include_router(router)
     modules.mount(api_v1)
     app.include_router(api_v1)
     return app

@@ -13,7 +13,7 @@ from statistics import fmean, median
 from typing import Any
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.modules.expenses.domain import EntryKind
 from app.modules.expenses.features.analytics.schemas import (
@@ -43,7 +43,7 @@ from app.modules.expenses.features.analytics.schemas import (
     Unusual,
     WeekdayAmount,
 )
-from app.modules.expenses.features.entries.models import Entry, EntryRepository, sums
+from app.modules.expenses.features.entries.models import Entry, EntryRepository, in_base, sums
 from app.modules.expenses.features.entries.schemas import EntryFilters, on_days
 from app.modules.expenses.features.products.service import Products
 from app.platform import ActorContext
@@ -74,9 +74,15 @@ class _Anomalies(BaseModel):
     min_ratio: float
 
 
+class _Query(BaseModel):
+    max_rows: int = Field(ge=1)
+    max_categories: int = Field(ge=1)
+
+
 class Tuning(BaseModel):
     top: _Top
     monthly: _Monthly
+    query: _Query
     forecast: _Forecast
     anomalies: _Anomalies
 
@@ -174,9 +180,11 @@ class Analytics:
         kind: EntryKind | None = None,
         currency: str | None = None,
     ) -> dict[str, Any]:
-        """Entries in the base currency unless ``currency`` says which."""
-        found = filters.criteria() | on_days(span.start, span.end)
-        found["currency"] = currency or self.currency
+        """Entries counted in the base currency (whatever they were paid in) unless
+        ``currency`` says which."""
+        found = (
+            filters.criteria() | on_days(span.start, span.end) | in_base(currency or self.currency)
+        )
         if kind is not None:
             found["kind"] = kind
         return self.entries.query(found, include_deleted=filters.deleted)

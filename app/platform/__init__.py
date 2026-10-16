@@ -21,8 +21,9 @@ from app.core.errors import (
 )
 from app.core.idempotency import REPLAYED_HEADER, IdempotencyKey, answer_once
 from app.core.logging import get_logger
-from app.core.money import to_major, to_minor
+from app.core.money import convert, major_text, to_major, to_minor
 from app.core.pagination import Page, PageParams, PageParamsDep, page_params, parse_sort
+from app.core.rate_limit import rate_limit
 from app.core.repository import NEWEST_FIRST, Scope, ScopedRepository
 from app.core.revisions import (
     CLIENT_KEY_INDEX,
@@ -53,6 +54,8 @@ from app.platform.dashboard.contract import (
     daily_counts,
     widget,
 )
+from app.platform.fx.models import FxRate
+from app.platform.fx.service import Fx, FxUnavailableError, FxUnsupportedError
 from app.platform.jobs.contract import job
 from app.platform.jobs.models import JobRun
 from app.platform.modules.manifest import ModuleManifest, ModuleStatus, TileStat
@@ -60,6 +63,7 @@ from app.platform.modules.models import ModuleOverride, UserModule
 from app.platform.notifications.inbox import Inbox, Notification
 from app.platform.reminders.models import Reminder
 from app.platform.reminders.service import Reminders
+from app.platform.search.contract import SearchHit, search
 from app.platform.users.models import User
 
 # Beanie document models owned by the platform; registered with the database at startup.
@@ -74,6 +78,7 @@ PLATFORM_DOCUMENTS = (
     Notification,
     JobRun,
     Reminder,
+    FxRate,
 )
 
 __all__ = [
@@ -95,6 +100,9 @@ __all__ = [
     "DateRange",
     "FieldChange",
     "ForbiddenError",
+    "Fx",
+    "FxUnavailableError",
+    "FxUnsupportedError",
     "IdempotencyKey",
     "Inbox",
     "Item",
@@ -117,6 +125,7 @@ __all__ = [
     "RunStatus",
     "Scope",
     "ScopedRepository",
+    "SearchHit",
     "Series",
     "SettingsDep",
     "StaticOutcome",
@@ -128,18 +137,22 @@ __all__ = [
     "UserScope",
     "VersionConflictError",
     "answer_once",
+    "convert",
     "count_in",
     "daily_counts",
     "error_responses",
     "get_logger",
     "job",
     "load_lexicon",
+    "major_text",
     "match_action",
     "normalise",
     "page_params",
     "parse_sort",
     "patched",
+    "rate_limit",
     "run_skill",
+    "search",
     "to_major",
     "to_minor",
     "tool",

@@ -4,8 +4,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response, status
 
+from app.modules.expenses.features.entries.bulk import Bulk
 from app.modules.expenses.features.entries.duplicates import Duplicates
 from app.modules.expenses.features.entries.schemas import (
+    BulkIn,
+    BulkOut,
     DuplicatesIn,
     DuplicatesOut,
     EntryFilters,
@@ -97,6 +100,15 @@ async def entry_facets(service: ServiceDep) -> FacetsOut:
 )
 async def check_duplicates(body: DuplicatesIn, ctx: ActorDep) -> DuplicatesOut:
     return await Duplicates(ctx).check(body)
+
+
+@router.post(
+    "/bulk-update",
+    summary="One change to many entries: category, a tag, delete or bring back",
+    responses=error_responses(401, 403, 422),
+)
+async def bulk_update(body: BulkIn, ctx: ActorDep) -> BulkOut:
+    return await Bulk(ctx).apply(body)
 
 
 @router.get(

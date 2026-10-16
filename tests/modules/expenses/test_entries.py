@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+import respx
 from httpx import AsyncClient
 
 from tests.helpers import register
@@ -35,6 +36,9 @@ async def test_an_entry_is_stored_as_given_and_read_back(client: AsyncClient) ->
         "title": "Vegetables",
         "amount_minor": 12500,
         "currency": "INR",  # the user's base currency
+        "base_currency": "INR",  # what it counts in
+        "fx_rate": "1",
+        "amount_base_minor": 12500,
         "quantity": None,
         "unit": None,
         "category_id": "groceries",
@@ -97,15 +101,19 @@ async def test_the_category_must_exist_and_fit_the_kind(client: AsyncClient) -> 
     assert wrong_kind.json()["code"] == "EXPENSE_CATEGORY_INVALID"
 
 
-async def test_entries_are_kept_in_the_base_currency_for_now(client: AsyncClient) -> None:
+async def test_an_entry_may_be_in_another_currency(
+    client: AsyncClient, fx_rates: respx.Route
+) -> None:
+    """Counted in the base currency at its day's rate (test_currencies.py has the rest)."""
     account = await register(client)
 
     foreign = await post(client, account, currency="USD")
     stated = await post(client, account, currency="INR")
 
-    assert foreign.status_code == 422
-    assert foreign.json()["code"] == "EXPENSE_CURRENCY_UNSUPPORTED"
-    assert stated.status_code == 201
+    assert foreign.status_code == 201, foreign.text
+    assert (foreign.json()["currency"], foreign.json()["base_currency"]) == ("USD", "INR")
+    assert (stated.json()["fx_rate"], stated.json()["amount_base_minor"]) == ("1", 12500)
+    assert fx_rates.call_count == 1  # none for the base currency itself
 
 
 async def test_the_list_filters_sorts_and_pages(client: AsyncClient) -> None:

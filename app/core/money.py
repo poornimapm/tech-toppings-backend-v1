@@ -24,6 +24,21 @@ def to_minor(amount: Decimal | float | str, currency: str) -> int:
     return int(scaled.quantize(Decimal(1), rounding=ROUND_HALF_UP))
 
 
+def major_text(amount_minor: int, currency: str) -> str:
+    """``25050`` INR -> ``"250.50"``: every minor digit written, for files people open in a
+    spreadsheet (no float rounding, no grouping, a dot for the decimals)."""
+    exponent = minor_exponent(currency)
+    return str(Decimal(amount_minor).scaleb(-exponent).quantize(Decimal(1).scaleb(-exponent)))
+
+
+def convert(amount_minor: int, source: str, target: str, rate: Decimal) -> int:
+    """``amount_minor`` of ``source`` in ``target``'s minor units, at ``rate`` (how much
+    ``target`` one ``source`` buys): ``convert(1000, "USD", "INR", Decimal("83.5"))`` is 83500
+    paise for 10 dollars."""
+    major = Decimal(amount_minor).scaleb(-minor_exponent(source))
+    return to_minor(major * rate, target)
+
+
 def to_major(amount_minor: int, currency: str) -> float:
     """``25050`` INR -> ``250.5``, for figures the client formats (tiles, charts)."""
     return float(Decimal(amount_minor).scaleb(-minor_exponent(currency)))

@@ -6,6 +6,12 @@ top:
 monthly:
   months: 12 # months shown when no range is asked for
 
+query:
+  # Questions about the user's figures (the expenses_query tool, the ask-expenses skill): rows
+  # one answer takes at most, and categories one question can name.
+  max_rows: 50
+  max_categories: 10
+
 forecast:
   # This month's projection: what was spent so far, plus the days left at the pace of the
   # last lookback_days (their average day). The band uses that span's quieter and busier

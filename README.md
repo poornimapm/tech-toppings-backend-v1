@@ -316,6 +316,146 @@ paid back 500"). With AI on, the model looks the loan up with `expenses_ious` an
 `iou_id` over; a draft that doesn't fit that loan (the other way round, or paid back already)
 goes back to the model as `EXPENSE_SETTLEMENT_INVALID`.
 
+## Data pack: try it
+
+Each Phase 9b feature can be tried from `/docs` in the same way. Their numbers are in
+`app/modules/expenses/data/listing.yaml`.
+
+### Saved views
+
+1. `POST /v1/expenses/saved-filters` with
+   `{"name": "Pets last month", "view": {"show": "expense", "period": "last_month", "category_id": "<a category id>"}}`.
+   `GET /v1/expenses/saved-filters` lists it, with every filter spelled out.
+2. A period is kept by name (`this_month`, `last_month`, `last_90_days`, `all_time`), so the
+   view always shows that period as of the day it is opened. Days a chart chose are kept as
+   `from` and `to` instead; giving both a period and days is refused (422), as is anything the
+   list can't filter by.
+3. The same name again, in any case, answers 409 `EXPENSE_SAVED_FILTER_EXISTS`.
+   `PATCH /v1/expenses/saved-filters/<id>` with `{"name": ...}` renames it, or with
+   `{"view": ...}` replaces its filters. `DELETE` frees the name.
+
+A user keeps at most `saved_filters.max_per_user` views (`EXPENSE_SAVED_FILTER_LIMIT`, 409).
+Opening a view is the app's work: it puts the filters back into the list's URL.
+
+### Bulk edit
+
+1. Add two expenses and one income entry. `POST /v1/expenses/entries/bulk-update` with
+   `{"ids": ["<expense 1>", "<expense 2>", "<income>"], "action": "category", "category_id": "food"}`.
+   The answer has `changed` (the two expenses) and `skipped` with the income entry and the
+   reason `kind`: food is a category for expenses.
+2. `GET /v1/expenses/entries/<expense 1>/revisions`: the newest revision changed `category_id`,
+   with the source `bulk`. Budgets and prices see the change as they see an edit, so moving
+   entries into a budget's category can warn.
+3. `{"ids": [...], "action": "add_tag", "tag": "goa"}` and `"remove_tag"` add or take off a tag;
+   `"delete"` deletes, and `"undelete"` brings back (how the app undoes a bulk delete).
+   `GET /v1/activity` notes each change once ("Changed 2 entries"), or as an edit of that entry
+   when it changed one.
+
+Other reasons to skip an entry: `not_found` (not one of yours), `unchanged` (already so),
+`conflict` (edited at the same moment; try again) and `tags_full`. A change takes at most
+`bulk.max_entries` entries; each is saved on its own, so some can go through while others are
+skipped.
+
+### Search
+
+1. With a saved view, a loan, a product and an entry whose names have "goa" in them (or a
+   place or note, for an entry), `GET /v1/search?q=goa`. The answer has one group,
+   `expenses`, with a fair share for each kind: the view (`path` `?view=<id>`), the loan
+   (`plan?show=loans&focus=<id>`, with what is still owed and when it is due), the product
+   (`prices/<id>`) and the entry (`entries/<id>`, with its amount and day).
+2. `q=g` finds nothing (shorter than `SEARCH_MIN_CHARS`); what is typed is matched as text,
+   any case, so `(5 kg` finds "Rice (5 kg)".
+3. Switch Expenses off (`PATCH /v1/modules/expenses/preferences {"enabled": false}`) and its
+   group is gone.
+
+### CSV export
+
+1. `GET /v1/expenses/export.csv?from=2026-10-01&to=2026-10-31` downloads
+   `expenses-2026-10-01-to-2026-10-31.csv`: the entries the list shows for those filters (any
+   of the list's own: `kind`, `category_id`, `tag`, `q`, `deleted` ...), newest first.
+2. It is UTF-8 with a byte-order mark, so Excel and LibreOffice show Tamil and Hindi right. The
+   columns are `date, time, kind, title, amount, currency, category, quantity, unit, merchant,
+   payment_mode, for_whom, tags, note`; amounts are in the main unit with every decimal
+   (`125.50`), tags are joined with `;`, and a category is your own name for it or the system
+   key (`groceries`).
+3. Text a spreadsheet would run as a formula (`=`, `+`, `-`, `@` first) starts with `'`.
+4. More than `export.max_rows` entries answers 422 `EXPENSE_EXPORT_TOO_LARGE` before anything
+   is sent; the file itself is streamed, so memory stays small. The route has its own rate
+   limit (`RATE_LIMIT_EXPORT`).
+
+### CSV import: preview
+
+1. Base64-encode a CSV file (PowerShell: `[Convert]::ToBase64String([IO.File]::ReadAllBytes("statement.csv"))`)
+   and `POST /v1/expenses/import/preview` with `{"file": "<base64>"}`. Nothing is saved.
+2. The answer guesses the `mapping`: the header row (a bank statement's own lines above it are
+   skipped), which column holds what (from the words in `data/imports.yaml`, in English, Tamil
+   and Hindi; this app's export maps itself), the date format, and whether a single amount
+   column uses minus for money spent (`signs`).
+3. `rows` are the first rows as they would be saved, each with `problems` (`bad_date`,
+   `missing_amount`, `currency` ...) or `duplicate: true` when an entry with the same day, kind,
+   amount and title is saved already; `problems` lists the rows a problem stops, and the counts
+   say how many rows the import would add. A category the file names is matched to yours by
+   name (or a system key); others are filed under Other and listed in `unknown_categories`.
+4. Send the file again with a changed `mapping` (`header_row`, `columns` by index,
+   `date_format` from `date_formats`, `signs`) to read it that way.
+
+### CSV import: commit
+
+1. `POST /v1/expenses/import/commit` with the same `file`, the `mapping` the preview showed,
+   and `offset` 0. It adds up to `limits.commit_batch` of the importable rows (those with no
+   problem, and not saved already unless `include_duplicates` is true) and answers `added`,
+   `already`, `done`, `total` and `next_offset`.
+2. Send it again with `offset` = `next_offset` until that is `null`. The entries have the source
+   `import`, and `GET /v1/activity` notes the import once, when its last batch adds rows.
+3. Send the same file again, or a batch whose reply was lost: nothing is added twice
+   (`already`). Each row is keyed by the file's fingerprint and its row number.
+
+The server keeps nothing: each request sends the file and mapping again.
+
+### Monthly report
+
+1. `GET /v1/expenses/reports/monthly?month=2026-09`: the month's `summary` (spent, received,
+   kept, against the same days of the month before), `categories` with what was spent under
+   each the month before and the change, `income`, `merchants`, `people`, money spent each
+   day (`days`) and the biggest expenses (`largest`). Leave out `month` for this month so far.
+2. `GET /v1/expenses/reports/monthly.csv?month=2026-09` downloads
+   `expenses-report-2026-09.csv`: a row per figure (`section, name, amount, share_pct,
+   previous, change_pct`), UTF-8 with a byte-order mark.
+3. The PDF is the browser's "Save as PDF" on the app's report page (D5), so Tamil and Hindi
+   are shaped right without fonts on the server.
+
+### Chat with expenses
+
+1. With AI off (static mode) or on: `POST /v1/agents/assistant/runs` with
+   `{"input": "How much did I spend on groceries last month?"}`. The `ask-expenses` skill
+   answers `ask-expenses.total.expense` with `amount_minor`, `from_on` and `to_on` (the whole
+   month before), worded by the app. "Where did I spend the most this week?" names the top
+   places (`ask-expenses.top.<n>`); "how many times", "average", "biggest" and "earn" work too,
+   in English, Tamil and Hindi.
+2. The figures come from `POST /v1/expenses/query`: an `ExpenseQuery` (metric, kind, grouping,
+   days, categories, place, person, tag, words, amounts, order and limit) compiled from a
+   whitelist into a pipeline that only ever reads your own entries (the AI calls the same
+   compiler through the `expenses_query` tool). Try
+   `{"metric": "total", "group_by": "month", "sort": "key"}` for spending month by month.
+3. `tests/modules/expenses/test_query_compiler.py` is the property test the plan asks for: 500
+   random queries checked for their shape, and 200 run on MongoDB against a plain Python
+   reading of random entries, with a fixed seed.
+
+### Other currencies
+
+1. `POST /v1/expenses/entries` with `"currency": "USD"`, `"amount_minor": 12000` and a date.
+   The entry keeps `currency` USD and what it was in your base currency that day:
+   `base_currency`, `fx_rate` and `amount_base_minor`. Rates come from Frankfurter (free, no key,
+   `FX_PROVIDER_URL`) and are kept in `fx_rates`, so each currency and day is asked once.
+2. `GET /v1/expenses/entries/summary` and every other total count `amount_base_minor`, so they
+   stay the same when rates move. `GET /v1/fx/rates?base=USD&date=2026-09-05` shows the rates
+   used.
+3. Editing an entry keeps its currency (a different one is 422 `EXPENSE_CURRENCY_UNSUPPORTED`).
+   A currency with no rate is 422 `FX_CURRENCY_UNSUPPORTED`; with the provider away and nothing
+   kept, saving answers 503 `FX_UNAVAILABLE` and saves nothing. Files over
+`limits.max_bytes` or `limits.max_rows` answer 422 `EXPENSE_IMPORT_TOO_LARGE`; the route has its
+own rate limit (`RATE_LIMIT_IMPORTS`).
+
 ## Tasks
 
 | Command | What it does |
@@ -392,6 +532,8 @@ app/
     activity/        ActivityLog, /v1/activity, activity widgets
     notifications/   Inbox, /v1/notifications, tools.py + skills/check-notifications
     reminders/       Reminders (schedule, cancel, deliver once), /v1/reminders (snooze, dismiss)
+    search/          search contract (@search), /v1/search across the modules in use
+    fx/              exchange rates (Frankfurter), cached per currency and day, /v1/fx/rates
     admin/           /v1/admin/*: the only place an unrestricted Scope is allowed
     context.py       ActorContext: what tools and widgets receive
     plugins.py       folder discovery shared by modules, agents, skills, tools, widgets and jobs

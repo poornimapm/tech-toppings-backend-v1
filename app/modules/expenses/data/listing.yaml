@@ -1,0 +1,16 @@
+# How the tools around the expenses list behave (saved views; bulk edit, search, import and
+# export follow). Change a number here, not in code.
+
+saved_filters:
+  # Views a user can keep: named filters of the entries list, shown as chips above it.
+  max_per_user: 20
+
+bulk:
+  # Entries one bulk change takes (selected on the list): each is saved with its own revision,
+  # so this bounds how long one request runs.
+  max_entries: 100
+
+export:
+  # Rows one CSV file takes. The file is streamed, so memory stays small; this bounds how long
+  # one download runs. More than this asks for a shorter period (EXPENSE_EXPORT_TOO_LARGE).
+  max_rows: 50000

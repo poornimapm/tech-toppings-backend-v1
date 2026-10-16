@@ -54,6 +54,7 @@ async def test_without_consent_static_mode_answers_by_default(agent_client: Agen
         "track-expenses",
         "tidy-products",
         "explain-spending",
+        "ask-expenses",
         "take-notes",
     }
     assert (skills["manage-modules"]["mode"], skills["manage-modules"]["has_static"]) == (

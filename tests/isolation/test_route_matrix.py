@@ -61,6 +61,7 @@ ROUTE_BODIES: dict[tuple[str, str], dict[str, object]] = {
     ("PATCH", "/v1/expenses/ious/{iou_id}"): {"counterparty": "hijacked", "revision_no": 1},
     ("POST", "/v1/expenses/ious/{iou_id}/settlements"): {"amount_minor": 1, "date": "2026-10-08"},
     ("PATCH", "/v1/expenses/recurring/{rule_id}"): {"active": False},
+    ("PATCH", "/v1/expenses/saved-filters/{saved_id}"): {"name": "hijacked"},
     ("POST", "/v1/expenses/recurring/{rule_id}/mark-paid"): {"due_on": RULE_DUE_ON},
     ("POST", "/v1/reminders/{reminder_id}/snooze"): {"days": 1},
 }
@@ -321,6 +322,22 @@ async def check_rule(client: AsyncClient, owner: Account, rule_id: str) -> None:
     assert all(item["recurring_id"] != rule_id for item in entries["items"])
 
 
+async def create_saved_filter(client: AsyncClient, owner: Account) -> str:
+    response = await client.post(
+        "/v1/expenses/saved-filters",
+        headers=owner.headers,
+        json={"name": f"Mine {uuid.uuid4().hex[:8]}", "view": {"show": "expense", "tag": "goa"}},
+    )
+    assert response.status_code == 201, response.text
+    return str(response.json()["id"])
+
+
+async def check_saved_filter(client: AsyncClient, owner: Account, saved_id: str) -> None:
+    views = (await client.get("/v1/expenses/saved-filters", headers=owner.headers)).json()
+    mine = next(item for item in views if item["id"] == saved_id)
+    assert (mine["name"].startswith("Mine "), mine["view"]["tag"]) == (True, "goa")
+
+
 Factory = Callable[[AsyncClient, Account], Awaitable[str]]
 Checker = Callable[[AsyncClient, Account, str], Awaitable[None]]
 
@@ -338,6 +355,7 @@ RESOURCES: dict[str, tuple[Factory, Checker]] = {
     "goal_id": (create_goal, check_goal),
     "iou_id": (create_iou, check_iou),
     "rule_id": (create_rule, check_rule),
+    "saved_id": (create_saved_filter, check_saved_filter),
 }
 
 

@@ -240,6 +240,9 @@ class RateLimitSettings(BaseSettings):
     auth_password_change: str = "10/minute"  # noqa: S105 - a request rate, not a password
     agent_run: str = "20/minute"
     jobs_run: str = "30/minute"
+    search: str = "120/minute"  # the palette asks as the user types
+    export: str = "10/minute"  # each one reads many entries
+    imports: str = "60/minute"  # each reads a whole file; an import asks once per batch
 
     @field_validator(
         "auth_login",
@@ -248,6 +251,9 @@ class RateLimitSettings(BaseSettings):
         "auth_password_change",
         "agent_run",
         "jobs_run",
+        "search",
+        "export",
+        "imports",
     )
     @classmethod
     def valid_rate(cls, value: str) -> str:
@@ -260,6 +266,9 @@ class ApiSettings(BaseSettings):
 
     default_page_size: int = Field(default=20, ge=1)
     max_page_size: int = Field(default=100, ge=1)
+    # Largest request body any route takes; a bigger one is refused (413) before it is read.
+    # The CSV import needs its file base64-encoded (a third bigger) plus its mapping.
+    max_body_bytes: int = Field(default=3_000_000, ge=1024)
 
 
 class DefaultsSettings(BaseSettings):
@@ -449,6 +458,30 @@ class RemindersSettings(BaseSettings):
     deliver_batch: int = Field(default=50, ge=1)
 
 
+class SearchSettings(BaseSettings):
+    """Search from the command palette: each module finds the caller's own things."""
+
+    model_config = _group_config("SEARCH_")
+
+    # Shorter queries find nothing: too many things match one letter.
+    min_chars: int = Field(default=2, ge=1)
+    max_chars: int = Field(default=80, ge=1)
+    # Things one module may answer with; a slow module is left out of the answer.
+    max_hits: int = Field(default=8, ge=1, le=50)
+    timeout_seconds: float = Field(default=2.0, gt=0, le=10)
+
+
+class FxSettings(BaseSettings):
+    """Exchange rates (Frankfurter: free, no key), cached in MongoDB per currency and day."""
+
+    model_config = _group_config("FX_")
+
+    provider_url: str = "https://api.frankfurter.dev/v1"
+    # Today's rates are fetched again after this long; a past day's never change.
+    cache_ttl_hours: int = Field(default=12, ge=1)
+    timeout_seconds: float = Field(default=5.0, gt=0, le=30)
+
+
 class BootstrapSettings(BaseSettings):
     """First admin account, created or promoted by `poe seed` (skipped when unset)."""
 
@@ -484,6 +517,8 @@ class Settings(BaseModel):
     notifications: NotificationSettings
     jobs: JobsSettings
     reminders: RemindersSettings
+    search: SearchSettings
+    fx: FxSettings
     bootstrap: BootstrapSettings
 
 
@@ -512,6 +547,8 @@ def load_settings(env_files: Sequence[Path] | None = None) -> Settings:
         notifications=NotificationSettings(_env_file=existing),
         jobs=JobsSettings(_env_file=existing),
         reminders=RemindersSettings(_env_file=existing),
+        search=SearchSettings(_env_file=existing),
+        fx=FxSettings(_env_file=existing),
         bootstrap=BootstrapSettings(_env_file=existing),
     )
 

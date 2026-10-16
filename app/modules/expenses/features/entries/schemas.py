@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 import re
+from enum import StrEnum
 from typing import Annotated, Any
 
 from pydantic import (
@@ -17,6 +18,7 @@ from pydantic import (
 
 from app.modules.expenses.domain import EntryKind, EntrySource, PaymentMode
 from app.modules.expenses.features.entries.models import Entry
+from app.modules.expenses.listing import listing
 from app.modules.expenses.units import known_unit
 from app.platform import FieldChange, Revision, RevisionAction
 
@@ -103,6 +105,9 @@ class EntryUpdate(EntryIn):
 class EntryOut(EntryFields):
     id: str
     currency: str
+    base_currency: str | None = Field(default=None, description="The currency it counts in")
+    fx_rate: str | None = Field(default=None, description="base_currency one currency bought")
+    amount_base_minor: int | None = Field(default=None, description="What it was in base_currency")
     source: EntrySource
     recurring_id: str | None = Field(
         default=None, description="The repeating rule that added it, or whose bill it paid"
@@ -234,6 +239,70 @@ class DuplicatesOut(BaseModel):
     """One result per candidate, in the order asked. Advice only: saving is never refused."""
 
     results: list[DuplicateResult]
+
+
+class BulkAction(StrEnum):
+    CATEGORY = "category"  # file them under category_id
+    ADD_TAG = "add_tag"
+    REMOVE_TAG = "remove_tag"
+    DELETE = "delete"
+    UNDELETE = "undelete"  # bring them back (undoes a bulk delete)
+
+
+# What each action needs besides the entries.
+NEEDS = {
+    BulkAction.CATEGORY: "category_id",
+    BulkAction.ADD_TAG: "tag",
+    BulkAction.REMOVE_TAG: "tag",
+}
+
+
+class SkipReason(StrEnum):
+    NOT_FOUND = "not_found"  # not one of the user's entries (or deleted, unless bringing back)
+    UNCHANGED = "unchanged"  # already so
+    KIND = "kind"  # the category is for the other kind of entry
+    CONFLICT = "conflict"  # changed elsewhere at the same moment
+    TAGS_FULL = "tags_full"  # it has as many tags as an entry can
+
+
+def _distinct(ids: list[str]) -> list[str]:
+    return list(dict.fromkeys(ids))
+
+
+class BulkIn(BaseModel):
+    """One change to many entries: the category, a tag added or taken off, or delete (and
+    bring back)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ids: Annotated[
+        list[Annotated[str, StringConstraints(max_length=40)]],
+        Field(min_length=1, max_length=listing().bulk.max_entries),
+        AfterValidator(_distinct),
+    ]
+    action: BulkAction
+    category_id: CategoryId | None = Field(default=None, description="For category")
+    tag: Tag | None = Field(default=None, description="For add_tag and remove_tag")
+
+    @model_validator(mode="after")
+    def what_it_needs(self) -> BulkIn:
+        needs = NEEDS.get(self.action)
+        for name in ("category_id", "tag"):
+            if (getattr(self, name) is not None) != (name == needs):
+                raise ValueError(f"{self.action} takes {needs or 'nothing but the entries'}")
+        if self.tag:
+            self.tag = self.tag.casefold()  # as entries keep their tags
+        return self
+
+
+class BulkSkip(BaseModel):
+    id: str
+    reason: SkipReason
+
+
+class BulkOut(BaseModel):
+    changed: list[str] = Field(description="The entries changed, in the order asked")
+    skipped: list[BulkSkip]
 
 
 def _bounds(low: Any, high: Any) -> dict[str, Any]:

@@ -1,0 +1,69 @@
+# How a CSV file is read for import (POST /v1/expenses/import/preview, then /commit). Change
+# words and limits here, not in code.
+
+limits:
+  max_bytes: 2000000 # the file as uploaded; API_MAX_BODY_BYTES must fit it base64-encoded
+  max_rows: 5000 # rows of data (the header not counted)
+  preview_rows: 50 # rows shown as entries in the preview
+  max_problems: 50 # rows with a problem listed (all of them are counted)
+  header_search_rows: 20 # bank statements may start with lines about the account
+  commit_batch: 200 # rows one import request adds; the app asks again for the rest
+
+# A column is matched to a field when its header, any case and spacing, is one of these words.
+# The export's own headers are among them, so an exported file maps itself.
+columns:
+  date: [date, txn date, transaction date, value date, posting date, தேதி, तारीख, दिनांक]
+  time: [time, txn time, நேரம், समय]
+  title:
+    - title
+    - description
+    - narration
+    - particulars
+    - details
+    - remarks
+    - transaction details
+    - விவரம்
+    - विवरण
+  amount: [amount, amt, transaction amount, தொகை, राशि]
+  debit: [debit, withdrawal, withdrawal amt, withdrawal amount, debit amount, dr, paid out]
+  credit: [credit, deposit, deposit amt, deposit amount, credit amount, cr, paid in]
+  kind: [kind, type, dr/cr, cr/dr]
+  currency: [currency]
+  category: [category, வகை, श्रेणी]
+  quantity: [quantity, qty]
+  unit: [unit]
+  merchant: [merchant, place, payee, shop]
+  payment_mode: [payment_mode, payment mode, mode]
+  for_whom: [for_whom, for whom, person]
+  tags: [tags, tag]
+  note: [note, notes, memo, comment]
+
+# Words in a kind column, or after an amount ("500 Dr"), any case.
+kinds:
+  expense: [expense, debit, dr, spent, withdrawal, செலவு, खर्च]
+  income: [income, credit, cr, received, deposit, வரவு, आमदनी]
+
+# Day formats (Python strftime) tried in this order; the first that reads every date in the
+# file is the guess. Day before month comes first, as in India.
+date_formats:
+  - "%Y-%m-%d"
+  - "%d/%m/%Y"
+  - "%d-%m-%Y"
+  - "%d.%m.%Y"
+  - "%d/%m/%y"
+  - "%d-%m-%y"
+  - "%d %b %Y"
+  - "%d-%b-%Y"
+  - "%d-%b-%y"
+  - "%d %B %Y"
+  - "%m/%d/%Y"
+  - "%Y/%m/%d"
+time_formats: ["%H:%M:%S", "%H:%M", "%I:%M %p"]
+
+# Tags in one cell are split on these.
+tag_separators: [";", "|"]
+
+# The category of a row that names none, or one that isn't the user's, by kind.
+fallback_category:
+  expense: other_expense
+  income: other_income

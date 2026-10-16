@@ -14,6 +14,7 @@ from app.core.config import JobsSettings
 from app.modules.expenses.features.entries.models import EntryRevision
 from tests.helpers import Account, FrozenClock, build_app, build_settings, register, running_client
 from tests.platform.agents.conftest import agent_client  # noqa: F401 - a fixture, used by name
+from tests.platform.fx.conftest import fx_rates  # noqa: F401 - a fixture, used by name
 from tests.platform.reminders.test_exactly_once import TOKEN
 
 ENTRIES = "/v1/expenses/entries"

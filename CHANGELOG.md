@@ -6,6 +6,46 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added — Phase 9b: data pack (in progress)
+
+- **Saved views** (`/v1/expenses/saved-filters`): named filters of the entries list, a period
+  kept by name or a chart's days, one view per name; limit in `data/listing.yaml`.
+- **Bulk edit** (`POST /v1/expenses/entries/bulk-update`): category, add or take off a tag,
+  delete and bring back for many entries; each is changed by the usual rules (revision source
+  `bulk`), what can't be is skipped with a reason, and the activity feed notes it once.
+- **Search** (`app/platform/search`, `GET /v1/search`): `@search` providers per module, asked
+  at once with a time limit and a cap each (`SEARCH_*`, `RATE_LIMIT_SEARCH`); expenses finds
+  saved views, loans, products and entries.
+- **CSV export** (`GET /v1/expenses/export.csv`): the list's filters, streamed, UTF-8 with a
+  byte-order mark, formula-safe text; row limit `export.max_rows`, `RATE_LIMIT_EXPORT`. CORS
+  exposes `Content-Disposition`.
+- **CSV import preview** (`POST /v1/expenses/import/preview`): reads a bank statement, a
+  spreadsheet or the export (base64 in JSON), guesses the header row, columns, date format and
+  amount signs (`data/imports.yaml`), and shows the rows as entries with problems and
+  duplicates; nothing saved. `RATE_LIMIT_IMPORTS`.
+- **CSV import** (`POST /v1/expenses/import/commit`): adds the importable rows in batches
+  (`limits.commit_batch`), each once per file and row, as entries with the source `import`;
+  the activity feed notes the import once.
+- **Monthly report** (`GET /v1/expenses/reports/monthly`, `.csv`): a month against the one
+  before, by category (with the change), income, places, people, days and the biggest expenses.
+- **Chat with expenses**: `ExpenseQuery` compiled from a whitelist (`features/queries`,
+  `POST /v1/expenses/query`, tool `expenses_query`), the `ask-expenses` skill (AI, or its static
+  reading in English, Tamil and Hindi), and property tests of the compiler (seeded, no new
+  dependency). Limits in `data/analytics.yaml` (`query`).
+- **Other currencies** (ADR-0004): exchange rates from Frankfurter cached per currency and day
+  (`app/platform/fx`, `GET /v1/fx/rates`, `FX_*`); an entry in another currency keeps
+  `base_currency`, `fx_rate` and `amount_base_minor`, and every total counts that.
+
+### Changed
+
+- A repeating rule keeps adding in its own currency after the base currency changes, counted in
+  the new base at each day's rate (it was refused before).
+
+### Security
+
+- **Request body limit**: every route refuses a body over `API_MAX_BODY_BYTES` (default 3 MB)
+  with 413 `REQUEST_TOO_LARGE` before reading it, chunked bodies included.
+
 ### Added — Phase 9a: planning pack (2026-10-16)
 
 - **Scheduled jobs** (`app/platform/jobs`, ADR-0007): `@job("daily"|"each")` plugins, caught

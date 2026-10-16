@@ -165,7 +165,7 @@ class Budgets:
         if entry.kind is not EntryKind.EXPENSE:
             return
         counted_in = {
-            "currency": entry.currency,
+            "currency": entry.base_currency or entry.currency,  # what the entry counts in
             "$or": [
                 {"scope": BudgetScope.OVERALL},
                 {"scope": BudgetScope.CATEGORY, "category_id": entry.category_id},

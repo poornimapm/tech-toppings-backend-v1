@@ -27,6 +27,8 @@ class EntrySource(StrEnum):
     MANUAL = "manual"
     ASSISTANT = "assistant"
     RECURRING = "recurring"  # added by a repeating rule on its day
+    BULK = "bulk"  # changed with others at once, from the list
+    IMPORT = "import"  # read from a CSV file
 
 
 class RuleMode(StrEnum):

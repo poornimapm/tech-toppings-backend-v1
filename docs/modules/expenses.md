@@ -183,6 +183,18 @@ sentence mixing a loan with spending stays entries in rule mode. The rule parser
 are in `tests/modules/expenses/iou_cases.yaml`, and the near misses that must not become
 loans in `iou_near_misses.yaml`.
 
+## Questions about the figures
+
+The `ask-expenses` skill answers questions about the user's own figures ("how much did I spend
+on groceries last month?"). With AI, the model writes an `ExpenseQuery` for the
+`expenses_query` tool; without it, the skill's static script reads the metric, kind, grouping,
+period and category names from the words in its `references/lexicon.yaml`. Either way the query
+is compiled by `features/queries/compiler.py` from a whitelist: fixed expressions for each
+metric, grouping and order, the user's words only ever as values (exact or escaped patterns),
+and a first stage that keeps the caller's own live entries in their currency, so no question
+can read anyone else's entries or change anything. The property tests check exactly that, and
+that every answer is what the entries say.
+
 ## Not yet
 
 - Corrections ("change the last entry to 300") are not understood yet.
