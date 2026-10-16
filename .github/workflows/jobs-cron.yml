@@ -1,0 +1,64 @@
+name: jobs-cron
+
+# The best-effort second path for scheduled work (ADR-0007): wake the API, then run the due
+# jobs of recently active users. The first path is the app itself (each user's notification
+# bell), so a late or skipped run only delays things. GitHub runs schedules from the default
+# branch only. Until the repository secrets JOBS_API_URL and JOBS_TOKEN are set, every run
+# is a no-op.
+
+on:
+  schedule:
+    - cron: "7,37 * * * *" # every 30 minutes, off the busy top of the hour
+  workflow_dispatch:
+    inputs:
+      job:
+        description: A job's name, or all
+        required: false
+        default: all
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: jobs-cron
+  cancel-in-progress: false
+
+jobs:
+  run:
+    name: run due jobs
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      JOBS_API_URL: ${{ secrets.JOBS_API_URL }}
+      JOBS_TOKEN: ${{ secrets.JOBS_TOKEN }}
+      JOB: ${{ inputs.job || 'all' }}
+    steps:
+      - name: Check configuration
+        id: guard
+        run: |
+          if [ -z "$JOBS_API_URL" ] || [ -z "$JOBS_TOKEN" ]; then
+            echo "::notice::JOBS_API_URL or JOBS_TOKEN is not set, so there is nothing to call."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! [[ "$JOB" =~ ^[a-z0-9_]+$ ]]; then
+            echo "::error::The job must be a job's name or all."
+            exit 1
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      # Render's free instance sleeps when idle and takes about a minute to start.
+      - name: Wake the API
+        if: steps.guard.outputs.ready == 'true'
+        run: >-
+          curl --silent --show-error --fail --output /dev/null
+          --retry 6 --retry-all-errors --retry-delay 20 --max-time 90
+          "$JOBS_API_URL/healthz"
+
+      # The response holds counts only. The token goes in a header, never in the output.
+      - name: Run due jobs
+        if: steps.guard.outputs.ready == 'true'
+        run: >-
+          curl --silent --show-error --fail-with-body --max-time 120
+          -X POST -H "X-Job-Token: $JOBS_TOKEN"
+          "$JOBS_API_URL/v1/internal/jobs/$JOB/run"

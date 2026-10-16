@@ -47,6 +47,7 @@ async def test_an_entry_is_stored_as_given_and_read_back(client: AsyncClient) ->
         "note": "For the week",
         "attachments": [{"url": "https://example.com/bill.pdf", "label": "Bill"}],
         "source": "manual",
+        "recurring_id": None,  # not from a repeating rule
         "revision_no": 1,
         "deleted": False,
         "created_at": "",

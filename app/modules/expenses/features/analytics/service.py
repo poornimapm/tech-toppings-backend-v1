@@ -11,7 +11,6 @@ from functools import cache
 from pathlib import Path
 from statistics import fmean, median
 from typing import Any
-from zoneinfo import ZoneInfo
 
 import yaml
 from pydantic import BaseModel
@@ -44,9 +43,8 @@ from app.modules.expenses.features.analytics.schemas import (
     Unusual,
     WeekdayAmount,
 )
-from app.modules.expenses.features.entries.models import Entry, EntryRepository
+from app.modules.expenses.features.entries.models import Entry, EntryRepository, sums
 from app.modules.expenses.features.entries.schemas import EntryFilters, on_days
-from app.modules.expenses.features.entries.service import sums
 from app.modules.expenses.features.products.service import Products
 from app.platform import ActorContext
 
@@ -148,7 +146,7 @@ class Analytics:
     # ------------------------------------------------------------------ helpers
 
     def today(self) -> dt.date:
-        return self.ctx.clock.now().astimezone(ZoneInfo(self.ctx.user.timezone)).date()
+        return self.ctx.today()
 
     def span(self, filters: EntryFilters) -> Span:
         """The days asked for; this month so far when none are."""
@@ -170,15 +168,24 @@ class Analytics:
         return Span(start=end - length, end=end)
 
     def criteria(
-        self, filters: EntryFilters, span: Span, kind: EntryKind | None = None
+        self,
+        filters: EntryFilters,
+        span: Span,
+        kind: EntryKind | None = None,
+        currency: str | None = None,
     ) -> dict[str, Any]:
-        found = filters.criteria() | on_days(span.start, span.end) | {"currency": self.currency}
+        """Entries in the base currency unless ``currency`` says which."""
+        found = filters.criteria() | on_days(span.start, span.end)
+        found["currency"] = currency or self.currency
         if kind is not None:
             found["kind"] = kind
         return self.entries.query(found, include_deleted=filters.deleted)
 
-    async def totals(self, span: Span, filters: EntryFilters | None = None) -> Totals:
-        return _totals(await sums(self.criteria(filters or EntryFilters(), span), "kind"))
+    async def totals(
+        self, span: Span, filters: EntryFilters | None = None, currency: str | None = None
+    ) -> Totals:
+        criteria = self.criteria(filters or EntryFilters(), span, currency=currency)
+        return _totals(await sums(criteria, "kind"))
 
     async def _by_day(self, filters: EntryFilters, span: Span, kind: EntryKind) -> dict[str, int]:
         rows = await sums(self.criteria(filters, span, kind), "date")

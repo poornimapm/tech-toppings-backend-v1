@@ -4,7 +4,10 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response, status
 
+from app.modules.expenses.features.entries.duplicates import Duplicates
 from app.modules.expenses.features.entries.schemas import (
+    DuplicatesIn,
+    DuplicatesOut,
     EntryFilters,
     EntryIn,
     EntryListQuery,
@@ -17,12 +20,12 @@ from app.modules.expenses.features.entries.schemas import (
 )
 from app.modules.expenses.features.entries.service import EntryService
 from app.platform import (
-    REPLAYED_HEADER,
     ActorDep,
     IdempotencyKey,
     Page,
     PageParamsDep,
     SettingsDep,
+    answer_once,
     error_responses,
     page_params,
     parse_sort,
@@ -68,10 +71,7 @@ async def list_entries(
 async def add_entry(
     body: EntryIn, service: ServiceDep, response: Response, key: IdempotencyKey = None
 ) -> EntryOut:
-    entry, created = await service.create(body, key)
-    if not created:
-        response.headers[REPLAYED_HEADER] = "true"
-    return EntryOut.of(entry)
+    return EntryOut.of(answer_once(response, await service.create(body, key)))
 
 
 @router.get("/summary", summary="Totals of my entries", responses=error_responses(401, 403))
@@ -88,6 +88,15 @@ async def summarise_entries(
 )
 async def entry_facets(service: ServiceDep) -> FacetsOut:
     return await service.facets()
+
+
+@router.post(
+    "/duplicates/check",
+    summary="Saved entries that look like ones about to be saved (advice only)",
+    responses=error_responses(401, 403),
+)
+async def check_duplicates(body: DuplicatesIn, ctx: ActorDep) -> DuplicatesOut:
+    return await Duplicates(ctx).check(body)
 
 
 @router.get(

@@ -31,6 +31,12 @@ class Activity(OwnedDocument):
         ]
 
 
+def with_module(module: str, params: Mapping[str, Any]) -> dict[str, Any]:
+    """Params as feeds (activity, notifications) carry them: ``module`` names the module, when
+    there is one."""
+    return {"module": module, **params} if module != "platform" else dict(params)
+
+
 class ActivityLog(ScopedRepository[Activity]):
     model: ClassVar[type[OwnedDocument]] = Activity
 
@@ -47,7 +53,7 @@ class ActivityLog(ScopedRepository[Activity]):
         await self.create(
             {
                 "type": type_,
-                "params": {"module": module, **params} if module != "platform" else params,
+                "params": with_module(module, params),
                 "module_key": module,
                 "purge_at": self.clock.now() + self._retention,
             }

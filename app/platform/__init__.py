@@ -17,8 +17,9 @@ from app.core.errors import (
     ForbiddenError,
     NotFoundError,
     error_responses,
+    patched,
 )
-from app.core.idempotency import REPLAYED_HEADER, IdempotencyKey
+from app.core.idempotency import REPLAYED_HEADER, IdempotencyKey, answer_once
 from app.core.logging import get_logger
 from app.core.money import to_major, to_minor
 from app.core.pagination import Page, PageParams, PageParamsDep, page_params, parse_sort
@@ -31,6 +32,7 @@ from app.core.revisions import (
     RevisionAction,
     RevisionedDocument,
     RevisionedRepository,
+    VersionConflictError,
 )
 from app.platform.activity.log import Activity, ActivityLog
 from app.platform.agents.catalog import StaticOutcome, StaticRequest
@@ -51,9 +53,13 @@ from app.platform.dashboard.contract import (
     daily_counts,
     widget,
 )
+from app.platform.jobs.contract import job
+from app.platform.jobs.models import JobRun
 from app.platform.modules.manifest import ModuleManifest, ModuleStatus, TileStat
 from app.platform.modules.models import ModuleOverride, UserModule
 from app.platform.notifications.inbox import Inbox, Notification
+from app.platform.reminders.models import Reminder
+from app.platform.reminders.service import Reminders
 from app.platform.users.models import User
 
 # Beanie document models owned by the platform; registered with the database at startup.
@@ -66,6 +72,8 @@ PLATFORM_DOCUMENTS = (
     AgentUsage,
     Activity,
     Notification,
+    JobRun,
+    Reminder,
 )
 
 __all__ = [
@@ -100,6 +108,8 @@ __all__ = [
     "PageParams",
     "PageParamsDep",
     "Point",
+    "Reminder",
+    "Reminders",
     "Revision",
     "RevisionAction",
     "RevisionedDocument",
@@ -116,15 +126,19 @@ __all__ = [
     "ToolBox",
     "User",
     "UserScope",
+    "VersionConflictError",
+    "answer_once",
     "count_in",
     "daily_counts",
     "error_responses",
     "get_logger",
+    "job",
     "load_lexicon",
     "match_action",
     "normalise",
     "page_params",
     "parse_sort",
+    "patched",
     "run_skill",
     "to_major",
     "to_minor",

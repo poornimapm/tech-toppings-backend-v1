@@ -4,7 +4,9 @@ widgets ...), so they all see the caller the same way and stay inside the caller
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from typing import Annotated, Any
+from zoneinfo import ZoneInfo
 
 from fastapi import Depends, Request
 
@@ -23,6 +25,10 @@ class ActorContext:
     clock: Clock
     settings: Settings
     state: Any  # app.state: shared services (module registry, agent runtime ...)
+
+    def today(self) -> date:
+        """The calendar day it is now for the user, in their own time zone."""
+        return self.clock.now().astimezone(ZoneInfo(self.user.timezone)).date()
 
 
 def actor_context(

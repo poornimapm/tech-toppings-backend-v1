@@ -21,7 +21,15 @@ from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from limits import parse as parse_rate_limit
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, SecretStr, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    SecretStr,
+    field_validator,
+    model_validator,
+)
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -52,12 +60,13 @@ class RegistrationMode(StrEnum):
     CLOSED = "closed"
 
 
-def _group_config(prefix: str) -> SettingsConfigDict:
+def _group_config(prefix: str, *, secret: bool = False) -> SettingsConfigDict:
     return SettingsConfigDict(
         env_prefix=prefix,
         env_file_encoding="utf-8",
         extra="ignore",  # env files hold every group's variables
         frozen=True,
+        hide_input_in_errors=secret,  # a startup error must not print a mistyped secret
     )
 
 
@@ -230,9 +239,15 @@ class RateLimitSettings(BaseSettings):
     auth_refresh: str = "60/minute"
     auth_password_change: str = "10/minute"  # noqa: S105 - a request rate, not a password
     agent_run: str = "20/minute"
+    jobs_run: str = "30/minute"
 
     @field_validator(
-        "auth_login", "auth_register", "auth_refresh", "auth_password_change", "agent_run"
+        "auth_login",
+        "auth_register",
+        "auth_refresh",
+        "auth_password_change",
+        "agent_run",
+        "jobs_run",
     )
     @classmethod
     def valid_rate(cls, value: str) -> str:
@@ -376,6 +391,64 @@ class NotificationSettings(BaseSettings):
     retention_days: int = Field(default=90, ge=1)
 
 
+class JobsSettings(BaseSettings):
+    """Scheduled work without a resident cron (ADR-0007): jobs run when the user's bell polls,
+    and from the jobs-cron workflow through a token-protected endpoint."""
+
+    model_config = _group_config("JOBS_", secret=True)
+
+    # Shared with the jobs-cron workflow (header X-Job-Token); unset = the endpoint refuses
+    # every call. Generate one with: python -c "import secrets; print(secrets.token_urlsafe(48))"
+    token: Annotated[SecretStr, Field(min_length=32)] | None = None
+    # How long a daily job's run holds its lease; a run that fails is retried after it.
+    lease_seconds: int = Field(default=300, ge=10)
+    # Each job's time limit on the bell's poll (the user waits) and on a cron run.
+    lazy_timeout_seconds: float = Field(default=3.0, gt=0, le=30)
+    run_timeout_seconds: float = Field(default=20.0, gt=0, le=120)
+    # The cron catches up users signed in within this many days, most recent first.
+    active_days: int = Field(default=45, ge=1)
+    max_users_per_run: int = Field(default=200, ge=1)
+    retention_days: int = Field(default=30, ge=1)
+
+    @field_validator("token", mode="before")
+    @classmethod
+    def blank_is_none(cls, value: Any) -> Any:
+        return value or None
+
+    @field_validator("token")
+    @classmethod
+    def header_safe(cls, value: SecretStr | None) -> SecretStr | None:
+        # Request headers arrive as printable ASCII, so any other token could never match.
+        if value is not None and not re.fullmatch(r"[!-~]+", value.get_secret_value()):
+            raise ValueError("must be printable ASCII without spaces, e.g. secrets.token_urlsafe")
+        return value
+
+    @model_validator(mode="after")
+    def lease_outlasts_a_run(self) -> JobsSettings:
+        # A lease that ended mid-run would let a second catch-up start the same daily job.
+        if self.lease_seconds <= max(self.lazy_timeout_seconds, self.run_timeout_seconds):
+            raise ValueError(
+                "JOBS_LEASE_SECONDS must be longer than JOBS_LAZY_TIMEOUT_SECONDS and "
+                "JOBS_RUN_TIMEOUT_SECONDS"
+            )
+        return self
+
+
+class RemindersSettings(BaseSettings):
+    """Reminders of things due on a day (ADR-0012), told through the notification inbox."""
+
+    model_config = _group_config("REMINDERS_")
+
+    # Local hour (user's time zone) at which a reminder is sent on its day.
+    send_hour: int = Field(default=9, ge=0, le=23)
+    # Days a reminder is kept after its due day; older due dates are never scheduled again.
+    retention_days: int = Field(default=90, ge=1)
+    # At least a week: the app offers snoozes of up to 7 days.
+    max_snooze_days: int = Field(default=30, ge=7)
+    # Reminders sent per catch-up at most; the rest go out on the next one.
+    deliver_batch: int = Field(default=50, ge=1)
+
+
 class BootstrapSettings(BaseSettings):
     """First admin account, created or promoted by `poe seed` (skipped when unset)."""
 
@@ -409,6 +482,8 @@ class Settings(BaseModel):
     agent: AgentSettings
     dashboard: DashboardSettings
     notifications: NotificationSettings
+    jobs: JobsSettings
+    reminders: RemindersSettings
     bootstrap: BootstrapSettings
 
 
@@ -435,6 +510,8 @@ def load_settings(env_files: Sequence[Path] | None = None) -> Settings:
         agent=AgentSettings(_env_file=existing),
         dashboard=DashboardSettings(_env_file=existing),
         notifications=NotificationSettings(_env_file=existing),
+        jobs=JobsSettings(_env_file=existing),
+        reminders=RemindersSettings(_env_file=existing),
         bootstrap=BootstrapSettings(_env_file=existing),
     )
 

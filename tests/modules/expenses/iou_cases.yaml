@@ -1,0 +1,68 @@
+# Labelled loan sentences for the static reading of loans (track-expenses, references/ious.yaml):
+# money lent or borrowed, and payments on it. "Today" is Thursday 2026-10-08 for every case.
+#
+#   lang       en | ta | hi | mixed
+#   text       the input
+#   action     new: money lent or borrowed; repay: a payment on it
+#   direction  lent: the user gave the money; borrowed: the user took it
+#   person     the other person, as it should be read
+#   amount     in the currency's main unit
+#
+# The sentences that only look like loans ("gave 200 to the watchman", a refund, "I'll be back")
+# are labelled in parser_cases_unseen.yaml and iou_near_misses.yaml; none may read as a loan.
+
+# ---------------------------------------------------------------- English (17)
+- { lang: en, text: "lent Ravi 500", action: new, direction: lent, person: Ravi, amount: 500 }
+- { lang: en, text: "I lent 2000 to Priya yesterday", action: new, direction: lent, person: Priya, amount: 2000 }
+- { lang: en, text: "lent 1500 rupees to Anand", action: new, direction: lent, person: Anand, amount: 1500 }
+- { lang: en, text: "gave Ravi a loan of 5000", action: new, direction: lent, person: Ravi, amount: 5000 }
+- { lang: en, text: "Meena owes me 750", action: new, direction: lent, person: Meena, amount: 750 }
+- { lang: en, text: "Ravi borrowed 500 from me", action: new, direction: lent, person: Ravi, amount: 500 }
+- { lang: en, text: "borrowed 2000 from Ravi", action: new, direction: borrowed, person: Ravi, amount: 2000 }
+- { lang: en, text: "I borrowed 300 from Anand last friday", action: new, direction: borrowed, person: Anand, amount: 300 }
+- { lang: en, text: "took a loan of 50000 from Kumar uncle", action: new, direction: borrowed, person: Kumar uncle, amount: 50000 }
+- { lang: en, text: "I owe Suresh 1200", action: new, direction: borrowed, person: Suresh, amount: 1200 }
+- { lang: en, text: "Ravi lent me 500", action: new, direction: borrowed, person: Ravi, amount: 500 }
+- { lang: en, text: "Ravi gave me a loan of 5000", action: new, direction: borrowed, person: Ravi, amount: 5000 }
+- { lang: en, text: "Ravi paid back 500", action: repay, direction: lent, person: Ravi, amount: 500 }
+- { lang: en, text: "Ravi paid me back 500", action: repay, direction: lent, person: Ravi, amount: 500 }
+- { lang: en, text: "Priya returned 1000 rupees", action: repay, direction: lent, person: Priya, amount: 1000 }
+- { lang: en, text: "paid back 1000 to Meena", action: repay, direction: borrowed, person: Meena, amount: 1000 }
+- { lang: en, text: "I repaid Anand 300", action: repay, direction: borrowed, person: Anand, amount: 300 }
+
+# ---------------------------------------------------------------- Tamil (12)
+- { lang: ta, text: "ரவிக்கு 500 கடன் கொடுத்தேன்", action: new, direction: lent, person: ரவி, amount: 500 }
+- { lang: ta, text: "முருகனுக்கு 2000 கடனாக கொடுத்தேன்", action: new, direction: lent, person: முருகன், amount: 2000 }
+- { lang: ta, text: "நேற்று பிரியாவுக்கு 1000 ரூபாய் கடன் கொடுத்தேன்", action: new, direction: lent, person: பிரியா, amount: 1000 }
+- { lang: ta, text: "ரவியிடம் 2000 கடன் வாங்கினேன்", action: new, direction: borrowed, person: ரவி, amount: 2000 }
+- { lang: ta, text: "முருகனிடம் 1500 கடன் வாங்கினேன்", action: new, direction: borrowed, person: முருகன், amount: 1500 }
+- { lang: ta, text: "அண்ணனிடம் ஐந்தாயிரம் ரூபாய் கடன் வாங்கினேன்", action: new, direction: borrowed, person: அண்ணன், amount: 5000 }
+- { lang: ta, text: "ரவி என்னிடம் 500 கடன் வாங்கினான்", action: new, direction: lent, person: ரவி, amount: 500 }
+- { lang: ta, text: "ரவி எனக்கு 1000 கடன் கொடுத்தான்", action: new, direction: borrowed, person: ரவி, amount: 1000 }
+- { lang: ta, text: "ரவி 500 திருப்பிக் கொடுத்தான்", action: repay, direction: lent, person: ரவி, amount: 500 }
+- { lang: ta, text: "பிரியா 1000 ரூபாய் திருப்பித் தந்தாள்", action: repay, direction: lent, person: பிரியா, amount: 1000 }
+- { lang: ta, text: "ரவிக்கு 500 திருப்பிக் கொடுத்தேன்", action: repay, direction: borrowed, person: ரவி, amount: 500 }
+- { lang: ta, text: "முருகனுக்கு 1500 கடனைத் திருப்பிக் கொடுத்தேன்", action: repay, direction: borrowed, person: முருகன், amount: 1500 }
+
+# ---------------------------------------------------------------- Hindi (12)
+- { lang: hi, text: "रवि को 500 उधार दिए", action: new, direction: lent, person: रवि, amount: 500 }
+- { lang: hi, text: "रवि ने मुझे 500 उधार दिए", action: new, direction: borrowed, person: रवि, amount: 500 }
+- { lang: hi, text: "रवि ने मुझसे 500 उधार लिए", action: new, direction: lent, person: रवि, amount: 500 }
+- { lang: hi, text: "मैंने प्रिया को 2000 रुपये उधार दिए", action: new, direction: lent, person: प्रिया, amount: 2000 }
+- { lang: hi, text: "कल सुरेश को 1000 उधार दिया", action: new, direction: lent, person: सुरेश, amount: 1000 }
+- { lang: hi, text: "रवि से 2000 उधार लिया", action: new, direction: borrowed, person: रवि, amount: 2000 }
+- { lang: hi, text: "भैया से पाँच हज़ार उधार लिए", action: new, direction: borrowed, person: भैया, amount: 5000 }
+- { lang: hi, text: "मैंने अनिल से 3000 रुपये उधार लिए", action: new, direction: borrowed, person: अनिल, amount: 3000 }
+- { lang: hi, text: "रवि ने 500 लौटाए", action: repay, direction: lent, person: रवि, amount: 500 }
+- { lang: hi, text: "प्रिया ने 1000 रुपये वापस किए", action: repay, direction: lent, person: प्रिया, amount: 1000 }
+- { lang: hi, text: "मैंने रवि को 500 लौटाए", action: repay, direction: borrowed, person: रवि, amount: 500 }
+- { lang: hi, text: "सुरेश को 1000 रुपये वापस कर दिए", action: repay, direction: borrowed, person: सुरेश, amount: 1000 }
+
+# ---------------------------------------------------------------- mixed (7)
+- { lang: mixed, text: "Ravi ko 500 udhaar diye", action: new, direction: lent, person: Ravi, amount: 500 }
+- { lang: mixed, text: "Ravi ne mujhe 500 udhaar diye", action: new, direction: borrowed, person: Ravi, amount: 500 }
+- { lang: mixed, text: "Ravi se 2000 udhaar liya", action: new, direction: borrowed, person: Ravi, amount: 2000 }
+- { lang: mixed, text: "Ravi ku 500 kadan kuduthen", action: new, direction: lent, person: Ravi, amount: 500 }
+- { lang: mixed, text: "Ravi kitta 1000 kadan vaanginen", action: new, direction: borrowed, person: Ravi, amount: 1000 }
+- { lang: mixed, text: "Ravi ne 500 lautaye", action: repay, direction: lent, person: Ravi, amount: 500 }
+- { lang: mixed, text: "Priya ko 1000 wapas kiye", action: repay, direction: borrowed, person: Priya, amount: 1000 }

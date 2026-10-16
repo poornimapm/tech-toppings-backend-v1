@@ -47,6 +47,7 @@ class Draft:
     quantity: Decimal | None = None
     unit: str | None = None  # a code of the module's unit table
     confidence: dict[str, float] = field(default_factory=dict)
+    said: str = ""  # the words it was read from, without the day: what else they say (ious.py)
 
 
 def tokenise(text: str, lexicon: Lexicon) -> list[Word]:
@@ -183,6 +184,7 @@ def _draft(
             "category_id": category_sure if category else 0.0,
             "date": sure["date_said"] if day else sure["date_assumed"],
         },
+        said=" ".join(item.text if isinstance(item, Word) else item.raw for item in items),
     )
 
 

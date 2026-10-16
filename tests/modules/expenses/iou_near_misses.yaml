@@ -1,0 +1,31 @@
+# Sentences that only look like loans, for the static reading of loans (references/ious.yaml):
+# money a shop gives back (a refund, change), goods returned, "back" meaning somewhere, a loan
+# that didn't happen, and a loan said with spending of its own. None may read as a loan; the
+# ones about money stay entries.
+#
+#   lang   en | ta | hi | mixed
+#   text   the input
+
+- { lang: en, text: "I'll be back in 10 minutes" }
+- { lang: en, text: "returned 3 books to the library" }
+- { lang: en, text: "I came back home and paid 200 for auto" }
+- { lang: en, text: "Returned the shoes, got 1500 refund" }
+- { lang: en, text: "amazon refund 799 received back" }
+- { lang: en, text: "received 500 back from amazon" }
+- { lang: en, text: "returned 2 shirts and got 1200" }
+- { lang: en, text: "got 50 change back" }
+- { lang: en, text: "paid 500 for petrol and 200 back to Ravi" }
+- { lang: en, text: "I owe nothing, paid 300 for lunch" }
+- { lang: en, text: "Ravi hasn't paid back the 500 yet" }
+- { lang: en, text: "lent Ravi 500 and paid 300 for lunch" }
+- { lang: ta, text: "கடைக்காரர் 50 ரூபாய் திருப்பி கொடுத்தார்" }
+- { lang: ta, text: "டிக்கெட் பணம் 300 திருப்பி கிடைத்தது" }
+- { lang: ta, text: "அமேசான் ரீஃபண்ட் 799 வந்தது" }
+- { lang: ta, text: "ரவி இன்னும் 500 திருப்பித் தரவில்லை" }
+- { lang: hi, text: "दुकानदार ने 50 रुपये लौटाए" }
+- { lang: hi, text: "कोचिंग फीस 2000 वापस मिली" }
+- { lang: hi, text: "अमेज़न से 799 का रिफंड मिला" }
+- { lang: hi, text: "रवि ने अभी तक 500 नहीं लौटाए" }
+- { lang: mixed, text: "dukandar ne 50 wapas kiye" }
+- { lang: mixed, text: "amazon refund 799 aaya" }
+- { lang: mixed, text: "Ravi ne abhi 500 nahi lautaye" }

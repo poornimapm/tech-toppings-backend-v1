@@ -1,0 +1,180 @@
+# Static mode for loans (track-expenses): the words that say money was lent, borrowed or paid
+# back, in English, Tamil and Hindi and in Latin letters. Only these make a sentence a loan, so
+# "gave Ravi 500" stays an expense. The rest (amount, day, the person) is read by the rule
+# parser, as for an entry. Each part of a sentence ("... and ...") is read on its own.
+#
+# Each action lists cues. A cue is a word or phrase, or a list of words that must all be said,
+# in any order. English matches whole words, "^" means the part starts with it, and "*" stands
+# for any one word ("paid * back"). Tamil and Hindi words also match with an ending attached
+# ("திருப்பிக்", "लौटाए"), except short ones ("ने", "को"), which match only as whole words.
+# The first action with a cue said wins, so the more specific ones come first: payments before
+# new loans, and for each, the other person acting on the user ("lent me"), then the user ("I
+# lent"), then someone named ("रवि ने"), then the plain verbs.
+#
+#   action     new: money lent or borrowed; repay: a payment on such a loan
+#   direction  lent: the user gave the money; borrowed: the user took it
+#   sure       false when the words don't say who gave: "Ravi lent 500" (to the user, most
+#              likely). The direction is then marked for the user to check.
+#
+# Being paid back is read only on the Expenses page (see scripts/static.py).
+
+actions:
+  # Someone paid the user back: "Ravi paid me back", "रवि ने मुझे 500 लौटाए".
+  paid_me_back:
+    action: repay
+    direction: lent
+    cues: ["paid me back", "paid back to me", "repaid me", "gave me back", "gave back to me",
+           "returned to me", [திருப்பி, வாங்கினேன்],
+           [मुझे, लौटा], [मुझे, वापस], [मुझको, लौटा], [मुझको, वापस],
+           [mujhe, lautaye], [mujhe, wapas], [thirupi, vaanginen], [thiruppi, vaanginen]]
+  # The user paid someone back: "I paid Ravi back", "paid back 1000 to Meena", "मैंने ... लौटाए",
+  # "திருப்பிக் கொடுத்தேன்", or "को ... लौटाए" (to someone, said by the user).
+  i_paid_back:
+    action: repay
+    direction: borrowed
+    cues: ["i paid back", "i repaid", "i paid * back", "i gave back", "i gave * back",
+           "^paid back", "^repaid", "^paid * back", "^gave back", "^gave * back",
+           [i, returned, rupees], [i, returned, money], [i, returned, loan],
+           [திருப்பி, கொடுத்தேன்], [திருப்பி, குடுத்தேன்], [திருப்பி, தந்தேன்],
+           [திருப்பி, கட்டினேன்], [கடனை, அடைத்தேன்],
+           [मैंने, लौटा], [मैंने, वापस], [मैंने, उधार, चुका], [मैंने, कर्ज, चुका],
+           [maine, lautaye], [maine, wapas], [thirupi, kuduthen], [thiruppi, kuduthen]]
+  # Someone named paid back: "रवि ने 500 लौटाए", "ரவி 500 திருப்பிக் கொடுத்தான்".
+  they_paid_back:
+    action: repay
+    direction: lent
+    cues: [[ने, लौटा], [ने, वापस], [ने, उधार, चुका], [ने, कर्ज, चुका],
+           [திருப்பி, கொடுத்தா], [திருப்பி, குடுத்தா], [திருப்பி, தந்தா],
+           [ne, lautaye], [ne, lautaya], [ne, wapas], [ne, vapas]]
+  # Paid back to someone, said by the user without "I": "रवि को 500 लौटाए".
+  paid_back_to:
+    action: repay
+    direction: borrowed
+    cues: [[को, लौटा], [को, वापस], [उधार, चुका], [कर्ज, चुका],
+           [ko, lautaye], [ko, lautaya], [ko, wapas], [ko, vapas]]
+  # "Ravi paid back 500": paid back to the user, most likely.
+  someone_paid_back:
+    action: repay
+    direction: lent
+    sure: false
+    cues: ["paid back", "repaid", "gave back", "paid * back",
+           [returned, rupees], [returned, money], [returned, loan]]
+  # Someone else lent to the user: "Ravi lent me 500", "रवि ने मुझे 500 उधार दिए".
+  lent_to_me:
+    action: new
+    direction: borrowed
+    cues: ["lent me", "loaned me", [gave, me, loan], [given, me, loan],
+           [எனக்கு, கடன], [எனக்கு, கைமாத்து],
+           [मुझे, उधार, दिए], [मुझे, उधार, दिया], [मुझे, उधार, दी], [मुझे, उधार, दिये],
+           [मुझे, कर्ज, दिया], [मुझे, कर्ज, दिए],
+           [mujhe, udhaar, diye], [mujhe, udhaar, diya], [mujhe, udhar, diye],
+           [mujhe, udhar, diya], [enakku, kadan]]
+  # Someone borrowed from the user, or owes them: "Ravi borrowed 500 from me".
+  borrowed_from_me:
+    action: new
+    direction: lent
+    cues: [[borrowed, "from me"], [borrow, "from me"], [loan, "from me"], "owes me", "owe me",
+           [என்னிடம், கடன], [என்னிடமிருந்து, கடன], [என்னிடம், கைமாத்து],
+           [मुझसे, उधार], [मुझसे, कर्ज], [mujhse, udhaar], [mujhse, udhar], [ennidam, kadan]]
+  # The user borrowed: "I borrowed", "borrowed 2000 from Ravi", "I owe Suresh",
+  # "கடன் வாங்கினேன்", "रवि से 2000 उधार लिया".
+  i_borrowed:
+    action: new
+    direction: borrowed
+    cues: ["i borrowed", "we borrowed", "^borrowed", "^borrow", "i owe", "we owe", "^owe",
+           [i, took, loan], [we, took, loan], [^took, loan], [i, got, loan], [^got, loan],
+           "loan from",
+           [கடன, வாங்கினேன்], [கடன, வாங்கினோம்], [கடன, வாங்கிட்டேன்], [கைமாத்து, வாங்கினேன்],
+           [kadan, vaanginen], [kadan, vanginen], [kadan, vangiten], [kadan, vaangiten]]
+  # The user lent: "lent Ravi 500", "I lent 2000 to Priya", "gave Ravi a loan of 5000",
+  # "கடன் கொடுத்தேன்".
+  i_lent:
+    action: new
+    direction: lent
+    cues: ["i lent", "we lent", "^lent", "i loaned", "^loaned",
+           [i, gave, loan], [we, gave, loan], [^gave, loan],
+           [கடன, கொடுத்தேன்], [கடன, கொடுத்தோம்], [கடன, குடுத்தேன்], [கைமாத்து, கொடுத்தேன்],
+           [kadan, kuduthen], [kadan, kudutthen], [kadan, koduthen]]
+  # Someone named borrowed: "रवि ने 2000 उधार लिए", "ரவி கடன் வாங்கினான்" (from the user).
+  they_borrowed:
+    action: new
+    direction: lent
+    cues: [[ने, उधार, लिया], [ने, उधार, लिए], [ने, उधार, ली], [ने, उधार, लिये],
+           [ने, कर्ज, लिया], [ने, कर्ज, लिए],
+           [கடன, வாங்கினா], [கடன, வாங்கிட்டா], [கைமாத்து, வாங்கினா],
+           [ne, udhaar, liya], [ne, udhaar, liye], [ne, udhar, liya], [ne, udhar, liye]]
+  # Someone named lent: "रवि ने 500 उधार दिए", "ரவி கடன் கொடுத்தான்" (to the user).
+  they_lent:
+    action: new
+    direction: borrowed
+    cues: [[ने, उधार, दिया], [ने, उधार, दिए], [ने, उधार, दी], [ने, उधार, दिये],
+           [ने, कर्ज, दिया], [ने, कर्ज, दिए],
+           [கடன, கொடுத்தா], [கடன, குடுத்தா], [கைமாத்து, கொடுத்தா],
+           [ne, udhaar, diya], [ne, udhaar, diye], [ne, udhar, diya], [ne, udhar, diye]]
+  # Borrowed, said by the user without "I": "रवि से 2000 उधार लिया", "Ravi se 2000 udhaar liya".
+  borrowed:
+    action: new
+    direction: borrowed
+    cues: [[उधार, लिया], [उधार, लिए], [उधार, ली], [उधार, लिये], [कर्ज, लिया], [कर्ज, लिए],
+           [udhaar, liya], [udhaar, liye], [udhar, liya], [udhar, liye], [udhari, liya]]
+  # Lent, said by the user without "I": "रवि को 500 उधार दिए", "Ravi ko 500 udhaar diye".
+  lent:
+    action: new
+    direction: lent
+    cues: [[उधार, दिया], [उधार, दिए], [उधार, दी], [उधार, दिये], [कर्ज, दिया], [कर्ज, दिए],
+           [udhaar, diya], [udhaar, diye], [udhar, diya], [udhar, diye], [udhari, diye]]
+  # "Ravi borrowed 500", "Ravi and Priya owe 500": from the user, most likely.
+  someone_borrowed:
+    action: new
+    direction: lent
+    sure: false
+    cues: [borrowed, borrow, owes, owe, [took, loan], [got, loan]]
+  # "Ravi lent 500": to the user, most likely.
+  someone_lent:
+    action: new
+    direction: borrowed
+    sure: false
+    cues: [lent, loaned, [gave, loan]]
+
+# Any of these in the sentence means it is not a loan, whatever else it says: money a shop gives
+# back (a refund, cashback, change, "the shopkeeper returned 50"), or a sentence that says no
+# ("I owe nothing", "hasn't paid back"), which the rules can't read the right way round.
+not_loans: [refund, refunded, refunds, cashback, "cash back", shopkeeper, not, never, nothing,
+            "didn't", "didn’t", didnt, "hasn't", "hasn’t", hasnt, "haven't", "haven’t", havent,
+            "don't", "don’t", dont, "won't", "won’t",
+            ரீஃபண்ட், ரிஃபண்ட், ரீபண்ட், கேஷ்பேக், சில்லறை, கடைக்கார, இல்லை, வில்லை,
+            रिफंड, रिफ़ंड, कैशबैक, छुट्टा, छुट्टे, खुल्ले, दुकानदार, नहीं, नही,
+            chutta, chutte, khulle, dukandar, nahi, nahin, chillarai, kadaikaarar, illa, illai]
+
+# Left out of what remains of the sentence, so the person's name is what is left. English
+# plurals, and Tamil and Hindi words with an ending, need not be listed.
+strip: [lent, lend, loaned, loan, borrowed, borrow, back, returned, repaid, owe, owes, money,
+        debt, kitta, mujhe, mujhse, ennidam, enakku,
+        கடன், கடனாக, கடனா, கடனை, திருப்பி, கொடுத்தான், கொடுத்தாள், கொடுத்தார், தந்தான்,
+        தந்தாள், தந்தார், தந்தேன், கைமாத்து, கைமாத்தா, கிட்ட, அடைத்தேன், கிடைத்தது, வாங்கின,
+        என்னிடம், என்னிடமிருந்து,
+        उधार, कर्ज, लौटा, वापस, किए, किये, कर, मुझसे, मुझको, चुका,
+        udhaar, udhar, udhari, kadan, kadana, lautaye, lautaya, lautai, wapas, vapas, kiye,
+        thirupi, thiruppi]
+
+# Tamil case endings on the name, and what each leaves: "ரவிக்கு" (to Ravi) is ரவி, and
+# "முருகனிடம்" (from Murugan) is முருகன். The longest ending that fits is taken off.
+endings:
+  "யிடமிருந்து": ""
+  "விடமிருந்து": ""
+  "ிடமிருந்து": "்"
+  "வுக்கு": ""
+  "யிடம்": ""
+  "விடம்": ""
+  "ிடம்": "்"
+  "ுக்கு": "்"
+  "க்கு": ""
+  "கிட்டே": ""
+  "கிட்ட": ""
+
+# How sure the reading is (0 to 1); below capture.uncertain_below (lexicon.yaml) a field is
+# marked for the user to check. The person's name is picked out of the sentence, so it always is.
+confidence:
+  counterparty: 0.5
+  direction_said: 0.9 # the words say who gave: "I lent", "रवि ने", "கொடுத்தான்"
+  direction_assumed: 0.5 # they don't: "Ravi lent 500"

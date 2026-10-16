@@ -1,4 +1,4 @@
-"""Static mode for track-expenses: the lexicon's actions, then the rule parser."""
+"""Static mode for track-expenses: the lexicon's actions, then loans, then the rule parser."""
 
 from __future__ import annotations
 
@@ -15,6 +15,10 @@ from app.platform import (
 )
 
 
+def _unsure(confidence: dict[str, float], uncertain_below: float) -> list[str]:
+    return [name for name, sure in confidence.items() if sure < uncertain_below]
+
+
 def _argument(draft: parsing.Draft, uncertain_below: float) -> dict[str, Any]:
     return {
         "kind": draft.kind,
@@ -25,7 +29,20 @@ def _argument(draft: parsing.Draft, uncertain_below: float) -> dict[str, Any]:
         "merchant": draft.merchant,
         "quantity": float(draft.quantity) if draft.quantity is not None else None,
         "unit": draft.unit,
-        "uncertain": [name for name, sure in draft.confidence.items() if sure < uncertain_below],
+        "uncertain": _unsure(draft.confidence, uncertain_below),
+    }
+
+
+def _loan(loan: parsing.IouDraft, uncertain_below: float) -> dict[str, Any]:
+    """A loan as the client tool takes it. The due date is left for the user: the parser never
+    reads a day to come."""
+    return {
+        "action": loan.action,
+        "direction": loan.direction,
+        "counterparty": loan.counterparty,
+        "amount": float(loan.amount) if loan.amount is not None else None,
+        "date": loan.date.isoformat() if loan.date else None,
+        "uncertain": _unsure(loan.confidence, uncertain_below),
     }
 
 
@@ -40,6 +57,21 @@ async def run(request: StaticRequest, tools: ToolBox) -> StaticOutcome | None:
     # Asked from the Expenses page, anything typed is an entry. Asked from the general
     # assistant, only what speaks of money is: "pin 2 modules" is not an expense of 2.
     asked_here = request.context.get("input_type") is not None
+    # Only explicit loan words count ("lent", "उधार दिए"), so "gave Ravi 500" stays an expense;
+    # a new loan from anywhere, since it needs no money word ("lent Ravi 500"), but being paid
+    # back only here: elsewhere "back" is seldom about money ("I'll be back in 10 minutes").
+    loans = parsing.read_ious(
+        request.input,
+        request.today,
+        words,
+        parsing.load_ious(request.references),
+        repayments=asked_here,
+    )
+    if any(loan.amount for loan in loans):
+        arguments = [_loan(loan, words.uncertain_below) for loan in loans]
+        await tools.client(lexicon["capture"]["iou_tool"], {"drafts": arguments})
+        return StaticOutcome("track-expenses.ready.iou")
+
     if not asked_here and not parsing.speaks_of_money(request.input, words):
         return None
 

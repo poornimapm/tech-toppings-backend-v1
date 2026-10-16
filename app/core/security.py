@@ -1,5 +1,5 @@
 """Security primitives with no knowledge of users: password hashing and policy, token
-hashing, random secrets, and HS256 JWT encoding.
+hashing, random secrets, shared-secret checks, and HS256 JWT encoding.
 
 Argon2 hashing is CPU- and memory-heavy, so it runs in a worker thread to keep the event
 loop responsive.
@@ -8,6 +8,7 @@ loop responsive.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import secrets
 import string
 from datetime import datetime
@@ -17,6 +18,7 @@ import anyio
 import jwt
 from argon2 import PasswordHasher as Argon2Hasher
 from argon2.exceptions import InvalidHashError, VerificationError
+from pydantic import SecretStr
 
 from app.core.config import AuthSettings
 
@@ -84,6 +86,14 @@ def new_token(nbytes: int = 32) -> str:
 def hash_token(token: str) -> str:
     """Store only digests of bearer secrets (refresh tokens), never the tokens themselves."""
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def same_secret(given: str | None, expected: SecretStr | None) -> bool:
+    """Constant-time check of a presented shared secret, so timing reveals nothing of it.
+    Nothing presented, or nothing configured, never matches."""
+    if not given or expected is None:
+        return False
+    return hmac.compare_digest(given.encode("utf-8"), expected.get_secret_value().encode("utf-8"))
 
 
 def encode_jwt(claims: dict[str, Any], secret: str) -> str:

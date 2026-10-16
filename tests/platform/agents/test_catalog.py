@@ -84,6 +84,8 @@ def test_the_app_ships_the_assistant_and_its_skills(mongo_uri: str) -> None:
         "expenses_items": "read",
         "expenses_product_matches": "client",
         "expenses_insight_facts": "read",
+        "expenses_iou_draft": "client",
+        "expenses_ious": "read",
         "notes_add": "write",
         "modules_list": "read",
         "modules_set_preferences": "write",

@@ -26,3 +26,18 @@ class EntrySource(StrEnum):
 
     MANUAL = "manual"
     ASSISTANT = "assistant"
+    RECURRING = "recurring"  # added by a repeating rule on its day
+
+
+class RuleMode(StrEnum):
+    """What a repeating rule does on each due date."""
+
+    AUTO_CREATE = "auto_create"  # adds the entry by itself
+    REMIND = "remind"  # a bill: reminds the user, who marks it paid
+
+
+class CadenceUnit(StrEnum):
+    DAY = "day"
+    WEEK = "week"
+    MONTH = "month"
+    YEAR = "year"

@@ -4,6 +4,7 @@ import re
 
 import jwt
 import pytest
+from pydantic import SecretStr
 
 from app.core.security import (
     PasswordHasher,
@@ -13,6 +14,7 @@ from app.core.security import (
     hash_token,
     new_token,
     password_policy_violations,
+    same_secret,
 )
 from tests.helpers import auth_settings
 
@@ -68,6 +70,22 @@ def test_token_digests_are_stable_and_do_not_reveal_the_token() -> None:
     assert re.fullmatch(r"[0-9a-f]{64}", hash_token(token))
     assert token not in hash_token(token)
     assert new_token() != token
+
+
+@pytest.mark.parametrize(
+    ("given", "expected", "matches"),
+    [
+        ("shared-secret", SecretStr("shared-secret"), True),
+        ("shared-secreT", SecretStr("shared-secret"), False),
+        ("shared-secret-", SecretStr("shared-secret"), False),
+        ("shared-sécret", SecretStr("shared-secret"), False),  # not ASCII: refused, no error
+        (None, SecretStr("shared-secret"), False),
+        ("", SecretStr(""), False),  # nothing presented never matches
+        ("shared-secret", None, False),  # nothing configured never matches
+    ],
+)
+def test_shared_secrets(given: str | None, expected: SecretStr | None, matches: bool) -> None:
+    assert same_secret(given, expected) is matches
 
 
 def test_jwt_round_trip_and_audience_check() -> None:

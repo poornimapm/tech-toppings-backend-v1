@@ -1,11 +1,14 @@
 # Static mode for the track-expenses skill: what it does without AI.
 #
-# A request that names one of the actions below is answered with that action. Anything else
-# is read by the rule parser (numbers.yaml, words.yaml, categories.yaml, sms.yaml) into draft
-# entries, which the user checks and saves.
+# A request that names one of the actions below is answered with that action. One that says
+# money was lent, borrowed or paid back (ious.yaml; paid back only when asked on the Expenses
+# page), with an amount, becomes loans to check.
+# Anything else is read by the rule parser (numbers.yaml, words.yaml, categories.yaml,
+# sms.yaml) into draft entries, which the user checks and saves.
 #
 # Message codes (worded by the module's frontend manifest, strings.replies):
 #   track-expenses.ready.<action>   an action below
+#   track-expenses.ready.iou        loans were prepared
 #   track-expenses.ready.draft      drafts were prepared
 
 actions:
@@ -16,8 +19,9 @@ actions:
     tool: expenses_open
 
 capture:
-  # The client tool that hands the drafts to the user.
+  # The client tools that hand the drafts, and the loans, to the user.
   tool: expenses_draft
+  iou_tool: expenses_iou_draft
   # A field the parser is less sure of than this is marked for the user to check.
   uncertain_below: 0.6
   # How sure the parser is of each kind of guess (0 to 1).

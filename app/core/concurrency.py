@@ -16,8 +16,9 @@ T = TypeVar("T")
 async def settle(work: Awaitable[T], *, within: float, event: str, **context: object) -> T | None:
     """The result of ``work``, or None if it fails or takes longer than ``within`` seconds.
 
-    Used for module-provided code (tile stats, dashboard widgets): one broken or slow module
-    is logged and skipped, never an error for the whole response."""
+    Used for module-provided code (tile stats, dashboard widgets, jobs) and for each account
+    in the jobs sweep: one broken or slow part is logged and skipped, never an error for the
+    whole response."""
     try:
         return await asyncio.wait_for(work, timeout=within)
     except Exception as exc:

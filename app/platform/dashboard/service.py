@@ -4,7 +4,6 @@ import asyncio
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import date
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel
 
@@ -12,7 +11,7 @@ from app.core.concurrency import settle
 from app.core.daterange import DateRange, resolve_range
 from app.platform.context import ActorContext
 from app.platform.dashboard.contract import WIDGET_ATTRIBUTE, WidgetData, WidgetKind, WidgetSpec
-from app.platform.plugins import PluginError, contributions
+from app.platform.plugins import owned_contributions
 
 
 @dataclass(frozen=True)
@@ -35,17 +34,10 @@ class DashboardOut(BaseModel):
 
 
 def discover_widgets(packages: Iterable[str]) -> list[Widget]:
-    widgets = [
-        Widget(package.rsplit(".", 1)[-1], spec)
-        for package in packages
-        for spec in contributions(package, "widgets", WIDGET_ATTRIBUTE)
+    return [
+        Widget(owner, spec)
+        for owner, spec in owned_contributions(packages, "widgets", WIDGET_ATTRIBUTE)
     ]
-    names = [item.spec.name for item in widgets]
-    if len(set(names)) != len(names):
-        raise PluginError(
-            f"duplicate widget names: {sorted(n for n in names if names.count(n) > 1)}"
-        )
-    return widgets
 
 
 def period_for(ctx: ActorContext, start: date | None, end: date | None) -> DateRange:
@@ -54,7 +46,7 @@ def period_for(ctx: ActorContext, start: date | None, end: date | None) -> DateR
     return resolve_range(
         start,
         end,
-        today=ctx.clock.now().astimezone(ZoneInfo(ctx.user.timezone)).date(),
+        today=ctx.today(),
         timezone=ctx.user.timezone,
         default_days=settings.default_range_days,
         max_days=settings.max_range_days,

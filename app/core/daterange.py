@@ -19,6 +19,11 @@ class InvalidRangeError(AppError):
     default_message = "That date range isn't valid."
 
 
+def at_local(day: date, timezone: str, hour: int = 0) -> datetime:
+    """``hour`` o'clock on ``day`` in ``timezone``, as a UTC instant (DST included)."""
+    return datetime.combine(day, time(hour), ZoneInfo(timezone)).astimezone(UTC)
+
+
 @dataclass(frozen=True)
 class DateRange:
     start: date
@@ -26,7 +31,7 @@ class DateRange:
     timezone: str
 
     def _at(self, day: date) -> datetime:
-        return datetime.combine(day, time(), ZoneInfo(self.timezone)).astimezone(UTC)
+        return at_local(day, self.timezone)
 
     @property
     def begins(self) -> datetime:

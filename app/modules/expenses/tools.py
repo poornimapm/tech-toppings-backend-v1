@@ -1,9 +1,9 @@
 """Agent tools for expenses: thin wrappers over the same services as the API, so the
 assistant follows the same rules and sees only the caller's own entries.
 
-The assistant never writes anything itself. It hands over drafts (``expenses_draft``) and
-product matches (``expenses_product_matches``); the user checks them and saves them through the
-API like anything else.
+The assistant never writes anything itself. It hands over drafts (``expenses_draft``), loans
+(``expenses_iou_draft``) and product matches (``expenses_product_matches``); the user checks
+them and saves them through the API like anything else.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Annotated, Any, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
 from app.modules.expenses.domain import EntryKind
 from app.modules.expenses.features.categories.service import Categories
@@ -20,11 +20,15 @@ from app.modules.expenses.features.entries.schemas import EntryFilters, EntryOut
 from app.modules.expenses.features.entries.service import EntryService
 from app.modules.expenses.features.insights.schemas import Period
 from app.modules.expenses.features.insights.service import Insights
+from app.modules.expenses.features.ious.models import IouDirection, IouRepository
+from app.modules.expenses.features.ious.schemas import IouState
+from app.modules.expenses.features.ious.service import Ious, SettlementInvalidError
 from app.modules.expenses.features.products.service import MAX_PRODUCTS, Products
 from app.modules.expenses.units import known_unit, units
 from app.platform import ActorContext, PageParams, to_major, tool
 
 Day = Annotated[date | None, Field(description="YYYY-MM-DD")]
+DAY_TEXT = r"^\d{4}-\d{2}-\d{2}$"  # a day as the model writes it; checked again when saved
 MAX_DRAFTS = 10
 MAX_MATCHES = 20
 
@@ -43,8 +47,7 @@ class DraftIn(BaseModel):
     ] = None
     category_id: Annotated[str | None, Field(description="An id from expenses_categories")] = None
     date: Annotated[
-        str | None,
-        Field(pattern=r"^\d{4}-\d{2}-\d{2}$", description="YYYY-MM-DD; leave out for today"),
+        str | None, Field(pattern=DAY_TEXT, description="YYYY-MM-DD; leave out for today")
     ] = None
     quantity: Annotated[
         float | None, Field(gt=0, description='How much was bought (2 in "2 kg"), with unit')
@@ -215,3 +218,96 @@ async def expenses_product_matches(
     for match in matches:
         for product_id in [match.product_id, *match.products]:
             await products.repo.get(product_id)
+
+
+class IouDraftIn(BaseModel):
+    """Money lent or borrowed, or paid back on such a loan, as understood from what the user
+    said. Leave out what they didn't say."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    action: Annotated[
+        Literal["new", "repay"],
+        Field(description="new: money lent or borrowed; repay: money paid back on a loan"),
+    ] = "new"
+    direction: Annotated[
+        IouDirection,
+        Field(
+            description="lent: the user gave the money (it is owed to them); borrowed: they "
+            "took it (they owe it). For repay, the direction of the loan being paid back"
+        ),
+    ]
+    counterparty: Annotated[
+        str | None, Field(max_length=60, description="The other person, in the user's words")
+    ] = None
+    amount: Annotated[
+        float | None, Field(gt=0, description="In the currency's main unit, e.g. 500")
+    ] = None
+    date: Annotated[
+        str | None, Field(pattern=DAY_TEXT, description="YYYY-MM-DD; leave out for today")
+    ] = None
+    due_on: Annotated[
+        str | None,
+        Field(pattern=DAY_TEXT, description="new: when it is to be paid back, only if said"),
+    ] = None
+    note: Annotated[str | None, Field(max_length=1000)] = None
+    iou_id: Annotated[
+        str | None, Field(description="repay: the loan it pays back, from expenses_ious")
+    ] = None
+    uncertain: Annotated[
+        list[Literal["action", "direction", "counterparty", "amount", "date", "due_on"]],
+        Field(description="Fields you guessed, for the user to check"),
+    ] = []
+
+    @model_validator(mode="after")
+    def loan_only_for_repay(self) -> IouDraftIn:
+        if self.iou_id is not None and self.action != "repay":
+            raise ValueError("iou_id is only for a repayment")
+        return self
+
+
+@tool("client")
+async def expenses_iou_draft(
+    ctx: ActorContext,
+    drafts: Annotated[list[IouDraftIn], Field(min_length=1, max_length=MAX_DRAFTS)],
+) -> None:
+    """Show the user loans to check and save: money they lent or borrowed, or money paid back
+    on a loan. Nothing is saved until they do."""
+    loans = IouRepository(ctx.scope, ctx.clock)
+    for draft in drafts:
+        if draft.iou_id is None:
+            continue
+        loan = await loans.get(draft.iou_id)
+        # A payment on a loan the other way round, or on one paid back already, can't be saved:
+        # said now, the AI can correct it before the user sees it.
+        if loan.direction != draft.direction or loan.settled_on is not None:
+            reason = "settled" if loan.settled_on is not None else "direction"
+            outstanding = loan.amount_minor - loan.settled_minor
+            raise SettlementInvalidError(
+                details={"reason": reason, "outstanding_minor": outstanding}
+            )
+
+
+@tool("read")
+async def expenses_ious(
+    ctx: ActorContext,
+    person: Annotated[
+        str | None, Field(max_length=60, description="Only loans with this person")
+    ] = None,
+    state: Annotated[
+        IouState, Field(description="open (not paid back in full), settled, or all")
+    ] = IouState.OPEN,
+    limit: Annotated[int, Field(ge=1, le=50)] = 20,
+) -> list[dict[str, Any]]:
+    """The user's loans, most recently lent first: id, the other person (counterparty),
+    direction (lent: owed to the user; borrowed: the user owes it), the amount, what was paid
+    back (settled) and what is still outstanding, in the currency's main unit, the day it was
+    lent and when it is due."""
+    found, _ = await Ious(ctx).overview(PageParams(1, limit), state, person)
+    fields = {
+        "id", "counterparty", "direction", "amount_minor", "settled_minor", "outstanding_minor",
+        "currency", "date", "due_on", "settled_on",
+    }  # fmt: skip
+    return [
+        _in_major(item.model_dump(mode="json", include=fields), item.currency) for item in found
+    ]

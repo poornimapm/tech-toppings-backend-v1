@@ -25,6 +25,10 @@ MANAGED_VARS = (
     "AUTH_JWT_SECRET",
     "AUTH_ALLOWED_EMAILS",
     "RATE_LIMIT_AUTH_LOGIN",
+    "RATE_LIMIT_JOBS_RUN",
+    "JOBS_TOKEN",
+    "JOBS_LEASE_SECONDS",
+    "REMINDERS_SEND_HOUR",
     "DEFAULT_TIMEZONE",
 )
 SECRET = "s" * 40
@@ -93,7 +97,14 @@ def test_defaults_are_safe() -> None:
     assert settings.auth.refresh_cookie_samesite == "strict"
     assert settings.auth.google_client_id is None
     assert settings.rate_limit.enabled is True
+    assert settings.jobs.token is None  # the jobs endpoint refuses every call until it is set
     assert settings.bootstrap.email is None
+
+
+def test_a_blank_job_token_means_none(required_env: pytest.MonkeyPatch) -> None:
+    required_env.setenv("JOBS_TOKEN", "")
+
+    assert load_settings([]).jobs.token is None
 
 
 @pytest.mark.parametrize(
@@ -101,6 +112,12 @@ def test_defaults_are_safe() -> None:
     [
         ("AUTH_JWT_SECRET", "too-short", "at least 32"),
         ("RATE_LIMIT_AUTH_LOGIN", "ten per minute", "auth_login"),
+        ("RATE_LIMIT_JOBS_RUN", "often", "jobs_run"),
+        ("JOBS_TOKEN", "too-short", "at least 32"),
+        ("JOBS_TOKEN", "é" * 40, "printable ASCII"),  # a request header could never match it
+        ("JOBS_LEASE_SECONDS", "20", "must be longer than"),  # the cron's time limit is 20
+        ("REMINDERS_SEND_HOUR", "24", "less than or equal to 23"),
+        ("REMINDERS_MAX_SNOOZE_DAYS", "5", "greater than or equal to 7"),  # the app offers 7
         ("DEFAULT_TIMEZONE", "Mars/Olympus", "unknown time zone"),
     ],
 )
@@ -111,6 +128,15 @@ def test_invalid_values_are_rejected(
 
     with pytest.raises(ValidationError, match=message):
         load_settings([])
+
+
+def test_a_rejected_job_token_is_not_echoed(required_env: pytest.MonkeyPatch) -> None:
+    required_env.setenv("JOBS_TOKEN", "mistyped-SECRET")
+
+    with pytest.raises(ValidationError, match="at least 32") as caught:
+        load_settings([])
+
+    assert "SECRET" not in str(caught.value)
 
 
 def test_mongo_uri_and_jwt_secret_are_required() -> None:

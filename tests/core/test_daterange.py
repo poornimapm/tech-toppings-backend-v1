@@ -4,7 +4,7 @@ from datetime import UTC, date, datetime
 
 import pytest
 
-from app.core.daterange import DateRange, InvalidRangeError, resolve_range
+from app.core.daterange import DateRange, InvalidRangeError, at_local, resolve_range
 
 TODAY = date(2026, 10, 12)
 KOLKATA = "Asia/Kolkata"
@@ -29,6 +29,18 @@ def test_days_are_whole_days_in_the_users_time_zone() -> None:
     assert period.ends == datetime(2026, 10, 2, 18, 30, tzinfo=UTC)
     assert period.match("at") == {"at": {"$gte": period.begins, "$lt": period.ends}}
     assert period.day_of(datetime(2026, 10, 1, 19, 0, tzinfo=UTC)) == date(2026, 10, 2)
+
+
+@pytest.mark.parametrize(
+    ("day", "timezone", "expected"),
+    [
+        (date(2026, 10, 20), KOLKATA, datetime(2026, 10, 20, 3, 30, tzinfo=UTC)),
+        (date(2026, 10, 30), "America/New_York", datetime(2026, 10, 30, 13, 0, tzinfo=UTC)),
+        (date(2026, 11, 2), "America/New_York", datetime(2026, 11, 2, 14, 0, tzinfo=UTC)),
+    ],
+)
+def test_a_local_hour_follows_daylight_saving(day: date, timezone: str, expected: datetime) -> None:
+    assert at_local(day, timezone, 9) == expected  # 9:00 local, before and after 1 November
 
 
 def test_previous_is_the_same_length_just_before() -> None:

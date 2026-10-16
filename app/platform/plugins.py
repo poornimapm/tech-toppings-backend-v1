@@ -7,6 +7,7 @@ import importlib
 import importlib.util
 import pkgutil
 import sys
+from collections.abc import Iterable
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -52,6 +53,22 @@ def contributions(package: str, module: str, attribute: str) -> list[Any]:
         if not spec.name.startswith(f"{owner}_"):
             raise PluginError(f"{package}.{module}: {spec.name} must start with '{owner}_'")
     return specs
+
+
+def owned_contributions(
+    packages: Iterable[str], module: str, attribute: str
+) -> list[tuple[str, Any]]:
+    """``(owner, spec)`` for what every package contributes; names are unique across them."""
+    found = [
+        (package.rsplit(".", 1)[-1], spec)
+        for package in packages
+        for spec in contributions(package, module, attribute)
+    ]
+    names = [spec.name for _, spec in found]
+    duplicates = sorted({name for name in names if names.count(name) > 1})
+    if duplicates:
+        raise PluginError(f"duplicate names in {module}.py: {duplicates}")
+    return found
 
 
 def load_script(path: Path, name: str) -> ModuleType:

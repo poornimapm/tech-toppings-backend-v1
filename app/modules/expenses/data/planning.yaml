@@ -1,0 +1,58 @@
+# How the expenses planning features behave (duplicate warning, budgets, goals, loans, and
+# repeating entries and bills). Change a number here, not in code.
+
+duplicates:
+  # An entry about to be saved looks like one already saved when both have the same kind and
+  # amount, are dated at most window_days apart, and have the same name (ignoring case and
+  # spaces), names at least this similar (0 to 1, a difflib ratio: "tomato" and "tomatoes"
+  # score 0.86), or the same place. The warning is advice only: saving is never refused.
+  window_days: 1
+  similarity: 0.85
+  max_results: 3 # matches shown per entry, newest first
+
+budgets:
+  # A budget warns once when this share of its limit is spent (0 to 1), and once more when the
+  # limit is passed. This is the default for a new budget; each budget can set its own, and 0
+  # turns the early warning off.
+  alert_threshold: 0.8
+  # Every saved expense is checked against the user's budgets it counts in, so a user keeps at
+  # most this many (ended trips included; deleting one makes room).
+  max_per_user: 50
+
+ledger:
+  # Money added to a goal, or paid back on a loan, is a line in that record. When two lines
+  # arrive at the same moment, one write wins and the other is tried again on the record as it
+  # now is, up to this many times, each after a random pause of up to pause_ms, doubled on each
+  # try (12 lines at once all land). Lines that still lose answer 409 VERSION_CONFLICT, and
+  # sending them again with the same key is safe.
+  retries: 5
+  pause_ms: 25
+  # Every line is kept in the record, so one record takes at most this many; then it answers
+  # 409 EXPENSE_LEDGER_FULL (a daily saver fills a goal in under three years).
+  max_lines: 1000
+
+ious:
+  # A loan with a due date reminds the user this many days before it (at REMINDERS_SEND_HOUR,
+  # their time), until it is paid back in full.
+  remind_days_before: 1
+
+recurring:
+  # A bill reminds the user this many days before each due date (at REMINDERS_SEND_HOUR, their
+  # time) until it is marked paid. The default for a new rule; each rule can set its own.
+  remind_days_before: 2
+  # A rule that adds its entries by itself adds at most this many at once after a long time
+  # away (the latest ones; older due dates are skipped).
+  max_catch_up: 31
+  detect:
+    # "Looks like it repeats": the same name (ignoring case and spaces) and kind, seen at least
+    # min_occurrences times in the last lookback_days, the latest ones evenly apart (cadences:
+    # the days apart each unit allows), each amount within amount_tolerance of the usual one
+    # (0.10 = 10%), and at most one due date missed since. Long enough for a yearly bill to be
+    # seen three times.
+    lookback_days: 800
+    min_occurrences: 3
+    amount_tolerance: 0.10
+    cadences:
+      week: [6, 8]
+      month: [27, 33]
+      year: [355, 375]

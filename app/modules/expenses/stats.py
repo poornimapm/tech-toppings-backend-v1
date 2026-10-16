@@ -6,9 +6,8 @@ from datetime import date
 from zoneinfo import ZoneInfo
 
 from app.modules.expenses.domain import EntryKind
-from app.modules.expenses.features.entries.models import EntryRepository
+from app.modules.expenses.features.entries.models import EntryRepository, sums
 from app.modules.expenses.features.entries.schemas import on_days
-from app.modules.expenses.features.entries.service import sums
 from app.platform import Clock, Scope, TileStat, User, to_major
 
 

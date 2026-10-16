@@ -14,6 +14,7 @@ import re
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Any
 
 import pytest
@@ -22,10 +23,14 @@ from fastapi import FastAPI
 from httpx import AsyncClient
 
 from app.core.repository import Scope
+from app.platform.context import ActorContext
 from app.platform.notifications.inbox import Inbox
+from app.platform.reminders.service import Reminders
+from app.platform.users.models import User
 from tests.helpers import CSRF, Account, FrozenClock, api_operations, build_settings, register
 
 PATH_PARAM = re.compile(r"{(\w+)}")
+RULE_DUE_ON = "2030-01-05"  # the owner's bill's first due date: payable by them, not by others
 WRITE_BODIES: dict[str, dict[str, object]] = {
     "PATCH": {"text": "hijacked"},
     "PUT": {"text": "hijacked"},
@@ -47,6 +52,17 @@ ROUTE_BODIES: dict[tuple[str, str], dict[str, object]] = {
     ("PATCH", "/v1/expenses/products/{product_id}"): {"name": "hijacked"},
     ("POST", "/v1/expenses/products/{product_id}/merge"): {"product_id": "0" * 24},
     ("POST", "/v1/expenses/products/{product_id}/apart"): {"product_id": "0" * 24},
+    ("PATCH", "/v1/expenses/budgets/{budget_id}"): {"limit_minor": 1},
+    ("PATCH", "/v1/expenses/goals/{goal_id}"): {"name": "hijacked", "revision_no": 1},
+    ("POST", "/v1/expenses/goals/{goal_id}/contributions"): {
+        "amount_minor": 1,
+        "date": "2026-10-08",
+    },
+    ("PATCH", "/v1/expenses/ious/{iou_id}"): {"counterparty": "hijacked", "revision_no": 1},
+    ("POST", "/v1/expenses/ious/{iou_id}/settlements"): {"amount_minor": 1, "date": "2026-10-08"},
+    ("PATCH", "/v1/expenses/recurring/{rule_id}"): {"active": False},
+    ("POST", "/v1/expenses/recurring/{rule_id}/mark-paid"): {"due_on": RULE_DUE_ON},
+    ("POST", "/v1/reminders/{reminder_id}/snooze"): {"days": 1},
 }
 
 
@@ -149,6 +165,26 @@ async def check_notification(client: AsyncClient, owner: Account, notification_i
     assert mine["read"] is False  # still there, and still unread
 
 
+async def create_reminder(client: AsyncClient, owner: Account) -> str:
+    """A reminder the notes module scheduled for next week (so it is not told yet)."""
+    owner_id = PydanticObjectId(owner.user_id)
+    user = await User.get(owner_id)
+    assert user is not None
+    settings = build_settings("mongodb://localhost/unused")
+    ctx = ActorContext(user, Scope.for_user(owner_id), FrozenClock(), settings, state=None)
+    note = await create_note(client, owner)
+    week = ctx.today() + timedelta(days=7)
+    await Reminders(ctx).schedule("notes.due", module="notes", ref_id=note, due_on=week, note=note)
+    page = (await client.get("/v1/reminders", headers=owner.headers)).json()
+    return str(next(item["id"] for item in page["items"] if item["params"]["note"] == note))
+
+
+async def check_reminder(client: AsyncClient, owner: Account, reminder_id: str) -> None:
+    page = (await client.get("/v1/reminders", headers=owner.headers)).json()
+    mine = next(item for item in page["items"] if item["id"] == reminder_id)
+    assert (mine["sent"], mine["snoozed_until"]) == (False, None)  # still listed, as it was
+
+
 async def create_entry(client: AsyncClient, owner: Account) -> str:
     response = await client.post(
         "/v1/expenses/entries",
@@ -214,6 +250,77 @@ async def check_product(client: AsyncClient, owner: Account, product_id: str) ->
     assert (product["alert_above_minor"], product["price_unit"]) == (None, "kg")
 
 
+async def create_budget(client: AsyncClient, owner: Account) -> str:
+    response = await client.post(
+        "/v1/expenses/budgets",
+        headers=owner.headers,
+        json={"name": "Mine", "scope": "overall", "period": "month", "limit_minor": 100000},
+    )
+    assert response.status_code == 201, response.text
+    return str(response.json()["id"])
+
+
+async def check_budget(client: AsyncClient, owner: Account, budget_id: str) -> None:
+    page = (await client.get("/v1/expenses/budgets", headers=owner.headers)).json()
+    mine = next(item for item in page["items"] if item["id"] == budget_id)
+    assert (mine["name"], mine["limit_minor"]) == ("Mine", 100000)
+
+
+async def create_goal(client: AsyncClient, owner: Account) -> str:
+    response = await client.post(
+        "/v1/expenses/goals",
+        headers=owner.headers,
+        json={"name": "Mine", "target_minor": 100000},
+    )
+    assert response.status_code == 201, response.text
+    return str(response.json()["id"])
+
+
+async def check_goal(client: AsyncClient, owner: Account, goal_id: str) -> None:
+    page = (await client.get("/v1/expenses/goals", headers=owner.headers)).json()
+    mine = next(item for item in page["items"] if item["id"] == goal_id)
+    assert (mine["name"], mine["saved_minor"], mine["revision_no"]) == ("Mine", 0, 1)
+
+
+async def create_iou(client: AsyncClient, owner: Account) -> str:
+    response = await client.post(
+        "/v1/expenses/ious",
+        headers=owner.headers,
+        json={"counterparty": "Ravi", "direction": "lent", "amount_minor": 50000},
+    )
+    assert response.status_code == 201, response.text
+    return str(response.json()["id"])
+
+
+async def check_iou(client: AsyncClient, owner: Account, iou_id: str) -> None:
+    page = (await client.get("/v1/expenses/ious?state=all", headers=owner.headers)).json()
+    mine = next(item for item in page["items"] if item["id"] == iou_id)
+    assert (mine["counterparty"], mine["settled_minor"], mine["revision_no"]) == ("Ravi", 0, 1)
+
+
+async def create_rule(client: AsyncClient, owner: Account) -> str:
+    """A monthly bill, first due years ahead: nothing is added or told yet."""
+    response = await client.post(
+        "/v1/expenses/recurring",
+        headers=owner.headers,
+        json={
+            "template": {"title": "Rent", "amount_minor": 1500000, "category_id": "housing"},
+            "cadence": {"unit": "month", "anchor": RULE_DUE_ON},
+            "mode": "remind",
+        },
+    )
+    assert response.status_code == 201, response.text
+    return str(response.json()["id"])
+
+
+async def check_rule(client: AsyncClient, owner: Account, rule_id: str) -> None:
+    page = (await client.get("/v1/expenses/recurring", headers=owner.headers)).json()
+    mine = next(item for item in page["items"] if item["id"] == rule_id)
+    assert (mine["active"], mine["next_run"]) == (True, RULE_DUE_ON)  # not paused, not paid
+    entries = (await client.get("/v1/expenses/entries", headers=owner.headers)).json()
+    assert all(item["recurring_id"] != rule_id for item in entries["items"])
+
+
 Factory = Callable[[AsyncClient, Account], Awaitable[str]]
 Checker = Callable[[AsyncClient, Account, str], Awaitable[None]]
 
@@ -223,9 +330,14 @@ RESOURCES: dict[str, tuple[Factory, Checker]] = {
     "run_id": (create_run, check_run),
     "proposal_id": (create_proposal, check_proposal),
     "notification_id": (create_notification, check_notification),
+    "reminder_id": (create_reminder, check_reminder),
     "entry_id": (create_entry, check_entry),
     "category_id": (create_category, check_category),
     "product_id": (create_product, check_product),
+    "budget_id": (create_budget, check_budget),
+    "goal_id": (create_goal, check_goal),
+    "iou_id": (create_iou, check_iou),
+    "rule_id": (create_rule, check_rule),
 }
 
 

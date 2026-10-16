@@ -1,5 +1,6 @@
-"""The rule parser: free text (typed, spoken or a pasted bank SMS) to draft entries, with no
-AI. It is the static mode of the track-expenses skill, and what answers when AI can't.
+"""The rule parser: free text (typed, spoken or a pasted bank SMS) to draft entries, or loans
+(``ious.py``), with no AI. It is the static mode of the track-expenses skill, and what answers
+when AI can't.
 
 Everything it knows about languages, units, categories and SMS formats is data in the skill's
 ``references/`` folder; ``scripts/eval_parser.py`` measures it against labelled inputs.
@@ -11,10 +12,20 @@ from collections.abc import Mapping, Set
 from datetime import date
 
 from app.modules.expenses.parsing import sentence, sms
+from app.modules.expenses.parsing.ious import IouDraft, load_ious, read_ious
 from app.modules.expenses.parsing.lexicon import Lexicon, load
 from app.modules.expenses.parsing.sentence import Draft, has_money_words
 
-__all__ = ["Draft", "Lexicon", "load", "parse", "speaks_of_money"]
+__all__ = [
+    "Draft",
+    "IouDraft",
+    "Lexicon",
+    "load",
+    "load_ious",
+    "parse",
+    "read_ious",
+    "speaks_of_money",
+]
 
 
 def speaks_of_money(text: str, lexicon: Lexicon) -> bool:

@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 from app.modules.expenses.domain import EntryKind
-from app.modules.expenses.features.entries.models import EntryRepository
+from app.modules.expenses.features.entries.models import EntryRepository, sums
 from app.modules.expenses.features.entries.schemas import on_days
-from app.modules.expenses.features.entries.service import sums
 from app.modules.expenses.stats import total
 from app.platform import ActorContext, DateRange, Kpi, Point, Series, to_major, widget
 

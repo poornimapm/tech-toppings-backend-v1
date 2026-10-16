@@ -6,6 +6,38 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added — Phase 9a: planning pack (2026-10-16)
+
+- **Scheduled jobs** (`app/platform/jobs`, ADR-0007): `@job("daily"|"each")` plugins, caught
+  up when the bell polls `GET /v1/notifications`, with a daily lease per user in `job_runs`.
+  Hidden, token-protected `POST /v1/internal/jobs/{job}/run` (`JOBS_TOKEN`, `X-Job-Token`)
+  and the `.github/workflows/jobs-cron.yml` workflow, a no-op until its secrets are set.
+- **Reminders** (`app/platform/reminders`, ADR-0012): `Reminders.schedule` / `cancel` for any
+  module, told once per due date at `REMINDERS_SEND_HOUR` local time; `GET /v1/reminders`,
+  snooze and dismiss.
+- **Budgets** (`/v1/expenses/budgets`): overall, category or tag (trips and events, U7), per
+  week, month or chosen dates, with pace and what is left a day; `expenses.budget_near` and
+  `expenses.budget_over`, each once per period.
+- **Goals** (`/v1/expenses/goals`): funded by hand (contributions, once per Idempotency-Key)
+  or by net savings since a day (U1); `expenses.goal_reached`; revisions, delete and undelete.
+- **Repeating entries and bills** (`/v1/expenses/recurring`, U3 part 1): rules that add their
+  entries in the daily job once per due date, or remind (`expenses.bill_due`) and are paid
+  with `mark-paid`; suggestions from the user's own entries to confirm or dismiss.
+- **Loans** (`/v1/expenses/ious`, U2): money lent or borrowed, payments once per key, balances
+  by person (`/ious/summary`), due reminders (`expenses.iou_due_lent`, `iou_due_borrowed`).
+- **Loans by voice**: the `track-expenses` skill reads loans and payments in English, Tamil
+  and Hindi into `expenses_iou_draft` drafts (client tool), with `expenses_ious` to find the
+  loan; 48 parser cases and 23 near misses that must stay entries.
+- **Duplicate warning**: `POST /v1/expenses/entries/duplicates/check`, advice only.
+- Numbers in `data/planning.yaml`; settings groups `JOBS_` and `REMINDERS_`.
+- Platform: `same_secret` (constant-time token check), `ActorContext.today()`, ledger lines on
+  revisioned records (`append_once`), `answer_once` and `patched` helpers.
+
+### Changed
+
+- The expenses module is version 0.3.0.
+- CORS exposes `Idempotent-Replayed`, so the app can tell a replayed save.
+
 ### Added — Phase 8: overview and insights (2026-10-14)
 
 - **Analytics** (`/v1/expenses/analytics/*`): summary (against the same number of days

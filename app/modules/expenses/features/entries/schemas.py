@@ -23,6 +23,7 @@ from app.platform import FieldChange, Revision, RevisionAction
 MAX_TAGS = 10
 MAX_ATTACHMENTS = 5
 MAX_QUANTITY = 10**6
+MAX_CANDIDATES = 10  # entries checked for duplicates in one request (a confirm card's drafts)
 
 
 def _upto(max_length: int) -> StringConstraints:
@@ -41,6 +42,7 @@ def _clean_tags(tags: list[str]) -> list[str]:
 # An empty optional box means "none", not an empty string.
 Blank = BeforeValidator(_blank_is_none)
 Title = Annotated[str, _upto(120)]
+Name = Annotated[str, _upto(60)]  # what a budget or goal is called, or who a loan is with
 CategoryId = Annotated[str, _upto(40)]
 Tag = Annotated[str, _upto(30)]
 Merchant = Annotated[Annotated[str, _upto(80)] | None, Blank]
@@ -48,6 +50,8 @@ Person = Annotated[Annotated[str, _upto(60)] | None, Blank]
 Label = Annotated[Annotated[str, _upto(60)] | None, Blank]
 Note = Annotated[Annotated[str, _upto(1000)] | None, Blank]
 UnitCode = Annotated[Annotated[str, AfterValidator(known_unit)] | None, Blank]
+Tags = Annotated[list[Tag], Field(max_length=MAX_TAGS), AfterValidator(_clean_tags)]
+Amount = Annotated[int, Field(gt=0, le=10**13, description="In the currency's minor unit")]
 
 
 class AttachmentIn(BaseModel):
@@ -60,7 +64,7 @@ class AttachmentIn(BaseModel):
 class EntryFields(BaseModel):
     kind: EntryKind = EntryKind.EXPENSE
     title: Title
-    amount_minor: int = Field(gt=0, le=10**13, description="In the currency's minor unit")
+    amount_minor: Amount
     currency: str | None = Field(
         default=None, pattern=r"^[A-Z]{3}$", description="Default: my base currency"
     )
@@ -74,7 +78,7 @@ class EntryFields(BaseModel):
     merchant: Merchant = None
     payment_mode: PaymentMode | None = None
     for_whom: Person = None
-    tags: Annotated[list[Tag], Field(max_length=MAX_TAGS), AfterValidator(_clean_tags)] = []
+    tags: Tags = []
     note: Note = None
     attachments: Annotated[list[AttachmentIn], Field(max_length=MAX_ATTACHMENTS)] = []
 
@@ -100,6 +104,9 @@ class EntryOut(EntryFields):
     id: str
     currency: str
     source: EntrySource
+    recurring_id: str | None = Field(
+        default=None, description="The repeating rule that added it, or whose bill it paid"
+    )
     revision_no: int
     deleted: bool
     created_at: dt.datetime
@@ -195,6 +202,38 @@ class EntryListQuery(EntryFilters):
     page: int = Field(default=1, ge=1, description="1-based page number")
     page_size: int | None = Field(default=None, ge=1, description="Items per page")
     sort: str | None = Field(default=None, description="e.g. -date,amount_minor")
+
+
+class DuplicateCandidate(BaseModel):
+    """An entry about to be saved, as far as telling it from saved ones needs."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: EntryKind = EntryKind.EXPENSE
+    title: Title
+    amount_minor: int = Field(gt=0, le=10**13, description="In the base currency's minor unit")
+    date: dt.date
+    merchant: Merchant = None
+    exclude_id: str | None = Field(
+        default=None, max_length=40, description="The entry being edited, never its own match"
+    )
+
+
+class DuplicatesIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    candidates: Annotated[list[DuplicateCandidate], Field(min_length=1, max_length=MAX_CANDIDATES)]
+
+
+class DuplicateResult(BaseModel):
+    index: int = Field(description="The candidate's place in the request")
+    matches: list[EntryOut]
+
+
+class DuplicatesOut(BaseModel):
+    """One result per candidate, in the order asked. Advice only: saving is never refused."""
+
+    results: list[DuplicateResult]
 
 
 def _bounds(low: Any, high: Any) -> dict[str, Any]:

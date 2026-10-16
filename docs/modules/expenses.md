@@ -1,7 +1,7 @@
 # Expenses module
 
-How the module reads what people say, type or paste, how well it does, and how it follows
-prices. The rest of the module is described in [architecture.md](../architecture.md#expenses).
+How the module reads what people say, type or paste, how well it does, how it follows
+prices, and what it plans. The rest of the module is described in [architecture.md](../architecture.md#expenses).
 
 ## Capture
 
@@ -148,9 +148,43 @@ the hash of the facts and returned again (`cached: true`) until they change. Wit
 skill's templates (`explain-spending.<period>.<more|less|same|first|empty>`, worded in the
 frontend manifest) say the same in one or two sentences.
 
+## Planning
+
+The Plan page has four sections: budgets, bills, goals and loans. Their numbers are in
+`data/planning.yaml`; the README's "Planning pack: try it" walks through each one.
+
+- **Budgets** count with the entries list's own filters (all spending, one category or one
+  tag) over a week, a month or the budget's own dates. A trip is a tag over its dates. Saving
+  an entry checks the budgets it falls under and warns once at the threshold and once when
+  over, per period, only while the budget is under way. What it has told is kept on the
+  budget, so it never warns twice.
+- **Goals** are funded by hand (contributions, each saved once per `Idempotency-Key`) or by
+  net savings since a day, worked out on read from the analytics `net` figure. Reaching one
+  notifies once per target.
+- **Repeating entries** are rules with a cadence anchored on a day, so the 31st stays the last
+  day of short months. `auto_create` rules add one entry per due date in the daily job
+  (`jobs.py`), with the client key `recurring/<rule>/<due date>`. `remind` rules are
+  **bills**: the platform reminders service tells them before the due date, and `mark-paid`
+  adds the entry and moves the bill on. Suggestions come from the user's own entries at a
+  steady pace and amount; each is confirmed or dismissed, never applied on its own.
+- **Loans** (IOUs) record money lent or borrowed with someone, never as entries. Payments are
+  lines on the loan, kept between nothing and the amount. A person's balance is what is owed
+  each way, by name as compared. A due date reminds until the loan is paid back in full.
+- **Duplicate warning**: before a draft or a new entry is saved, the app asks
+  `POST /entries/duplicates/check`. An entry of the same kind and amount, a few days away,
+  with a like name or the same place, is shown as a possible duplicate. Saving it anyway
+  still works.
+
+**Loans by voice.** The `track-expenses` skill reads loans into `expenses_iou_draft` drafts
+(new loan, or a payment on one), checked and saved by the user like entries. Only explicit
+loan words count (`references/ious.yaml`): "lent Ravi 500", "borrowed 2000 from Ravi", "Ravi
+paid me back 200", in English, Tamil and Hindi. "Gave Ravi 500" stays an expense, and a
+sentence mixing a loan with spending stays entries in rule mode. The rule parser's loan cases
+are in `tests/modules/expenses/iou_cases.yaml`, and the near misses that must not become
+loans in `iou_near_misses.yaml`.
+
 ## Not yet
 
-- Lending and borrowing ("gave Ravi 500", "கடன்") arrive with IOUs (Phase 9a).
 - Corrections ("change the last entry to 300") are not understood yet.
 - Prices are in the user's base currency; entries in other currencies wait for exchange
   rates.

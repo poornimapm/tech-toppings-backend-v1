@@ -1,5 +1,7 @@
 """``/v1/notifications``: my notifications. The unread count is the ``total`` of
-``?unread=true`` (ask for ``page_size=1``), so the bell needs no endpoint of its own."""
+``?unread=true`` (ask for ``page_size=1``), so the bell needs no endpoint of its own. The
+bell's poll is also when due jobs run for the user (ADR-0007), so what they deliver is listed
+in the same response."""
 
 from __future__ import annotations
 
@@ -13,6 +15,7 @@ from app.core.errors import error_responses
 from app.core.pagination import Page, PageParamsDep
 from app.core.repository import NEWEST_FIRST
 from app.platform.context import ActorDep
+from app.platform.jobs.deps import CaughtUpDep
 from app.platform.notifications.inbox import Inbox, Notification
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
@@ -45,6 +48,7 @@ class NotificationOut(BaseModel):
 
 @router.get("", summary="My notifications, newest first", responses=error_responses(401))
 async def list_notifications(
+    _: CaughtUpDep,
     inbox: InboxDep,
     params: PageParamsDep,
     unread: Annotated[bool | None, Query(description="true = only unread")] = None,

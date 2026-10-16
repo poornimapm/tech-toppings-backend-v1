@@ -14,6 +14,7 @@ from app.core.clock import Clock
 from app.core.config import Settings
 from app.core.documents import OwnedDocument
 from app.core.repository import Scope, ScopedRepository
+from app.platform.activity.log import with_module
 
 
 class Notification(OwnedDocument):
@@ -66,7 +67,7 @@ class Inbox(ScopedRepository[Notification]):
             await self.create(
                 {
                     "type": type_,
-                    "params": {"module": module, **params} if module != "platform" else params,
+                    "params": with_module(module, params),
                     "module_key": module,
                     "dedupe_key": dedupe_key,
                     "purge_at": self.clock.now() + self._retention,

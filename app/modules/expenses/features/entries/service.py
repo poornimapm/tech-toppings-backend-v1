@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable
 from typing import Any, ClassVar
 
 from app.modules.expenses.domain import MODULE, EntrySource
+from app.modules.expenses.features.budgets.service import Budgets
 from app.modules.expenses.features.categories.service import Categories
-from app.modules.expenses.features.entries.models import Entry, EntryRepository
+from app.modules.expenses.features.entries.models import Entry, EntryRepository, sums
 from app.modules.expenses.features.entries.schemas import (
     CurrencyTotal,
     EntryFilters,
@@ -28,24 +29,6 @@ class CurrencyUnsupportedError(AppError):
     default_message = "For now, entries are kept in your base currency."
 
 
-async def sums(criteria: Mapping[str, Any], *by: str) -> list[dict[str, Any]]:
-    """Total ``amount_minor`` and the number of entries matching ``criteria`` (a repository
-    ``query()``), for each combination of the ``by`` fields."""
-    cursor = await Entry.get_pymongo_collection().aggregate(
-        [
-            {"$match": dict(criteria)},
-            {
-                "$group": {
-                    "_id": {name: f"${name}" for name in by},
-                    "amount_minor": {"$sum": "$amount_minor"},
-                    "count": {"$sum": 1},
-                }
-            },
-        ]
-    )
-    return [{**row.pop("_id"), **row} async for row in cursor]
-
-
 def _suggestions(values: Iterable[Any]) -> list[str]:
     return sorted(value for value in values if value)[:MAX_SUGGESTIONS]
 
@@ -56,12 +39,16 @@ class EntryService:
         self.entries = EntryRepository(ctx.scope, ctx.clock)
         self.categories = Categories(ctx.scope, ctx.clock)
         self.products = Products(ctx)
+        self.budgets = Budgets(ctx)
         self.activity = ActivityLog(ctx.scope, ctx.clock, ctx.settings)
 
-    async def _stored(self, body: EntryIn, current: Entry | None = None) -> dict[str, Any]:
+    async def _stored(
+        self, body: EntryIn, current: Entry | None = None, *, kept: bool = False
+    ) -> dict[str, Any]:
         """What to store for ``body``, once its currency and category are known to be usable.
         An entry keeps the currency it was made in; a new one uses the user's base currency
-        (other currencies arrive with exchange rates)."""
+        (other currencies arrive with exchange rates). ``kept``: its category was checked
+        already and is kept even archived (a repeating rule's)."""
         currency = current.currency if current else self.ctx.user.base_currency
         if body.currency not in (None, currency):
             raise CurrencyUnsupportedError(details={"currency": currency})
@@ -69,7 +56,7 @@ class EntryService:
             current.category_id,
             current.kind,
         )
-        if refiled:
+        if refiled and not kept:
             await self.categories.ensure_usable(body.category_id, body.kind)
         fields = body.model_dump(mode="json", exclude={"revision_no"})
         return {**fields, "currency": currency}
@@ -80,6 +67,12 @@ class EntryService:
             await self.activity.record(f"{MODULE}.entry_{event}", module=MODULE, title=after.title)
         return after
 
+    async def _counted(self, entry: Entry) -> None:
+        """An entry now counts as spent (new, edited or back): follow its price, and warn about
+        budgets it brings near or over their limit."""
+        await self.products.observe(entry)
+        await self.budgets.observe(entry)
+
     # ------------------------------------------------------------------ writes
 
     async def create(
@@ -87,13 +80,17 @@ class EntryService:
         body: EntryIn,
         client_key: str | None = None,
         source: EntrySource = EntrySource.MANUAL,
+        recurring_id: str | None = None,
     ) -> tuple[Entry, bool]:
-        """The new entry, or the one an earlier request with this key made (then ``False``)."""
-        fields = {**await self._stored(body), "source": source}
+        """The new entry, or the one an earlier request with this key made (then ``False``).
+        ``recurring_id``: the repeating rule it comes from, whose category it is filed under
+        even once archived, as the rule keeps it."""
+        stored = await self._stored(body, kept=recurring_id is not None)
+        fields = {**stored, "source": source, "recurring_id": recurring_id}
         entry, created = await self.entries.create_once(fields, client_key, source=source)
         if not created:
             return entry, False
-        await self.products.observe(entry)
+        await self._counted(entry)
         return await self._changed("added", None, entry), True
 
     async def update(self, entry_id: str, body: EntryIn, expected: int) -> Entry:
@@ -103,7 +100,7 @@ class EntryService:
             entry_id, fields, expected=expected, source=EntrySource.MANUAL
         )
         if entry.revision_no != current.revision_no:
-            await self.products.observe(entry)
+            await self._counted(entry)
         return await self._changed("updated", current, entry)
 
     async def delete(self, entry_id: str) -> None:
@@ -114,11 +111,15 @@ class EntryService:
     async def undelete(self, entry_id: str) -> Entry:
         current = await self.entries.get(entry_id, include_deleted=True)
         entry = await self.entries.undelete(entry_id, source=EntrySource.MANUAL)
+        if entry.revision_no != current.revision_no:
+            await self.budgets.observe(entry)
         return await self._changed("undeleted", current, entry)
 
     async def restore(self, entry_id: str, revision_no: int) -> Entry:
         current = await self.entries.get(entry_id)
         entry = await self.entries.restore(entry_id, revision_no, source=EntrySource.MANUAL)
+        if entry.revision_no != current.revision_no:
+            await self.budgets.observe(entry)
         return await self._changed("restored", current, entry)
 
     # ------------------------------------------------------------------ reads

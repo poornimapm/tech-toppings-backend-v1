@@ -109,10 +109,14 @@ class RevisionedRepository(ScopedRepository[TRev]):
     """A ``ScopedRepository`` whose every write also writes one revision."""
 
     revisions: ClassVar[type[Revision]]
+    # List fields that grow a line at a time (money ledgers), through ``append`` only. Their
+    # revisions hold the line added, never the whole list, and snapshots leave them out, so
+    # history grows with the number of lines instead of with its square.
+    ledgers: ClassVar[frozenset[str]] = frozenset()
 
     def _fields(self, document: RevisionedDocument) -> dict[str, Any]:
-        """The record's own fields (no ownership, audit or bookkeeping) as stored."""
-        own = set(type(document).model_fields) - set(RevisionedDocument.model_fields)
+        """The record's own fields (no ownership, audit, bookkeeping or ledgers) as stored."""
+        own = set(type(document).model_fields) - set(RevisionedDocument.model_fields) - self.ledgers
         fields: dict[str, Any] = document.model_dump(mode="json", include=own)
         return fields
 
@@ -216,6 +220,25 @@ class RevisionedRepository(ScopedRepository[TRev]):
         has moved on answers 409 instead of silently losing the other change."""
         return await self._revise(entity_id, changes, RevisionAction.UPDATE, expected, source)
 
+    async def append(
+        self,
+        entity_id: str | PydanticObjectId,
+        field: str,
+        line: BaseModel,
+        changes: Mapping[str, Any],
+        *,
+        expected: int,
+        source: str = DEFAULT_SOURCE,
+    ) -> TRev:
+        """Add ``line`` to the ledger ``field`` with the ``changes`` that follow from it (a new
+        total), as of revision ``expected``. The revision records the line, not the list."""
+        if field not in self.ledgers:
+            raise ValueError(f"{field} is not one of {type(self).__name__}.ledgers")
+        added = {field: line.model_dump(mode="json")}
+        return await self._revise(
+            entity_id, changes, RevisionAction.UPDATE, expected, source, added
+        )
+
     async def soft_delete(
         self, entity_id: str | PydanticObjectId, *, source: str = DEFAULT_SOURCE
     ) -> None:
@@ -246,6 +269,7 @@ class RevisionedRepository(ScopedRepository[TRev]):
         action: RevisionAction,
         expected: int | None,
         source: str,
+        added: Mapping[str, Any] | None = None,
     ) -> TRev:
         reviving = action is RevisionAction.UNDELETE
         current = await self.get(entity_id, include_deleted=reviving)
@@ -263,11 +287,13 @@ class RevisionedRepository(ScopedRepository[TRev]):
             for name, value in after.items()
             if before[name] != value
         ]
-        if not diff and action in (RevisionAction.UPDATE, RevisionAction.RESTORE):
+        # A ledger line is recorded as added and pushed: the list is never rewritten.
+        lines = [FieldChange(field=name, new=line) for name, line in (added or {}).items()]
+        if not diff and not lines and action in (RevisionAction.UPDATE, RevisionAction.RESTORE):
             return current  # nothing changed: no revision, no new version
 
         number = current.revision_no + 1
-        entry = self._entry(number, action, diff, after, source)
+        entry = self._entry(number, action, [*diff, *lines], after, source)
         values: dict[str, Any] = {
             **{change.field: change.new for change in diff},
             "revision_no": number,
@@ -279,6 +305,9 @@ class RevisionedRepository(ScopedRepository[TRev]):
             values["deleted_at"] = entry.changed_at
         if reviving:
             values["deleted_at"] = None
+        update: dict[str, Any] = {"$set": values}
+        if added:
+            update["$push"] = dict(added)
         applied = await self.model.get_pymongo_collection().update_one(
             {
                 "_id": current.id,
@@ -286,7 +315,7 @@ class RevisionedRepository(ScopedRepository[TRev]):
                 "revision_no": current.revision_no,
                 "pending_revision": None,
             },
-            {"$set": values},
+            update,
         )
         if applied.matched_count == 0:
             raise VersionConflictError  # changed between our read and our write

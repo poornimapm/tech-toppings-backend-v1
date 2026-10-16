@@ -17,7 +17,6 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any, ClassVar
-from zoneinfo import ZoneInfo
 
 from app.core.clock import Clock
 from app.core.config import AgentMode, AgentSettings
@@ -181,14 +180,13 @@ class AgentRuntime:
         return await self._save(agent, request, ctx, decision, outcome, box)
 
     def _system_prompt(
-        self, agent: AgentSpec, skills: Sequence[SkillSpec], request: RunRequest, user: User
+        self, agent: AgentSpec, skills: Sequence[SkillSpec], request: RunRequest, ctx: ActorContext
     ) -> str:
-        today = self.clock.now().astimezone(ZoneInfo(user.timezone)).date().isoformat()
         values = {
             "skills": "\n".join(f"- {skill.name}: {skill.description}" for skill in skills),
-            "name": user.name,
+            "name": ctx.user.name,
             "locale": request.locale,
-            "today": today,
+            "today": ctx.today().isoformat(),
             "context": json.dumps(dict(request.context), ensure_ascii=False),
         }
         return PLACEHOLDER.sub(lambda m: values.get(m.group(1), m.group(0)), agent.instructions)
@@ -252,7 +250,7 @@ class AgentRuntime:
             skill.name: skill for skill in skills if request.skill
         }  # a named skill is preloaded
         messages: list[dict[str, Any]] = [
-            {"role": "system", "content": self._system_prompt(agent, skills, request, ctx.user)}
+            {"role": "system", "content": self._system_prompt(agent, skills, request, ctx)}
         ]
         messages += [{"role": "system", "content": skill.instructions} for skill in loaded.values()]
         messages.append({"role": "user", "content": self.redact(request.input)})
@@ -308,7 +306,7 @@ class AgentRuntime:
     ) -> None:
         """Each skill's script gets a turn. The first confident answer wins; a tentative one is
         used only if no other skill answers."""
-        today = self.clock.now().astimezone(ZoneInfo(ctx.user.timezone)).date()
+        today = ctx.today()
         fallback: tuple[SkillSpec, StaticOutcome, ToolBox] | None = None
         # The more specific skill first: a module knows its own words ("show my expenses")
         # better than the platform's general skills do.

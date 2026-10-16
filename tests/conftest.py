@@ -36,6 +36,8 @@ SETTINGS_ENV_PREFIXES = (
     "AGENT_",
     "DASHBOARD_",
     "NOTIFICATIONS_",
+    "JOBS_",
+    "REMINDERS_",
     "BOOTSTRAP_ADMIN_",
 )
 
@@ -60,18 +62,31 @@ def mongo_uri(test_db_name: str) -> str:
     return with_database(TEST_MONGO_BASE_URI, test_db_name)
 
 
-@pytest.fixture(scope="session", autouse=True)
-async def _drop_test_database(test_db_name: str) -> AsyncIterator[None]:
-    yield
+async def drop_database(name: str) -> None:
     client: AsyncMongoClient[dict[str, object]] = AsyncMongoClient(
         TEST_MONGO_BASE_URI, serverSelectionTimeoutMS=2000
     )
     try:
-        await client.drop_database(test_db_name)
+        await client.drop_database(name)
     except PyMongoError:
         pass  # MongoDB unavailable: the tests that needed it have already failed loudly.
     finally:
         await client.close()
+
+
+@pytest.fixture(scope="session", autouse=True)
+async def _drop_test_database(test_db_name: str) -> AsyncIterator[None]:
+    yield
+    await drop_database(test_db_name)
+
+
+@pytest.fixture
+async def own_mongo_uri() -> AsyncIterator[str]:
+    """A database for one test, for code that reads across users (the jobs cron): accounts
+    from other tests never show up in it. Dropped afterwards."""
+    name = f"tt-test-{uuid.uuid4().hex[:10]}"
+    yield with_database(TEST_MONGO_BASE_URI, name)
+    await drop_database(name)
 
 
 @pytest.fixture

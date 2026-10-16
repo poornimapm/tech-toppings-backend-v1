@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
+from datetime import datetime
 from typing import Any
 
 import pytest
 from httpx import AsyncClient, Response
+from pydantic import SecretStr
 
+from app.core.config import JobsSettings
 from app.modules.expenses.features.entries.models import EntryRevision
-from tests.helpers import Account
+from tests.helpers import Account, FrozenClock, build_app, build_settings, register, running_client
 from tests.platform.agents.conftest import agent_client  # noqa: F401 - a fixture, used by name
+from tests.platform.reminders.test_exactly_once import TOKEN
 
 ENTRIES = "/v1/expenses/entries"
 CATEGORIES = "/v1/expenses/categories"
@@ -66,6 +70,27 @@ async def listed(client: AsyncClient, account: Account, query: str = "") -> dict
 
 def titles(page: dict[str, Any]) -> list[str]:
     return [item["title"] for item in page["items"]]
+
+
+def travel(clock: FrozenClock, to: datetime) -> None:
+    clock.advance(seconds=(to - clock.now()).total_seconds())
+
+
+async def signed_up_at(client: AsyncClient, clock: FrozenClock, when: datetime) -> Account:
+    """A new account, then the app's clock moved to ``when``. In that order: access tokens are
+    signed with the app's clock but checked against the real one."""
+    account = await register(client)
+    travel(clock, when)
+    return account
+
+
+@pytest.fixture
+async def cron_client(own_mongo_uri: str, clock: FrozenClock) -> AsyncIterator[AsyncClient]:
+    """The app with the jobs endpoint on, over a database of its own (the cron reads across
+    users)."""
+    jobs = JobsSettings(_env_file=None, token=SecretStr(TOKEN))
+    async with running_client(build_app(build_settings(own_mongo_uri, jobs=jobs), clock)) as http:
+        yield http
 
 
 @pytest.fixture

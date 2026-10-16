@@ -34,6 +34,7 @@ from app.core.config import (
     DashboardSettings,
     DefaultsSettings,
     Environment,
+    JobsSettings,
     LogFormat,
     LogSettings,
     ModulesSettings,
@@ -41,10 +42,13 @@ from app.core.config import (
     NotificationSettings,
     RateLimitSettings,
     RegistrationMode,
+    RemindersSettings,
     SecuritySettings,
     Settings,
 )
+from app.core.repository import Scope
 from app.main import create_app
+from app.platform.context import ActorContext
 from app.platform.users.models import User
 
 TEST_MONGO_BASE_URI = os.environ.get("TEST_MONGO_URI", "mongodb://localhost:27017")
@@ -99,6 +103,8 @@ def build_settings(mongo_uri: str, **groups: Any) -> Settings:
         "agent": AgentSettings(_env_file=None),
         "dashboard": DashboardSettings(_env_file=None),
         "notifications": NotificationSettings(_env_file=None),
+        "jobs": JobsSettings(_env_file=None),
+        "reminders": RemindersSettings(_env_file=None),
         "bootstrap": BootstrapSettings(_env_file=None),
     }
     return Settings(**(defaults | groups))
@@ -176,6 +182,16 @@ async def register(
 
 async def login(client: AsyncClient, email: str, password: str = PASSWORD) -> Response:
     return await client.post("/v1/auth/login", json={"email": email, "password": password})
+
+
+async def actor_of(app: FastAPI, account: Account) -> ActorContext:
+    """What plugin code (jobs, services) receives for this account, outside a request."""
+    user = await User.get(PydanticObjectId(account.user_id))
+    assert user is not None
+    state = app.state
+    return ActorContext(
+        user, Scope.for_user(PydanticObjectId(account.user_id)), state.clock, state.settings, state
+    )
 
 
 HTTP_METHODS = {"get", "post", "put", "patch", "delete"}

@@ -175,6 +175,12 @@ features/entries/                     entries, their history, filters, totals
 features/products/                    products (names), prices per unit, alerts
 features/analytics/                   the overview's figures (ADR-0016)
 features/insights/                    a week or month in facts, and its summary
+features/budgets/                     budgets and their warnings
+features/goals/                       goals, contributions (ledger lines)
+features/recurring/                   repeating rules, bills, suggestions
+features/ious/                        loans, payments, balances by person
+data/planning.yaml                    budgets, goals, recurring, loans, duplicates tuning
+jobs.py                               the daily job that adds repeating entries
 data/analytics.yaml                   forecast, anomaly and top-N tuning
 skills/track-expenses/                SKILL.md, lexicon, static script (the rule parser)
 skills/tidy-products/                 SKILL.md, word groups, static script
@@ -212,13 +218,21 @@ skills/explain-spending/              SKILL.md, lexicon, static script (template
   period's facts and a summary by the `explain-spending` skill. An AI summary is kept with
   the hash of its facts and shown again until they change; without AI the skill's templates
   answer. Modules run a skill this way with the platform's `run_skill`.
+- **Planning** (budgets, goals, recurring, ious; see
+  [modules/expenses.md](modules/expenses.md#planning)): budgets warn when an entry is
+  saved, a net-savings goal reads the analytics `net` figure, repeating entries are added
+  by the daily job once per due date, and bills and loans remind through the platform
+  reminders service. Contributions and payments are ledger lines on their record
+  (`ledger.append_once`), each once per `Idempotency-Key`. `POST /entries/duplicates/check`
+  lists likely duplicates before a save; it is advice only.
 - **Platform services:** each change is noted in the activity feed; the Welcome tile shows
   this month's spending; the dashboard gets spent, received and spending per day; a price
   over a product's alert goes to the notification inbox.
 - **Capture and the assistant:** the `track-expenses` skill reads what the user says, types
   or pastes into drafts (the client tool `expenses_draft`); the user checks them on a confirm
   card and saves them through the API. Its tools: categories, habits (the user's usual
-  category per title), list, draft, open; none of them writes. Without AI, its static script
+  category per title), list, draft, open, and for loans `expenses_ious` and the client tool
+  `expenses_iou_draft`; none of them writes. Without AI, its static script
   is the rule parser (`parsing/`, vocabulary in the skill's `references/`). The
   `tidy-products` skill suggests products and titles that are the same thing (client tool
   `expenses_product_matches`) for the user to combine. See
@@ -318,9 +332,9 @@ provider, all providers failing.
 
 Daily budgets are counted per AI call (`agent_usage`, per user and global, by UTC day).
 
-## Dashboard, activity and notifications
+## Dashboard, activity, notifications and reminders
 
-Three platform services every module shares (ADR-0014). Tools and widgets both receive an
+Platform services every module shares (ADR-0012, ADR-0014). Tools and widgets both receive an
 `ActorContext` (user, scope, clock, settings, app state), so they read through the same
 `Scope` as the API.
 
@@ -365,6 +379,35 @@ params; `GET /v1/activity` lists the caller's own, newest first. Entries expire 
 
 In both feeds `params.module` is a module key; the client shows the module's name.
 
+**Reminders** (ADR-0012). A module reminds the user of a record's due date:
+
+```python
+await Reminders(ctx).schedule(
+    "expenses.bill_due", module="expenses", ref_id=rule_id, due_on=day, days_before=2,
+    title=title, amount_minor=amount, currency=currency,
+)
+await Reminders(ctx).cancel(module="expenses", ref_id=rule_id)  # paid, settled or deleted
+```
+
+- A reminder is told at `REMINDERS_SEND_HOUR`, local time, `days_before` days ahead of
+  `due_on`, as a notification of that `type` whose params add `module`, `reminder_id` and
+  `due_on` to the module's own. A module words it in its frontend manifest (`strings.feed`).
+  When the user changes time zone (`PATCH /v1/me`), each reminder not yet told keeps its
+  local day and send hour.
+- One row per (module, record, due date), kept until `REMINDERS_RETENTION_DAYS` after the due
+  day has begun in every time zone. A record has one live reminder: a new due date cancels
+  the others, and of two scheduled at once the later write wins.
+- Exactly once per due date: the notification is sent with the inbox `dedupe_key`
+  `reminder:{id}:{round}` first, then the row is marked sent by a guarded update. A row that
+  was sent or dismissed is never re-armed, and a due date older than the retention period is
+  never scheduled again.
+- Delivery is the `each` job `reminders_deliver`, run by the bell's poll and by the cron
+  (`app/platform/jobs`). Reminders of a module switched off for the user wait until it is
+  back.
+- `GET /v1/reminders` lists open reminders, soonest due first.
+  `POST /v1/reminders/{id}/snooze {days}` tells it once more, `days` from today (at most
+  `REMINDERS_MAX_SNOOZE_DAYS`); `POST /v1/reminders/{id}/dismiss` ends it.
+
 ## Configuration
 
 `app.core.config` is the only module that reads the environment.
@@ -386,6 +429,8 @@ Each concern is a frozen `BaseSettings` group with its own prefix:
 | `AGENT_` | `AgentSettings` (mode, fallback, providers, budgets, retention, redaction) |
 | `DASHBOARD_` | `DashboardSettings` (range defaults and limit, widget timeout, activity retention) |
 | `NOTIFICATIONS_` | `NotificationSettings` (retention) |
+| `JOBS_` | `JobsSettings` (cron token, daily lease, lazy and cron time limits, users per cron run, retention) |
+| `REMINDERS_` | `RemindersSettings` (local send hour, retention, longest snooze, reminders per delivery) |
 | `BOOTSTRAP_ADMIN_` | `BootstrapSettings` (`poe seed`) |
 
 Sources, from lowest to highest priority:

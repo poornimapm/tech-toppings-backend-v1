@@ -102,6 +102,220 @@ This serves the API at <http://127.0.0.1:8000> with auto-reload. `HOST` and `POR
 Every response carries an `X-Request-ID` header. Send your own (8–128 characters from
 `[A-Za-z0-9._-]`) and it is echoed back and included in every log line for that request.
 
+## Scheduled jobs
+
+Render's free plan has no cron and sleeps when idle, so scheduled work takes two paths
+(ADR-0007):
+
+- **Lazy (the main path).** Each time the notification bell polls `GET /v1/notifications`,
+  the jobs that are due run for that user, each within `JOBS_LAZY_TIMEOUT_SECONDS`. A slow
+  or failing job is logged as `job_failed` and never fails the poll.
+- **Cron (best effort).** `.github/workflows/jobs-cron.yml` calls
+  `POST /v1/internal/jobs/{job}/run` every 30 minutes with the `X-Job-Token` header, for
+  `all` jobs or one by name. It catches up users signed in within `JOBS_ACTIVE_DAYS`, most
+  recent first, at most `JOBS_MAX_USERS_PER_RUN` per run, and answers with counts only. The
+  route is left out of the OpenAPI schema, and while `JOBS_TOKEN` is empty it answers 401 to
+  every call.
+
+A package adds jobs in its own `jobs.py`; names start with the package's key:
+
+```python
+from app.platform import ActorContext, job
+
+
+@job("daily")  # or "each": runs on every catch-up, so it must be cheap when nothing is due
+async def mymodule_tidy(ctx: ActorContext) -> int:
+    ...  # do what is due for ctx.user; make every effect idempotent per item
+    return handled
+```
+
+- A `daily` job runs once per user and local day. Its lease in `job_runs` lasts
+  `JOBS_LEASE_SECONDS` and is also the backoff after a failed run.
+- Exactly-once never rests on the lease or the schedule: every effect has its own guard (a
+  unique key or a guarded update).
+- A module's jobs run only for users who have that module switched on.
+
+**Try it locally.** Put a `JOBS_TOKEN` in `.env` (see `.env.example`), restart `poe dev`,
+sign in once in the app, then:
+
+```powershell
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/v1/internal/jobs/all/run `
+  -Headers @{ "X-Job-Token" = "<your JOBS_TOKEN>" }
+```
+
+It answers `users` (how many accounts it caught up), then `ran`, `skipped`, `failed`, `done`
+and `more`. The platform's `reminders_deliver` (an `each` job) runs on every call and counts
+the reminders it told in `done`; run it twice and the second answer shows any daily jobs as
+skipped. A wrong token gets `401`.
+
+## Planning pack: try it
+
+Each Phase 9a feature can be tried from `/docs` (sign in, then **Authorize** with the access
+token). Their numbers are in `app/modules/expenses/data/planning.yaml`.
+
+### Duplicate warning
+
+1. `POST /v1/expenses/entries` with
+   `{"title": "Rice", "amount_minor": 12500, "category_id": "groceries", "date": "2026-10-08"}`.
+2. `POST /v1/expenses/entries/duplicates/check` with
+   `{"candidates": [{"title": "rice ", "amount_minor": 12500, "date": "2026-10-09"}]}`. The
+   answer lists that entry under `results[0].matches`.
+3. Change the amount, or move the date two days away, and `matches` is empty. Saving the same
+   entry again still works: the check is advice only.
+
+An entry matches when it has the same kind and amount, is at most `window_days` away, and has
+the same name (ignoring case and spaces), a name at least `similarity` alike ("Tomato" and
+"Tomatoes"), or the same place. A call takes up to 10 candidates and returns at most
+`max_results` matches for each, newest first.
+
+### Budgets
+
+1. Add a trip's spending with a tag: `POST /v1/expenses/entries` with
+   `{"title": "Hotel", "amount_minor": 600000, "category_id": "travel", "date": "<a trip day>", "tags": ["Goa"]}`.
+2. `POST /v1/expenses/budgets` with
+   `{"name": "Goa trip", "scope": "tag", "tag": "goa", "period": "custom", "start": "<first day>", "end": "<last day>", "limit_minor": 1000000}`,
+   choosing a first and last day that include today (a trip that has ended or not started
+   never warns). Its `status` says 600000 spent (60%), what an even pace would have spent by today
+   (`pace_minor`), and what is left a day (`per_day_left_minor`, for `days_left`).
+3. Add another `goa` entry of 200000 on a trip day. That is 80%, so `GET /v1/notifications`
+   (the bell) has one `expenses.budget_near`. Save or edit more entries and it stays one; pass
+   the limit and one `expenses.budget_over` follows.
+4. `GET /v1/expenses/entries/summary?from=<first day>&to=<last day>&tag=goa` totals the same
+   `expense_minor` as the budget's `spent_minor`: a budget counts with the list's own filters.
+
+A budget counts all spending (`overall`), one `category_id` or one `tag`, for each `week`
+(Monday first) or `month` by the user's own calendar, or between its own dates (`custom`). It
+warns once at `alert_threshold` of its limit (default `budgets.alert_threshold`; 0 turns this
+off) and once when over, in each week, month or date range, and again after its limit changes.
+It warns only while it is under way, and what it has told is kept on the budget, so the
+notification's retention never makes it warn twice. A budget counts in the currency it was made
+in, even after the user changes their base currency. `PATCH` changes only what is sent. A user
+keeps at most `budgets.max_per_user` budgets (`EXPENSE_BUDGET_LIMIT`, 409).
+
+### Goals
+
+1. `POST /v1/expenses/goals` with the header `Idempotency-Key: bike-goal-1` and
+   `{"name": "Bike", "target_minor": 5000000, "target_date": "<a day months ahead>"}`. Its
+   `per_month_minor` is what is left spread over the months to that date (this one counted).
+2. `POST /v1/expenses/goals/<id>/contributions` with the header `Idempotency-Key: bike-add-1` and
+   `{"amount_minor": 1200000}`: `saved_minor` is 1200000 and `pct` 24. Send the same request again
+   and the answer carries `Idempotent-Replayed: true` with the same total. A negative amount takes
+   money out; taking out more than is saved, or dating it after today, is refused
+   (`EXPENSE_CONTRIBUTION_INVALID`, 422, with the `reason` in `details`).
+3. Add `{"amount_minor": 3800000}` with a new key. The goal is `reached`, and `GET
+   /v1/notifications` has one `expenses.goal_reached`. Looking at the goals again tells nothing
+   new; raising the target and reaching it again does.
+4. `POST /v1/expenses/goals` with `{"name": "Cushion", "target_minor": 10000000, "funding":
+   "net_savings", "since": "<the first of this month>"}`. Its `saved_minor` equals
+   `total.net_minor` of `GET /v1/expenses/analytics/net?from=<the same day>&to=<today>`: money
+   in less money out, never below 0. Add an income entry and it grows; it takes no contributions.
+
+A goal is revisioned like an entry: `PATCH` takes the `revision_no` it edited (409 when the goal
+has moved on, for example when money was added meanwhile), `DELETE` keeps it, and
+`POST /v1/expenses/goals/<id>/undelete` brings it back. Each contribution is one revision that
+records that line alone, so history grows with the number of lines. Contributions that arrive
+at the same moment land once each: a write that loses the race is tried again after a random
+pause that widens each time, up to `ledger.retries` times. One that still loses answers 409
+`VERSION_CONFLICT`, and sending it again with the same key is safe. A goal holds at most
+`ledger.max_lines` contributions (`EXPENSE_LEDGER_FULL`, 409).
+
+### Repeating entries and bills
+
+1. An electricity bill that reminds: `POST /v1/expenses/recurring` with
+   `{"template": {"title": "Electricity", "amount_minor": 120000, "category_id": "utilities"}, "cadence": {"unit": "month", "anchor": "<a day two days ahead>"}, "mode": "remind", "remind_days_before": 2}`.
+   `GET /v1/reminders` lists it, due on that day. It is told two days before, at
+   `REMINDERS_SEND_HOUR` your time: today, so at once if that hour has passed.
+2. `GET /v1/notifications` (the bell) then has one `expenses.bill_due`. Poll again, or run the
+   cron (see [Scheduled jobs](#scheduled-jobs)) as often as you like: still one.
+3. `POST /v1/expenses/recurring/<id>/mark-paid` with `{"due_on": "<that day>"}` adds the
+   Electricity entry (its `recurring_id` is the rule) and moves the bill on: `next_run` is a
+   month later, and the reminder with it. Send it again and the answer carries
+   `Idempotent-Replayed: true` with the same entry. A day that isn't a due date, or one after
+   `next_run`, is refused (`EXPENSE_RECURRING_NOT_DUE`, 422). Unpaid, a bill stays due:
+   `GET /v1/expenses/recurring` shows it `overdue` once the day has passed.
+4. Something that adds itself: the same `POST` with `"mode": "auto_create"`, a `"unit":
+   "week"` and today as the anchor adds today's entry at once (`source: recurring`), and each
+   next one on its day when the bell or the cron catches up.
+5. Add three entries named "Milk", a week apart, the last within the week. `GET
+   /v1/expenses/recurring/suggestions` offers a weekly rule for it. Confirm it by sending that
+   suggestion's `template`, `cadence` and `signature` (with a `mode`) to `POST
+   /v1/expenses/recurring`; confirming it twice finds the same rule. Or
+   `POST /v1/expenses/recurring/suggestions/dismiss` with its `signature`: it is not suggested
+   again.
+
+Each due date is worked out from the anchor, so a month's day is kept (31 Jan, 28 Feb, 31 Mar).
+A new rule starts at its first due date from today; nothing before today is added. Each due
+date adds one entry at most, however many runs meet: its client key is
+`recurring/<rule>/<due date>`. After a long time away, a rule adds at most
+`recurring.max_catch_up` entries (the latest). `PATCH` changes only what is sent; a new pace
+starts again from today, and so does a paused rule switched back on, or a bill switched to
+adding itself, unless a later due date was paid already. Pausing or deleting a bill stops its
+reminders, and deleting a rule confirmed from a suggestion dismisses that suggestion. A rule
+keeps its category even once archived, and so do the entries it adds. Its amount is in the
+currency it was made in: after the base currency changes, its entries are refused
+(`EXPENSE_CURRENCY_UNSUPPORTED`), never relabelled.
+Suggestions are found afresh from the last `recurring.detect.lookback_days` of your own entries
+(not those a rule added): at least `min_occurrences` at a steady pace and amount.
+
+### Loans
+
+1. `POST /v1/expenses/ious` with the header `Idempotency-Key: ravi-loan-1` and
+   `{"counterparty": "Ravi", "direction": "lent", "amount_minor": 100000, "due_on": "<tomorrow>"}`.
+   Send it again and the answer carries `Idempotent-Replayed: true` with the same loan. A loan is
+   never an entry: `GET /v1/expenses/entries` is unchanged.
+2. `GET /v1/reminders` lists it, due tomorrow. It is told `ious.remind_days_before` day before, at
+   `REMINDERS_SEND_HOUR` your time: today, so at once if that hour has passed. `GET
+   /v1/notifications` (the bell) then has one `expenses.iou_due_lent`, however often it polls or
+   the cron runs (see [Scheduled jobs](#scheduled-jobs)).
+3. `POST /v1/expenses/ious/<id>/settlements` with the header `Idempotency-Key: ravi-pay-1` and
+   `{"amount_minor": 40000}`: `outstanding_minor` is 60000. Send it again and nothing more is
+   paid. More than is left, below nothing, or dated after today or before the loan is refused
+   (`EXPENSE_SETTLEMENT_INVALID`, 422, with the `reason` and `outstanding_minor` in `details`); a
+   negative amount corrects a payment.
+4. `POST /v1/expenses/ious` with `{"counterparty": "ravi ", "direction": "borrowed",
+   "amount_minor": 30000}` and a new key. `GET /v1/expenses/ious/summary` has one person, `ravi`,
+   with `owed_to_me_minor` 60000, `i_owe_minor` 30000, `net_minor` 30000 and `next_due_on`
+   tomorrow.
+5. Pay the rest of the first loan (`{"amount_minor": 60000}`, a new key). It has `settled_on`,
+   leaves `GET /v1/expenses/ious` (open ones by default; `?state=settled` or `all`), and its
+   reminder is cancelled.
+
+A loan is revisioned like a goal: `PATCH` takes the `revision_no` it edited (409 when the loan has
+moved on, for example when a payment came in meanwhile) and never sets the amount below what was
+paid back (`EXPENSE_IOU_BELOW_SETTLED`, 422); a new `due_on` moves the reminder. `DELETE` keeps it
+and stops its reminder, and `POST /v1/expenses/ious/<id>/undelete` brings it back.
+`GET /v1/expenses/ious/<id>` reads one loan (a reminder's link names the loan, not the person).
+Payments that arrive at the same moment never take what is paid back past the amount, and each
+lands once per key. `?person=` lists one person's loans by name as compared ("Ravi" and "ravi "
+are one person). The summary counts the loans in the user's base currency.
+
+### Loans by voice
+
+With AI off (static mode), or on:
+
+1. `POST /v1/agents/assistant/runs` with
+   `{"input": "lent Ravi 500", "skill": "track-expenses", "context": {"input_type": "text"}}`.
+   The answer has `message_code` `track-expenses.ready.iou` and one client action,
+   `expenses_iou_draft`, with `{"action": "new", "direction": "lent", "counterparty": "Ravi",
+   "amount": 500.0, "uncertain": ["counterparty"]}`. Nothing is saved: `GET /v1/expenses/ious`
+   is still empty.
+2. The app saves what the user checked: `POST /v1/expenses/ious` with the header
+   `Idempotency-Key: ravi-1` and `{"counterparty": "Ravi", "direction": "lent", "amount_minor":
+   50000}`. `GET /v1/expenses/ious/summary` has `owed_to_me_minor` 50000.
+3. Ask again with `"input": "Ravi paid me back 200"`: a `repay` draft for a loan you lent.
+   Saving it is `POST /v1/expenses/ious/<id>/settlements` with a new key and
+   `{"amount_minor": 20000}`; the loan's `outstanding_minor` is then 30000.
+
+Only explicit loan words count (`references/ious.yaml` of the track-expenses skill): "gave
+Ravi 500" is an expense, a refund or change from a shop is never a loan, and a sentence that
+mixes a loan with spending ("lent Ravi 500 and paid 300 for lunch") stays entries in static
+mode. Being paid back is read only when asked from the Expenses page (with `input_type`): from
+the general assistant, "I'll be back in 10 minutes" is not a payment. Each part of a sentence is
+its own loan, and the direction is marked for checking when the words don't say who gave ("Ravi
+paid back 500"). With AI on, the model looks the loan up with `expenses_ious` and hands its
+`iou_id` over; a draft that doesn't fit that loan (the other way round, or paid back already)
+goes back to the model as `EXPENSE_SETTLEMENT_INVALID`.
+
 ## Tasks
 
 | Command | What it does |
@@ -111,7 +325,7 @@ Every response carries an `X-Request-ID` header. Send your own (8–128 characte
 | `poe lint` | ruff check, format check, mypy `--strict` (app, tests and each skill's scripts), import-linter |
 | `poe fmt` | Auto-format and auto-fix |
 | `poe audit` | pip-audit on the pinned runtime dependencies |
-| `poe actionlint` | Lint the GitHub Actions workflow |
+| `poe actionlint` | Lint every GitHub Actions workflow |
 | `poe check` | **Everything CI runs**: lint, test, audit, actionlint |
 | `poe lock` | Re-pin `requirements/*.lock` from `pyproject.toml` |
 | `poe sync` | Make `.venv` match `requirements/dev.lock` exactly |
@@ -174,14 +388,17 @@ app/
     agents/          skill-driven agent runtime: catalog, tools, policy, providers, /v1/agents
     assistant/       agents/assistant.md: the agent behind "Ask" in the command palette
     dashboard/       widget contract (@widget), /v1/dashboard
+    jobs/            job contract (@job), daily leases, catch-up, /v1/internal/jobs (cron)
     activity/        ActivityLog, /v1/activity, activity widgets
     notifications/   Inbox, /v1/notifications, tools.py + skills/check-notifications
+    reminders/       Reminders (schedule, cancel, deliver once), /v1/reminders (snooze, dismiss)
     admin/           /v1/admin/*: the only place an unrestricted Scope is allowed
     context.py       ActorContext: what tools and widgets receive
-    plugins.py       folder discovery shared by modules, agents, skills, tools and widgets
+    plugins.py       folder discovery shared by modules, agents, skills, tools, widgets and jobs
   modules/           feature modules, auto-discovered
     expenses/        entries with history, categories, products and prices, analytics and
-                     insights, tile, widgets, tools, skills track-expenses, tidy-products
+                     insights, budgets, goals, repeating entries and bills, loans, tile,
+                     widgets, tools, jobs, skills track-expenses, tidy-products
                      and explain-spending (beta);
                      parsing/: the rule parser (vocabulary in skills/track-expenses/references)
     medicine/ ...    the other seven: manifest only, coming soon

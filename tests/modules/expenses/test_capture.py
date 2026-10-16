@@ -207,6 +207,8 @@ async def test_ai_looks_things_up_and_hands_over_drafts(agent_client: AgentClien
         "expenses_list",
         "expenses_draft",
         "expenses_open",
+        "expenses_ious",
+        "expenses_iou_draft",
     }
     assert '"id": "groceries"' in looked_up[0]
     assert json.loads(looked_up[1])["result"] == [

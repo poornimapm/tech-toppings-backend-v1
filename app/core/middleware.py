@@ -18,6 +18,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.core.config import Settings
 from app.core.context import REQUEST_ID_HEADER, request_id_var
+from app.core.idempotency import REPLAYED_HEADER
 from app.core.logging import get_logger
 
 logger = get_logger("app.access")
@@ -121,7 +122,8 @@ def install_middleware(app: FastAPI, settings: Settings) -> None:
             allow_credentials=True,
             allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
             allow_headers=["Authorization", "Content-Type", "Idempotency-Key", REQUEST_ID_HEADER],
-            expose_headers=[REQUEST_ID_HEADER],
+            # A client tells a replayed create (a retry after a lost reply) by its header.
+            expose_headers=[REQUEST_ID_HEADER, REPLAYED_HEADER],
         )
     app.add_middleware(
         SecurityHeadersMiddleware,

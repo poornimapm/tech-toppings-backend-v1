@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import ClassVar
+from collections.abc import Mapping
+from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field
 from pymongo import ASCENDING, DESCENDING, IndexModel
@@ -45,6 +46,7 @@ class Entry(RevisionedDocument):
     note: str | None = None
     attachments: list[Attachment] = Field(default_factory=list)
     source: EntrySource = EntrySource.MANUAL
+    recurring_id: str | None = None  # the repeating rule that added it, or whose bill it paid
 
     class Settings:
         name = "expenses"
@@ -74,3 +76,23 @@ class EntryRevision(Revision):
 class EntryRepository(RevisionedRepository[Entry]):
     model: ClassVar[type[OwnedDocument]] = Entry
     revisions: ClassVar[type[Revision]] = EntryRevision
+
+
+async def sums(criteria: Mapping[str, Any], *by: str) -> list[dict[str, Any]]:
+    """Total ``amount_minor`` and the number of entries matching ``criteria`` (a repository
+    ``query()``), for each combination of the ``by`` fields. It lives beside the model, not in
+    the entries service, so figures (analytics, budgets) can read entries without importing the
+    service that calls them back after each save."""
+    cursor = await Entry.get_pymongo_collection().aggregate(
+        [
+            {"$match": dict(criteria)},
+            {
+                "$group": {
+                    "_id": {name: f"${name}" for name in by},
+                    "amount_minor": {"$sum": "$amount_minor"},
+                    "count": {"$sum": 1},
+                }
+            },
+        ]
+    )
+    return [{**row.pop("_id"), **row} async for row in cursor]

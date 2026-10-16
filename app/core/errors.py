@@ -9,12 +9,12 @@ translate them by ``code``.
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Any, ClassVar
+from typing import Any, ClassVar, TypeVar
 
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.context import REQUEST_ID_HEADER, current_request_id
@@ -115,6 +115,21 @@ class ServiceNotReadyError(AppError):
 def error_responses(*status_codes: int) -> dict[int | str, dict[str, Any]]:
     """OpenAPI ``responses=`` entries documenting the error envelope for these statuses."""
     return {code: {"model": ErrorResponse} for code in status_codes}
+
+
+TModel = TypeVar("TModel", bound=BaseModel)
+
+
+def patched(model: type[TModel], current: object, changes: BaseModel) -> TModel:
+    """``current``'s fields of ``model`` with those ``changes`` sets (anything else it carries,
+    like the revision edited, is left out), checked as a whole. A change that is fine alone but
+    leaves a record that doesn't fit together is refused as a bad request is (422)."""
+    merged = {name: getattr(current, name) for name in model.model_fields}
+    sent = changes.model_dump(exclude_unset=True, include=set(model.model_fields))
+    try:
+        return model.model_validate(merged | sent)
+    except ValidationError as exc:  # e.g. a required field cleared
+        raise RequestValidationError(exc.errors()) from exc
 
 
 # Used as the app-wide default so OpenAPI documents the envelope instead of FastAPI's

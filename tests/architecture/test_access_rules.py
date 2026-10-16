@@ -1,5 +1,5 @@
-"""Guards from the reference analysis: auth is the default, and unrestricted data access is
-only possible from admin routes."""
+"""Guards from the reference analysis: auth is the default, unrestricted data access is only
+possible from admin routes, and no route hides from these checks except the jobs endpoint."""
 
 from __future__ import annotations
 
@@ -24,6 +24,9 @@ PUBLIC_ROUTES = {
     ("POST", "/v1/auth/logout"),
 }
 UNRESTRICTED_SCOPE_ALLOWED = ("platform/admin/",)  # plus its definition in core/repository.py
+# The checks above read the OpenAPI schema, so a hidden route escapes them. Only the cron's
+# token-protected endpoint may hide (tests/platform/jobs/test_internal_endpoint.py covers it).
+HIDDEN_ROUTES_ALLOWED = {"platform/jobs/router.py"}
 
 
 async def test_every_non_public_route_requires_a_bearer_token(
@@ -57,3 +60,13 @@ def test_unrestricted_scope_is_only_used_by_admin_code() -> None:
             offenders.append(relative)
 
     assert offenders == []
+
+
+def test_only_the_job_endpoint_is_hidden() -> None:
+    hiding = {
+        path.relative_to(APP_DIR).as_posix()
+        for path in APP_DIR.rglob("*.py")
+        if "include_in_schema" in path.read_text(encoding="utf-8")
+    }
+
+    assert hiding == HIDDEN_ROUTES_ALLOWED

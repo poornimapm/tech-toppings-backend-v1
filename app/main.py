@@ -5,8 +5,8 @@ Run locally with ``poe dev`` (uvicorn ``--factory app.main:create_app``). Tests 
 
 Feature modules are discovered from ``MODULES_PACKAGES`` (ADR-0001): dropping a folder with a
 ``manifest.py`` into ``app/modules`` registers its documents, mounts its routes under
-``/v1/<slug>`` and lists it on the Welcome page, with no edit here. Agents, skills, tools and
-dashboard widgets are discovered the same way from platform sub-packages and modules.
+``/v1/<slug>`` and lists it on the Welcome page, with no edit here. Agents, skills, tools,
+dashboard widgets and jobs are discovered the same way from platform sub-packages and modules.
 """
 
 from __future__ import annotations
@@ -38,11 +38,14 @@ from app.platform.auth.router import sessions_router
 from app.platform.dashboard.router import router as dashboard_router
 from app.platform.dashboard.service import discover_widgets
 from app.platform.health.router import router as health_router
+from app.platform.jobs.router import router as jobs_router
+from app.platform.jobs.runner import discover_jobs
 from app.platform.modules.discovery import discover_modules
 from app.platform.modules.registry import ModuleRegistry
 from app.platform.modules.router import router as modules_router
 from app.platform.notifications.router import router as notifications_router
 from app.platform.plugins import subpackages
+from app.platform.reminders.router import router as reminders_router
 from app.platform.users.router import router as me_router
 
 logger = get_logger(__name__)
@@ -101,6 +104,7 @@ def create_app(settings: Settings | None = None, *, clock: Clock | None = None) 
     app.state.modules = modules
     app.state.agents = agents
     app.state.widgets = discover_widgets(plugin_packages)
+    app.state.jobs = discover_jobs(plugin_packages)
     app.state.clock = clock
     app.state.rate_limiter = RateLimiter(settings.rate_limit)
     app.state.password_hasher = PasswordHasher(settings.auth)
@@ -123,7 +127,9 @@ def create_app(settings: Settings | None = None, *, clock: Clock | None = None) 
     api_v1.include_router(dashboard_router)
     api_v1.include_router(activity_router)
     api_v1.include_router(notifications_router)
+    api_v1.include_router(reminders_router)
     api_v1.include_router(admin_router)
+    api_v1.include_router(jobs_router)
     modules.mount(api_v1)
     app.include_router(api_v1)
     return app
