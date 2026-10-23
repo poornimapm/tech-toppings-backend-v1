@@ -36,11 +36,16 @@ from app.core.revisions import (
     VersionConflictError,
 )
 from app.platform.activity.log import Activity, ActivityLog
+from app.platform.admin.deps import AdminAction, AdminActionDep, AdminDep
+from app.platform.admin.tally import ErrorTally
 from app.platform.agents.catalog import StaticOutcome, StaticRequest
 from app.platform.agents.lexicon import load_lexicon, match_action, normalise
 from app.platform.agents.models import AgentRun, AgentUsage, RunStatus
 from app.platform.agents.runtime import run_skill
 from app.platform.agents.tools import ToolBox, tool
+from app.platform.audit.models import AuditEntry
+from app.platform.audit.service import AuditLog
+from app.platform.auth.allowlist import AllowedEmail
 from app.platform.auth.deps import AdminUser, CurrentUser, UserScope
 from app.platform.auth.models import AuthSession
 from app.platform.context import ActorContext, ActorDep
@@ -79,6 +84,9 @@ PLATFORM_DOCUMENTS = (
     JobRun,
     Reminder,
     FxRate,
+    AuditEntry,
+    AllowedEmail,
+    ErrorTally,
 )
 
 __all__ = [
@@ -90,9 +98,13 @@ __all__ = [
     "ActivityLog",
     "ActorContext",
     "ActorDep",
+    "AdminAction",
+    "AdminActionDep",
+    "AdminDep",
     "AdminUser",
     "AgentMode",
     "AppError",
+    "AuditLog",
     "Clock",
     "ClockDep",
     "ConflictError",

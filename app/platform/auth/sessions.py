@@ -27,8 +27,6 @@ logger = get_logger(__name__)
 
 # Predecessor digests kept per session for reuse detection.
 PREVIOUS_TOKENS_KEPT = 50
-# Ended sessions are kept this long (for reuse detection) before the TTL index drops them.
-PURGE_GRACE = timedelta(days=7)
 
 
 @dataclass(frozen=True)
@@ -63,7 +61,8 @@ class SessionService:
                 "last_used_at": now,
                 "expires_at": self._sliding_expiry(now, absolute),
                 "absolute_expires_at": absolute,
-                "purge_at": absolute + PURGE_GRACE,
+                # Kept past its end (for reuse detection) before the TTL index drops it.
+                "purge_at": absolute + timedelta(days=self.settings.session_purge_grace_days),
                 "user_agent": client.user_agent,
                 "ip": client.ip,
             }

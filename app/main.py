@@ -14,6 +14,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+from beanie import Document
 from fastapi import APIRouter, FastAPI
 
 from app.core.clock import Clock, SystemClock
@@ -28,6 +29,7 @@ from app.core.security import PasswordHasher
 from app.platform import PLATFORM_DOCUMENTS
 from app.platform.activity.router import router as activity_router
 from app.platform.admin.router import router as admin_router
+from app.platform.admin.tally import error_tally
 from app.platform.agents.catalog import discover_agents
 from app.platform.agents.providers import ProviderChain
 from app.platform.agents.router import router as agents_router
@@ -35,6 +37,7 @@ from app.platform.agents.runtime import AgentRuntime
 from app.platform.auth.google import GoogleIdTokenVerifier
 from app.platform.auth.router import router as auth_router
 from app.platform.auth.router import sessions_router
+from app.platform.auth.two_factor_router import router as two_factor_router
 from app.platform.dashboard.router import router as dashboard_router
 from app.platform.dashboard.service import discover_widgets
 from app.platform.fx.router import router as fx_router
@@ -46,6 +49,7 @@ from app.platform.modules.registry import ModuleRegistry
 from app.platform.modules.router import router as modules_router
 from app.platform.notifications.router import router as notifications_router
 from app.platform.plugins import subpackages
+from app.platform.privacy.router import router as privacy_router
 from app.platform.reminders.router import router as reminders_router
 from app.platform.search.router import router as search_router
 from app.platform.search.service import discover_search
@@ -60,7 +64,8 @@ def create_app(settings: Settings | None = None, *, clock: Clock | None = None) 
     settings = settings or get_settings()
     configure_logging(settings.log)
     modules = ModuleRegistry(discover_modules(settings.modules.packages))
-    database = Database(settings.mongo, document_models=[*PLATFORM_DOCUMENTS, *modules.documents()])
+    documents: list[type[Document]] = [*PLATFORM_DOCUMENTS, *modules.documents()]
+    database = Database(settings.mongo, document_models=documents)
     http_client = build_http_client(settings.app)
     clock = clock or SystemClock()
     plugin_packages = [
@@ -73,6 +78,7 @@ def create_app(settings: Settings | None = None, *, clock: Clock | None = None) 
         settings.agent,
         clock,
     )
+    tally = error_tally(clock, settings.admin)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
@@ -88,6 +94,7 @@ def create_app(settings: Settings | None = None, *, clock: Clock | None = None) 
         try:
             yield
         finally:
+            await tally.close()  # the error counts not yet written
             await http_client.aclose()
             await database.close()
             logger.info("app_stopped")
@@ -105,12 +112,14 @@ def create_app(settings: Settings | None = None, *, clock: Clock | None = None) 
     app.state.settings = settings
     app.state.database = database
     app.state.modules = modules
+    app.state.documents = documents  # every collection, for a person's export and erasure
     app.state.agents = agents
     app.state.widgets = discover_widgets(plugin_packages)
     app.state.jobs = discover_jobs(plugin_packages)
     app.state.searchers = discover_search(plugin_packages)
     app.state.clock = clock
     app.state.http = http_client
+    app.state.tally = tally
     app.state.rate_limiter = RateLimiter(settings.rate_limit)
     app.state.password_hasher = PasswordHasher(settings.auth)
     app.state.google_verifier = (
@@ -126,7 +135,9 @@ def create_app(settings: Settings | None = None, *, clock: Clock | None = None) 
     api_v1 = APIRouter(prefix=API_V1_PREFIX)
     for router in (
         auth_router,
+        two_factor_router,
         me_router,
+        privacy_router,
         sessions_router,
         modules_router,
         agents_router,

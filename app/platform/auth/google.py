@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -24,6 +25,7 @@ class GoogleIdentity:
     subject: str
     email: str
     name: str | None
+    issued_at: datetime  # when Google signed the token: how fresh a sign-in is
 
 
 class GoogleIdTokenVerifier:
@@ -79,4 +81,5 @@ class GoogleIdTokenVerifier:
             subject=str(claims["sub"]),
             email=email,
             name=name if isinstance(name, str) else None,
+            issued_at=datetime.fromtimestamp(int(claims["iat"]), UTC),
         )

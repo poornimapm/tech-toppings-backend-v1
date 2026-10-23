@@ -100,3 +100,46 @@ class CurrentPasswordInvalidError(AppError):
     status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
     code = "AUTH_CURRENT_PASSWORD_INVALID"
     default_message = "The current password is incorrect."
+
+
+# ---------------------------------------------------------------------- two-step sign-in
+
+
+class TwoFactorCodeInvalidError(AppError):
+    # 422 like a wrong current password: never mistaken for an ended session.
+    status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
+    code = "AUTH_TWO_FACTOR_CODE_INVALID"
+    default_message = "That code is incorrect or was already used."
+
+
+class TwoFactorChallengeInvalidError(UnauthenticatedError):
+    code = "AUTH_TWO_FACTOR_CHALLENGE_INVALID"
+    default_message = "This sign-in has expired. Please sign in again."
+
+
+class TwoFactorAlreadyOnError(ConflictError):
+    code = "AUTH_TWO_FACTOR_ALREADY_ON"
+    default_message = "Two-step sign-in is already on."
+
+
+class TwoFactorOffError(ConflictError):
+    code = "AUTH_TWO_FACTOR_OFF"
+    default_message = "Two-step sign-in is off."
+
+
+class TwoFactorNotSetUpError(ConflictError):
+    code = "AUTH_TWO_FACTOR_NOT_SET_UP"
+    default_message = "Start the setup first, then confirm it with a code."
+
+
+class GoogleReauthError(AppError):
+    # 422 like a wrong current password: never mistaken for an ended session.
+    status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
+    code = "AUTH_GOOGLE_REAUTH_REQUIRED"
+    default_message = "Sign in with Google again to confirm it's you."
+
+
+class TwoFactorUnavailableError(AppError):
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    code = "AUTH_TWO_FACTOR_UNAVAILABLE"
+    default_message = "Two-step sign-in isn't available on this server."

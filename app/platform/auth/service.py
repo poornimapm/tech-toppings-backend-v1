@@ -10,6 +10,7 @@ from app.core.clock import Clock
 from app.core.config import RegistrationMode, Settings
 from app.core.logging import get_logger
 from app.core.security import PasswordHasher, password_policy_violations
+from app.platform.auth.allowlist import is_allowed
 from app.platform.auth.errors import (
     AccountDisabledError,
     AccountLockedError,
@@ -20,8 +21,10 @@ from app.platform.auth.errors import (
     RefreshInvalidError,
     RegistrationClosedError,
     RegistrationNotAllowedError,
+    TwoFactorChallengeInvalidError,
 )
 from app.platform.auth.google import GoogleIdTokenVerifier
+from app.platform.auth.reauth import Reauth
 from app.platform.auth.schemas import (
     AuthConfigOut,
     LoginIn,
@@ -31,6 +34,7 @@ from app.platform.auth.schemas import (
 )
 from app.platform.auth.sessions import ClientInfo, IssuedRefresh, SessionService
 from app.platform.auth.tokens import AccessTokenService
+from app.platform.auth.two_factor import TwoFactor
 from app.platform.users.models import AuthProvider, User
 from app.platform.users.repository import EmailTakenError, UserRepository, normalise_email
 
@@ -47,6 +51,14 @@ class AuthResult:
     refresh: IssuedRefresh
 
 
+@dataclass(frozen=True)
+class TwoFactorChallenge:
+    """The first factor passed; a code from ``/login/totp`` finishes signing in."""
+
+    token: str
+    expires_in: int
+
+
 class AuthService:
     def __init__(  # noqa: PLR0913 - keyword-only dependencies
         self,
@@ -58,6 +70,8 @@ class AuthService:
         tokens: AccessTokenService,
         hasher: PasswordHasher,
         google: GoogleIdTokenVerifier | None,
+        two_factor: TwoFactor,
+        reauth: Reauth,
     ) -> None:
         self.settings = settings
         self.auth = settings.auth
@@ -67,6 +81,8 @@ class AuthService:
         self.tokens = tokens
         self.hasher = hasher
         self.google = google
+        self.two_factor = two_factor
+        self.reauth = reauth
 
     # ------------------------------------------------------------------ queries
 
@@ -86,7 +102,7 @@ class AuthService:
 
     async def register(self, data: RegisterIn, client: ClientInfo) -> AuthResult:
         email = normalise_email(str(data.email))
-        self._ensure_can_register(email)
+        await self._ensure_can_register(email)
         self._ensure_password_policy(data.password)
         if await self.users.by_email(email) is not None:
             raise EmailTakenError
@@ -96,7 +112,7 @@ class AuthService:
         logger.info("auth_registered", user_id=str(user.id))
         return await self._issue(user, client)
 
-    async def login(self, data: LoginIn, client: ClientInfo) -> AuthResult:
+    async def login(self, data: LoginIn, client: ClientInfo) -> AuthResult | TwoFactorChallenge:
         user = await self.users.by_email(str(data.email))
         now = self.clock.now()
         if user is not None and user.locked_until is not None and user.locked_until > now:
@@ -114,8 +130,28 @@ class AuthService:
         rehash = None
         if user.password_hash and self.hasher.needs_rehash(user.password_hash):
             rehash = await self.hasher.hash(data.password)
+        if user.two_factor:
+            if rehash is not None:  # the password was right: its hash can be upgraded now
+                await self.users.update(user.id, {"password_hash": rehash})
+            return self._challenge(user)
         user = await self.users.record_successful_login(user.id, new_password_hash=rehash)
         logger.info("auth_login_succeeded", user_id=str(user.id))
+        return await self._issue(user, client)
+
+    async def login_two_factor(
+        self, challenge_token: str, code: str, client: ClientInfo
+    ) -> AuthResult:
+        """The second step: the challenge from the first, and a TOTP or recovery code."""
+        claims = self.tokens.verify_challenge(challenge_token)
+        user = await self.users.by_id(claims.user_id)
+        # A password change, a reset or 2FA turned off since the first step ends the challenge.
+        if user is None or user.token_version != claims.token_version or not user.two_factor:
+            raise TwoFactorChallengeInvalidError
+        if not user.is_active:
+            raise AccountDisabledError
+        spent = await self.two_factor.check(user, code, client.ip)
+        user = await self.users.record_successful_login(claims.user_id)
+        logger.info("auth_login_succeeded", user_id=str(user.id), second_factor=spent)
         return await self._issue(user, client)
 
     async def refresh(self, refresh_token: str | None, client: ClientInfo) -> AuthResult:
@@ -145,11 +181,15 @@ class AuthService:
         user_id = user.id
         if user_id is None:
             raise InvalidCredentialsError
-        # Accounts created through Google have no password yet and may set one directly.
-        if user.password_hash is not None and not await self.hasher.verify(
-            user.password_hash, data.current_password
-        ):
-            raise CurrentPasswordInvalidError
+        if user.password_hash is not None:
+            if not await self.hasher.verify(user.password_hash, data.current_password or ""):
+                raise CurrentPasswordInvalidError
+        else:
+            # An account made through Google sets its first password with proof it's them, now:
+            # a session alone could be stolen, and a password would open DELETE /v1/me to it.
+            await self.reauth.confirm(user, password=None, google_id_token=data.google_id_token)
+            if user.two_factor:
+                await self.two_factor.check(user, data.code or "", client.ip)
         self._ensure_password_policy(data.new_password)
         if data.new_password == data.current_password:
             raise PasswordPolicyError(details=self._policy_details(["same_as_current"]))
@@ -163,7 +203,9 @@ class AuthService:
         logger.info("auth_password_changed", user_id=str(user_id))
         return await self._issue(user, client)
 
-    async def google_sign_in(self, id_token: str, client: ClientInfo) -> AuthResult:
+    async def google_sign_in(
+        self, id_token: str, client: ClientInfo
+    ) -> AuthResult | TwoFactorChallenge:
         if self.google is None:
             raise GoogleSignInDisabledError
         identity = await self.google.verify(id_token)
@@ -178,7 +220,7 @@ class AuthService:
                     push={"auth_providers": {"provider": GOOGLE, "subject": identity.subject}},
                 )
             else:
-                self._ensure_can_register(identity.email)
+                await self._ensure_can_register(identity.email)
                 user = await self.users.create(
                     self._new_user(
                         identity.email,
@@ -189,6 +231,8 @@ class AuthService:
                 )
         if not user.is_active or user.id is None:
             raise AccountDisabledError
+        if user.two_factor:
+            return self._challenge(user)
         user = await self.users.record_successful_login(user.id)
         logger.info("auth_google_sign_in", user_id=str(user.id))
         return await self._issue(user, client)
@@ -199,14 +243,14 @@ class AuthService:
         admin = self.settings.bootstrap.email
         return admin is not None and normalise_email(str(admin)) == email
 
-    def _ensure_can_register(self, email: str) -> None:
+    async def _ensure_can_register(self, email: str) -> None:
         email = normalise_email(email)
         if self._is_bootstrap_admin(email):
             return
         mode = self.auth.registration_mode
         if mode is RegistrationMode.CLOSED:
             raise RegistrationClosedError
-        if mode is RegistrationMode.ALLOWLIST and email not in self.auth.allowed_emails:
+        if mode is RegistrationMode.ALLOWLIST and not await is_allowed(email, self.auth):
             raise RegistrationNotAllowedError
 
     def _policy_details(self, violations: list[str]) -> dict[str, object]:
@@ -243,6 +287,11 @@ class AuthService:
             created_at=now,
             updated_at=now,
         )
+
+    def _challenge(self, user: User) -> TwoFactorChallenge:
+        token, expires_in = self.tokens.issue_challenge(user)
+        logger.info("auth_two_factor_asked", user_id=str(user.id))
+        return TwoFactorChallenge(token=token, expires_in=expires_in)
 
     async def _issue(self, user: User, client: ClientInfo) -> AuthResult:
         return self._result(user, await self.sessions.start(user, client))

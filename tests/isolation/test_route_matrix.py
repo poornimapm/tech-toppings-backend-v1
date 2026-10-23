@@ -30,6 +30,9 @@ from app.platform.users.models import User
 from tests.helpers import CSRF, Account, FrozenClock, api_operations, build_settings, register
 
 PATH_PARAM = re.compile(r"{(\w+)}")
+# Admin routes reach every user's data by design; tests/architecture/test_access_rules.py
+# checks that each one answers 403 to anyone but an admin (and 401 to nobody signed in).
+ADMIN_PREFIX = "/v1/admin/"
 RULE_DUE_ON = "2030-01-05"  # the owner's bill's first due date: payable by them, not by others
 WRITE_BODIES: dict[str, dict[str, object]] = {
     "PATCH": {"text": "hijacked"},
@@ -85,7 +88,7 @@ def id_routes(app: FastAPI) -> list[IdRoute]:
     routes: list[IdRoute] = []
     for method, path in api_operations(app):
         params = PATH_PARAM.findall(path)
-        if not params:
+        if not params or path.startswith(ADMIN_PREFIX):
             continue
         assert len(params) == 1, f"extend the matrix for multi-id route {path}"
         routes.append(IdRoute(method, path, params[0]))

@@ -7,6 +7,7 @@ Tests use a real MongoDB (default ``mongodb://localhost:27017``; override with
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import uuid
@@ -25,9 +26,11 @@ from pydantic import SecretStr
 
 from app.core.clock import Clock
 from app.core.config import (
+    AdminSettings,
     AgentSettings,
     ApiSettings,
     AppSettings,
+    AuditSettings,
     AuthSettings,
     BootstrapSettings,
     CorsSettings,
@@ -57,6 +60,7 @@ TEST_MONGO_BASE_URI = os.environ.get("TEST_MONGO_URI", "mongodb://localhost:2701
 UNREACHABLE_MONGO_URI = "mongodb://127.0.0.1:1/tt-unreachable"
 
 TEST_JWT_SECRET = "test-secret-" + "x" * 40
+TEST_FIELD_KEY = base64.urlsafe_b64encode(b"test-field-key-".ljust(32, b"k")).decode()
 CSRF = {"X-TT-CSRF": "1"}
 # The real modules plus the test-only ones (tests/fixtures/modules), e.g. "notes".
 TEST_MODULE_PACKAGES = ("app.modules", "tests.fixtures.modules")
@@ -85,6 +89,7 @@ def auth_settings(**overrides: Any) -> AuthSettings:
         "registration_mode": RegistrationMode.OPEN,
         "argon2_time_cost": 1,
         "argon2_memory_kib": 8192,
+        "field_encryption_key": SecretStr(TEST_FIELD_KEY),
     }
     return AuthSettings(_env_file=None, **(values | overrides))
 
@@ -109,6 +114,8 @@ def build_settings(mongo_uri: str, **groups: Any) -> Settings:
         "reminders": RemindersSettings(_env_file=None),
         "search": SearchSettings(_env_file=None),
         "fx": FxSettings(_env_file=None),
+        "audit": AuditSettings(_env_file=None),
+        "admin": AdminSettings(_env_file=None, error_tally_flush_seconds=0),  # counted at once
         "bootstrap": BootstrapSettings(_env_file=None),
     }
     return Settings(**(defaults | groups))

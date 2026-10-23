@@ -29,6 +29,7 @@ class EntrySource(StrEnum):
     RECURRING = "recurring"  # added by a repeating rule on its day
     BULK = "bulk"  # changed with others at once, from the list
     IMPORT = "import"  # read from a CSV file
+    ADMIN = "admin"  # corrected by an admin (the revision names who)
 
 
 class RuleMode(StrEnum):

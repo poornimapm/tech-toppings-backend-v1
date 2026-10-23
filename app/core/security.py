@@ -7,17 +7,21 @@ loop responsive.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import secrets
 import string
+import struct
 from datetime import datetime
 from typing import Any
+from urllib.parse import quote
 
 import anyio
 import jwt
 from argon2 import PasswordHasher as Argon2Hasher
 from argon2.exceptions import InvalidHashError, VerificationError
+from cryptography.fernet import Fernet, InvalidToken
 from pydantic import SecretStr
 
 from app.core.config import AuthSettings
@@ -115,3 +119,73 @@ def decode_jwt(token: str, secret: str, *, audience: str, issuer: str) -> dict[s
 
 def epoch(moment: datetime) -> int:
     return int(moment.timestamp())
+
+
+# ---------------------------------------------------------------------- TOTP (RFC 6238)
+
+TOTP_STEP_SECONDS = 30
+TOTP_DIGITS = 6
+TOTP_SECRET_BYTES = 20  # 160 bits, as RFC 4226 recommends
+RECOVERY_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"  # no 0/o, 1/l/i
+
+
+def new_totp_secret() -> str:
+    """A shared secret, base32 as authenticator apps take it."""
+    return base64.b32encode(secrets.token_bytes(TOTP_SECRET_BYTES)).decode().rstrip("=")
+
+
+def totp_step(moment: datetime) -> int:
+    return int(moment.timestamp()) // TOTP_STEP_SECONDS
+
+
+def totp_code(secret: str, step: int) -> str:
+    """The code for one 30-second step (HMAC-SHA1, dynamic truncation, six digits)."""
+    key = base64.b32decode(secret + "=" * (-len(secret) % 8), casefold=True)
+    digest = hmac.new(key, struct.pack(">Q", step), hashlib.sha1).digest()
+    offset = digest[-1] & 0x0F
+    number = struct.unpack(">I", digest[offset : offset + 4])[0] & 0x7FFFFFFF
+    return f"{number % 10**TOTP_DIGITS:0{TOTP_DIGITS}d}"
+
+
+def totp_matching_step(
+    secret: str, code: str, moment: datetime, *, window: int, after: int
+) -> int | None:
+    """The step ``code`` belongs to, within ``window`` steps of now and later than ``after`` (a
+    code already used never works twice), else None. Compared in constant time."""
+    now = totp_step(moment)
+    for step in range(now - window, now + window + 1):
+        if step > after and hmac.compare_digest(totp_code(secret, step).encode(), code.encode()):
+            return step
+    return None
+
+
+def totp_uri(secret: str, account: str, issuer: str) -> str:
+    """What an authenticator app scans (or is typed from)."""
+    label = quote(f"{issuer}:{account}")
+    return (
+        f"otpauth://totp/{label}?secret={secret}&issuer={quote(issuer)}"
+        f"&algorithm=SHA1&digits={TOTP_DIGITS}&period={TOTP_STEP_SECONDS}"
+    )
+
+
+def new_recovery_code() -> str:
+    """``abcde-fghjk``: ten readable characters, about 50 bits."""
+    core = "".join(secrets.choice(RECOVERY_ALPHABET) for _ in range(10))
+    return f"{core[:5]}-{core[5:]}"
+
+
+class FieldCipher:
+    """Encrypts a field at rest (TOTP secrets) with Fernet (AES-128-CBC + HMAC-SHA256)."""
+
+    def __init__(self, key: SecretStr) -> None:
+        self._fernet = Fernet(key.get_secret_value().encode())
+
+    def encrypt(self, value: str) -> str:
+        return self._fernet.encrypt(value.encode()).decode()
+
+    def decrypt(self, value: str) -> str | None:
+        """The value, or None when it can't be read (another key, or tampered with)."""
+        try:
+            return self._fernet.decrypt(value.encode()).decode()
+        except InvalidToken:
+            return None

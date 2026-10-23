@@ -13,6 +13,7 @@ from pydantic import SecretStr
 
 from app.core.config import BootstrapSettings, Settings, get_settings
 from app.core.security import PasswordHasher
+from app.platform.audit.models import AuditEntry
 from app.platform.auth.maintenance import (
     BootstrapOutcome,
     ensure_bootstrap_admin,
@@ -33,9 +34,17 @@ from tests.helpers import (
     running_client,
     unique_email,
 )
+from tests.platform.auth.conftest import turn_on
 
 SCRIPTS = Path(__file__).resolve().parents[3] / "scripts"
 ADMIN_PASSWORD = "Admin-Password-42"
+
+
+async def trail(user_id: str) -> list[AuditEntry]:
+    """What operators did to this account (no actor: no account acted)."""
+    return await AuditEntry.find(
+        {"owner_id": PydanticObjectId(user_id), "details.via": "operator"}
+    ).to_list()
 
 
 def with_bootstrap(settings: Settings, email: str, password: str = ADMIN_PASSWORD) -> Settings:
@@ -83,6 +92,9 @@ async def test_bootstrap_promotes_an_existing_account(
     assert outcome is BootstrapOutcome.PROMOTED
     signed_in = await login(client, account.email)  # password untouched
     assert signed_in.json()["user"]["role"] == "admin"
+    assert [(entry.actor_id, entry.details) for entry in await trail(account.user_id)] == [
+        (None, {"from": "user", "to": "admin", "via": "operator"})
+    ]
 
 
 @pytest.mark.usefixtures("client")
@@ -113,6 +125,24 @@ async def test_reset_password_signs_out_everywhere_and_clears_lockout(
     signed_in = await login(client, account.email, one_time)
     assert signed_in.status_code == 200
     assert signed_in.json()["user"]["must_change_password"] is True
+
+
+async def test_reset_password_turns_two_step_sign_in_off_and_is_audited(
+    app: FastAPI, client: AsyncClient, clock: FrozenClock
+) -> None:
+    """How someone who lost their phone gets back in, even the only admin."""
+    on = await turn_on(client, clock)
+
+    one_time = await reset_password(
+        on.account.email, app.state.settings, clock, PasswordHasher(app.state.settings.auth)
+    )
+
+    signed_in = await login(client, on.account.email, one_time)
+    assert "access_token" in signed_in.json()  # no code asked
+    assert [(entry.actor_id, entry.details) for entry in await trail(on.account.user_id)] == [
+        (None, {"two_factor_cleared": True, "via": "operator"})
+    ]
+    assert one_time not in str(await trail(on.account.user_id))
 
 
 @pytest.mark.usefixtures("client")

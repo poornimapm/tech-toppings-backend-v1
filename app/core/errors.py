@@ -162,6 +162,10 @@ def error_json(
     headers: dict[str, str] | None = None,
 ) -> JSONResponse:
     request_id = _request_id(request)
+    # Counted for the admin's usage page (app.state.tally, set by the platform); never in the way.
+    tally = getattr(request.app.state, "tally", None)
+    if tally is not None:
+        tally(code)
     body = ErrorResponse(code=code, message=message, details=details, request_id=request_id)
     response_headers = dict(headers or {})
     if request_id:

@@ -93,7 +93,8 @@ async def test_admin_reset_forces_a_password_change_before_anything_else(
     assert unblocked.json()["must_change_password"] is False
 
 
-async def test_accounts_without_a_password_can_set_one(client: AsyncClient) -> None:
+async def test_a_session_alone_never_sets_a_first_password(client: AsyncClient) -> None:
+    """Setting one takes a fresh Google sign-in (see test_google); a stolen session can't."""
     account = await register(client)
     await User.get_pymongo_collection().update_one(
         {"_id": PydanticObjectId(account.user_id)}, {"$set": {"password_hash": None}}
@@ -101,5 +102,5 @@ async def test_accounts_without_a_password_can_set_one(client: AsyncClient) -> N
 
     result = await change(client, account.access_token, "anything", NEW_PASSWORD)
 
-    assert result["status"] == 200
-    assert (await login(client, account.email, NEW_PASSWORD)).status_code == 200
+    assert (result["status"], result["code"]) == (422, "AUTH_GOOGLE_REAUTH_REQUIRED")
+    assert (await login(client, account.email, NEW_PASSWORD)).status_code == 401

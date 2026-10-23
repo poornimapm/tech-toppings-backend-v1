@@ -86,7 +86,10 @@ This serves the API at <http://127.0.0.1:8000> with auto-reload. `HOST` and `POR
 | `POST /v1/auth/logout`, `/logout-all` | Sign out this device, or every device (which also invalidates access tokens) |
 | `POST /v1/auth/password/change` | Signs out other devices. Required after an admin reset |
 | `POST /v1/auth/google` | Optional "Sign in with Google" (set `AUTH_GOOGLE_CLIENT_ID`) |
+| `POST /v1/auth/login/totp` | Second step when two-step sign-in is on: the challenge from `/login` (or `/google`) plus a code |
+| `GET /v1/auth/totp`, `POST …/setup`, `/enable`, `/disable`, `/recovery-codes` | Two-step sign-in (TOTP): status, set up, turn on and off, new recovery codes |
 | `GET/PATCH /v1/me` | Own profile: name, language, theme, currency, time zone, AI consent |
+| `GET /v1/me/export`, `DELETE /v1/me` | Everything kept about me as one JSON file; delete my account for good |
 | `GET /v1/me/sessions`, `DELETE /v1/me/sessions/{id}` | Signed-in devices; sign one out |
 
 - **Tokens.** Access tokens last 15 minutes and are kept in memory by the frontend. The
@@ -94,8 +97,8 @@ This serves the API at <http://127.0.0.1:8000> with auto-reload. `HOST` and `POR
   Reusing an old refresh token signs that device out (ADR-0003).
 - **No email in v1.** If someone forgets their password, run
   `.venv\Scripts\poe reset-password --email them@example.com`. It prints a one-time
-  password once and signs them out everywhere; they must choose a new password at the next
-  sign-in.
+  password once, signs them out everywhere and turns two-step sign-in off; they must choose a
+  new password at the next sign-in. The reset is written to the audit trail.
 - **Try it:** open `/docs`, call `POST /v1/auth/register` with an allowlisted email, copy the
   `access_token`, click **Authorize**, then call `GET /v1/me`.
 
@@ -456,6 +459,72 @@ The server keeps nothing: each request sends the file and mapping again.
 `limits.max_bytes` or `limits.max_rows` answer 422 `EXPENSE_IMPORT_TOO_LARGE`; the route has its
 own rate limit (`RATE_LIMIT_IMPORTS`).
 
+## Admin console and account security: try it
+
+Phase 10 (ADR-0017). Sign in as the bootstrap admin (`BOOTSTRAP_ADMIN_EMAIL`, `poe seed`) for
+the admin routes. Everything under `/v1/admin` answers 403 to anyone else.
+
+### Accounts
+
+1. `GET /v1/admin/users?q=asha&state=active` finds accounts. `GET /v1/admin/users/{id}` adds
+   how many devices are signed in.
+2. `PATCH /v1/admin/users/{id}` with `{"role": "admin"}` or `{"disabled": true}`. Disabling
+   signs the account out everywhere.
+3. `POST /v1/admin/users/{id}/revoke-sessions` signs the account out everywhere.
+4. `POST …/reset-password` returns a one-time password, once. The user must change it at their
+   next sign-in, and two-step sign-in is turned off so they can get back in.
+5. Changing your own account here is refused with 409 `ADMIN_SELF_CHANGE`. A change that would
+   leave no active admin is undone with 409 `ADMIN_LAST_ADMIN`.
+6. `GET /v1/admin/expenses/entries?user_id=…` lists someone's entries. `PATCH
+   /v1/admin/expenses/entries/{id}` with `{"revision_no": 3, "reason": "…", "amount_minor": 1200}`
+   corrects one: a revision by you, plus an `entry.admin_corrected` audit entry.
+
+### Allowlist and modules
+
+1. `POST /v1/admin/allowed-emails` with `{"email": "…", "note": "…"}` lets that address
+   register while `AUTH_REGISTRATION_MODE=allowlist`.
+2. `GET` lists entries from both sources. Entries from `AUTH_ALLOWED_EMAILS` can only be
+   removed from the env.
+3. `PATCH /v1/admin/modules/{key}` with `{"status": "beta"}` or `{"global_enabled": false}`
+   changes a module for everyone. `null` puts the manifest's value back.
+
+### Usage and audit
+
+1. `GET /v1/admin/analytics/usage?from=…&to=…` returns counts only: sign-ups per day, active
+   users, assistant answers by AI or by rules (and the fallback rate), AI calls by provider,
+   and errors by code.
+2. `GET /v1/admin/analytics/db` returns the database size per collection, against
+   `ADMIN_DB_QUOTA_MB`.
+3. `GET /v1/admin/audit-logs?owner_id=…` returns who changed what: roles, disabling, resets,
+   allowlist, modules, two-step sign-in, exports and deletions. Secret-looking details are
+   stored as `[redacted]`. Entries expire after `AUDIT_RETENTION_DAYS`.
+
+### Two-step sign-in
+
+1. Set `AUTH_FIELD_ENCRYPTION_KEY`. `.env.example` shows how to generate one. Without it, setup
+   answers 503 `AUTH_TWO_FACTOR_UNAVAILABLE`.
+2. `POST /v1/auth/totp/setup` returns the secret and an `otpauth://` URI for an authenticator
+   app.
+3. `POST /v1/auth/totp/enable` with a code from the app and your `password` (or a fresh
+   `google_id_token`, for an account without one) turns it on. The response holds the recovery
+   codes, shown this once. Turning it off takes the same.
+4. `POST /v1/auth/login` now answers `{"two_factor_required": true, "challenge_token": …}`.
+   Send that token and a code (or a recovery code) to `POST /v1/auth/login/totp`. Each code
+   works once.
+
+### Your data
+
+1. `GET /v1/me/export` downloads everything kept about you as one JSON file. Secrets such as
+   password and token hashes are left out.
+2. `DELETE /v1/me` needs these fields:
+   - `confirm_email`;
+   - `password`, or `google_id_token` for an account without a password;
+   - `code`, if two-step sign-in is on.
+
+   It deletes every record you own, then the account.
+3. `docs/privacy-policy-template.md` is a policy to fill in, including the Play Store Data
+   Safety answers.
+
 ## Tasks
 
 | Command | What it does |
@@ -470,7 +539,7 @@ own rate limit (`RATE_LIMIT_IMPORTS`).
 | `poe lock` | Re-pin `requirements/*.lock` from `pyproject.toml` |
 | `poe sync` | Make `.venv` match `requirements/dev.lock` exactly |
 | `poe seed` | Create or promote the bootstrap admin (idempotent) |
-| `poe reset-password --email …` | Admin password reset: prints a one-time password, forces a change |
+| `poe reset-password --email …` | Admin password reset: prints a one-time password, forces a change, turns 2FA off (audited) |
 | `poe openapi` | Write `openapi.json` for the frontend type generator |
 | `poe eval-parser` | Accuracy of the expenses rule parser by language and field (`--misses` lists errors) |
 | `poe docker-build` | Build the production image locally |

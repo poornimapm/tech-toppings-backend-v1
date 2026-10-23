@@ -15,6 +15,7 @@ class AuthSession(OwnedDocument):
     raced), and the whole session is revoked (ADR-0003)."""
 
     MODULE_KEY: ClassVar[str] = "platform"
+    PRIVATE_FIELDS: ClassVar[frozenset[str]] = frozenset({"token_hash", "previous_token_hashes"})
 
     token_hash: str
     previous_token_hashes: list[str] = Field(default_factory=list)

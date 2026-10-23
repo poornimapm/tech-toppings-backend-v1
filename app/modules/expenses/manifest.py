@@ -6,6 +6,7 @@ MANIFEST = ModuleManifest(
     status=ModuleStatus.BETA,  # live once voice capture is in (Phase 6)
     order=10,
     router="app.modules.expenses.router:router",
+    admin_router="app.modules.expenses.admin:router",
     documents=(
         "app.modules.expenses.features.entries.models:Entry",
         "app.modules.expenses.features.entries.models:EntryRevision",

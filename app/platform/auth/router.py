@@ -33,8 +33,10 @@ from app.platform.auth.schemas import (
     RegisterIn,
     SessionOut,
     TokenOut,
+    TwoFactorChallengeOut,
+    TwoFactorLoginIn,
 )
-from app.platform.auth.service import AuthResult
+from app.platform.auth.service import AuthResult, TwoFactorChallenge
 from app.platform.users.schemas import UserOut
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -56,7 +58,7 @@ def _set_refresh_cookie(
     )
 
 
-def _clear_refresh_cookie(response: Response, auth: AuthSettings) -> None:
+def clear_refresh_cookie(response: Response, auth: AuthSettings) -> None:
     response.delete_cookie(
         key=auth.refresh_cookie_name,
         path=auth.refresh_cookie_path,
@@ -75,6 +77,18 @@ def _respond(
         expires_in=result.expires_in,
         user=UserOut.from_user(result.user),
     )
+
+
+def _signed_in_or_asked(
+    response: Response,
+    result: AuthResult | TwoFactorChallenge,
+    settings: SettingsDep,
+    clock: Clock,
+) -> TokenOut | TwoFactorChallengeOut:
+    """Signed in, or (two-step sign-in on) asked for a code first: no cookie until then."""
+    if isinstance(result, TwoFactorChallenge):
+        return TwoFactorChallengeOut(challenge_token=result.token, expires_in=result.expires_in)
+    return _respond(response, result, settings, clock)
 
 
 @router.get("/config", summary="Public sign-in configuration")
@@ -111,8 +125,26 @@ async def login(
     client: ClientInfoDep,
     settings: SettingsDep,
     clock: ClockDep,
+) -> TokenOut | TwoFactorChallengeOut:
+    return _signed_in_or_asked(response, await service.login(body, client), settings, clock)
+
+
+@router.post(
+    "/login/totp",
+    summary="Finish signing in with a code (two-step sign-in)",
+    dependencies=[Depends(rate_limit("auth_login"))],
+    responses=error_responses(401, 403, 422, 429, 503),
+)
+async def login_totp(
+    body: TwoFactorLoginIn,
+    response: Response,
+    service: AuthServiceDep,
+    client: ClientInfoDep,
+    settings: SettingsDep,
+    clock: ClockDep,
 ) -> TokenOut:
-    return _respond(response, await service.login(body, client), settings, clock)
+    result = await service.login_two_factor(body.challenge_token, body.code, client)
+    return _respond(response, result, settings, clock)
 
 
 @router.post(
@@ -142,7 +174,7 @@ async def logout(
     request: Request, response: Response, service: AuthServiceDep, settings: SettingsDep
 ) -> None:
     await service.logout(request.cookies.get(settings.auth.refresh_cookie_name))
-    _clear_refresh_cookie(response, settings.auth)
+    clear_refresh_cookie(response, settings.auth)
 
 
 @router.post("/logout-all", status_code=status.HTTP_204_NO_CONTENT, responses=error_responses(401))
@@ -153,7 +185,7 @@ async def logout_all(
     settings: SettingsDep,
 ) -> None:
     await service.logout_all(user)
-    _clear_refresh_cookie(response, settings.auth)
+    clear_refresh_cookie(response, settings.auth)
 
 
 @router.post(
@@ -185,8 +217,9 @@ async def google_sign_in(
     client: ClientInfoDep,
     settings: SettingsDep,
     clock: ClockDep,
-) -> TokenOut:
-    return _respond(response, await service.google_sign_in(body.id_token, client), settings, clock)
+) -> TokenOut | TwoFactorChallengeOut:
+    result = await service.google_sign_in(body.id_token, client)
+    return _signed_in_or_asked(response, result, settings, clock)
 
 
 # ---------------------------------------------------------------- /v1/me/sessions

@@ -130,10 +130,13 @@ def test_invalid_values_are_rejected(
         load_settings([])
 
 
-def test_a_rejected_job_token_is_not_echoed(required_env: pytest.MonkeyPatch) -> None:
-    required_env.setenv("JOBS_TOKEN", "mistyped-SECRET")
+@pytest.mark.parametrize(
+    "name", ["JOBS_TOKEN", "AUTH_FIELD_ENCRYPTION_KEY", "AUTH_JWT_SECRET", "MONGO_URI"]
+)
+def test_a_rejected_secret_is_not_echoed(required_env: pytest.MonkeyPatch, name: str) -> None:
+    required_env.setenv(name, "mistyped-SECRET")
 
-    with pytest.raises(ValidationError, match="at least 32") as caught:
+    with pytest.raises(ValidationError) as caught:
         load_settings([])
 
     assert "SECRET" not in str(caught.value)

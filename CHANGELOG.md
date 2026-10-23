@@ -6,6 +6,83 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added — Phase 10: admin console, audit, account security
+
+- **Audit trail** (`app/platform/audit`, ADR-0017): every sensitive change is one entry. That
+  covers roles, disabling, sign-outs, password resets, allowlist, modules, two-step sign-in,
+  exports and deletions. Secret-looking details are redacted, and entries expire after
+  `AUDIT_RETENTION_DAYS`. `GET /v1/admin/audit-logs` reads them with filters and resolves
+  emails.
+- **User management** (`/v1/admin/users`): search and filter, set a role, disable or enable,
+  sign out everywhere, and reset a password to a one-time password that also turns two-step
+  sign-in off. An admin never changes their own account here (`ADMIN_SELF_CHANGE`).
+- **Allowlist management** (`/v1/admin/allowed-emails`): the env list plus a collection the
+  console edits. Registration and Google sign-in accept both.
+- **Module management** (`/v1/admin/modules`): stage and global switch as overrides of the
+  manifest; `null` resets.
+- **Admin corrections** (`/v1/admin/expenses/entries`): everyone's entries with the list's
+  filters, and a correction with a reason. It is a revision by the admin (source `admin`) plus
+  an `entry.admin_corrected` audit entry naming the fields, never their values.
+- **Usage analytics** (`/v1/admin/analytics/usage`, `/db`):
+  - sign-ups per day and active users (from sessions, so past ranges count right);
+  - assistant answers by AI or rules, the fallback rate, and AI calls by provider;
+  - errors by code per day, counted in memory and written in one batch at most every
+    `ADMIN_ERROR_TALLY_FLUSH_SECONDS` (`error_tallies`, `ADMIN_ERROR_TALLY_DAYS`);
+  - database size per collection, against `ADMIN_DB_QUOTA_MB`;
+  - ranges default to `ADMIN_USAGE_DEFAULT_DAYS`, span at most `ADMIN_USAGE_MAX_DAYS`, and a
+    range that can't be counted is `RANGE_INVALID`.
+- **Two-step sign-in (TOTP)**:
+  - RFC 6238 with the standard library;
+  - the secret is encrypted with `AUTH_FIELD_ENCRYPTION_KEY` (Fernet), and recovery codes are
+    hashed;
+  - every code works once, and wrong codes count toward the lockout;
+  - `/v1/auth/totp` (`setup`, `enable`, `disable`, `recovery-codes`), plus a challenge from
+    `/login` and `/google` that `/v1/auth/login/totp` completes;
+  - settings: `AUTH_TOTP_*` and `AUTH_RECOVERY_CODES`.
+- **Proof it's really them** (`Reauth`): turning 2FA on or off, deleting the account, and a
+  Google-only account's first password need the password, or a Google sign-in no older than
+  `AUTH_GOOGLE_REAUTH_MAX_AGE_SECONDS` (`AUTH_GOOGLE_REAUTH_REQUIRED`).
+- **Your data**:
+  - `GET /v1/me/export` streams everything kept about you as one JSON file. A document's
+    `PRIVATE_FIELDS` are left out, and so are who else acted on the account and from where.
+  - `DELETE /v1/me` erases every record with your `user_id`, then the account. It needs the
+    email typed, the password (or a fresh Google sign-in) and a code if 2FA is on. The last
+    admin can't delete their own account.
+- `docs/privacy-policy-template.md`, with the Play Store Data Safety answers.
+- A test that every `/v1/admin` route answers 403 to users and 401 to anonymous callers.
+
+### Changed — Phase 10
+
+- `UserOut` has `two_factor`.
+- `TimestampedDocument` has `PRIVATE_FIELDS`.
+- `app.state.documents` lists every collection.
+- The admin package is split by area.
+- `/v1/auth/login/totp` is a public route, authenticated by its challenge token.
+- `AUTH_SESSION_PURGE_GRACE_DAYS` replaces the fixed 7-day grace before ended sessions go.
+- `poe reset-password` turns 2FA off and writes an audit entry; the seed's promotion of the
+  bootstrap admin is audited too (no actor, `"via": "operator"`).
+
+### Security — Phase 10 review
+
+- A Google-only account could set a password from a stolen session, then use it to delete the
+  account. Setting a first password now needs a fresh Google sign-in (and a code with 2FA on).
+- Turning 2FA on needed no password, so a stolen session could lock the owner out. It now needs
+  the first factor again.
+- The lockout is checked inside the same conditional write that spends a code, so guesses sent
+  all at once can't get past it.
+- 2FA codes: spaces are ignored everywhere (not only when signing in), and only ASCII digits
+  match, so a code typed in Devanagari or Tamil digits is a wrong code instead of a 500.
+- `setup` and `enable` write conditionally: racing requests can't enable an unchecked secret.
+- Two admins demoting each other, or deleting themselves, at the same moment can no longer leave
+  no admin (`ADMIN_LAST_ADMIN`, `ACCOUNT_LAST_ADMIN`).
+- Deletion sweeps the records before and after signing the account out, so a failure in the
+  first sweep leaves an account that can be deleted again, and writes already in flight don't
+  survive. It also removes the account's allowlist invitation.
+- A mistyped `AUTH_*` secret (such as `AUTH_FIELD_ENCRYPTION_KEY`) is no longer printed in the
+  startup error.
+- Audit redaction reaches into lists.
+- A module override is audited even when users see no change.
+
 ### Added — Phase 9b: data pack (in progress)
 
 - **Saved views** (`/v1/expenses/saved-filters`): named filters of the entries list, a period

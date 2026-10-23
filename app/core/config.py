@@ -10,6 +10,7 @@ so ``.env.example`` documents every variable by group.
 
 from __future__ import annotations
 
+import base64
 import os
 import re
 from collections.abc import Sequence
@@ -56,7 +57,7 @@ class Locale(StrEnum):
 
 class RegistrationMode(StrEnum):
     OPEN = "open"
-    ALLOWLIST = "allowlist"  # only emails in AUTH_ALLOWED_EMAILS (ADR-0011)
+    ALLOWLIST = "allowlist"  # AUTH_ALLOWED_EMAILS plus those added in the admin console
     CLOSED = "closed"
 
 
@@ -89,7 +90,7 @@ class AppSettings(BaseSettings):
 
 
 class MongoSettings(BaseSettings):
-    model_config = _group_config("MONGO_")
+    model_config = _group_config("MONGO_", secret=True)  # the URI carries credentials
 
     # Full connection string including the database name,
     # e.g. mongodb://localhost:27017/tech-toppings-v1
@@ -163,8 +164,11 @@ class SecuritySettings(BaseSettings):
     hsts_max_age_seconds: int = Field(default=0, ge=0)
 
 
+FERNET_KEY_BYTES = 32
+
+
 class AuthSettings(BaseSettings):
-    model_config = _group_config("AUTH_")
+    model_config = _group_config("AUTH_", secret=True)
 
     # Signing key for access tokens. Generate one with:
     #   python -c "import secrets; print(secrets.token_urlsafe(48))"
@@ -210,6 +214,19 @@ class AuthSettings(BaseSettings):
         "https://accounts.google.com",
     )
     google_jwks_cache_seconds: int = Field(default=3600, ge=60)
+    # TOTP 2FA: the key that encrypts each user's secret at rest (Fernet). Unset, 2FA can't be
+    # turned on. Generate one with:
+    #   python -c "import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
+    field_encryption_key: SecretStr | None = None
+    totp_issuer: str = "Tech-Toppings"  # the name authenticator apps show
+    totp_window_steps: int = Field(default=1, ge=0, le=2)  # 30-second steps either side
+    totp_challenge_seconds: int = Field(default=300, ge=60, le=900)  # time to type the code
+    recovery_codes: int = Field(default=10, ge=4, le=20)
+    # Deleting an account or setting its first password without one: the Google sign-in given
+    # as proof must be this recent.
+    google_reauth_max_age_seconds: int = Field(default=300, ge=30, le=3600)
+    # Ended sessions (device, IP) are kept this long past their end, to catch a stolen token.
+    session_purge_grace_days: int = Field(default=7, ge=0, le=90)
 
     @field_validator("allowed_emails", mode="before")
     @classmethod
@@ -226,6 +243,23 @@ class AuthSettings(BaseSettings):
     @classmethod
     def blank_is_none(cls, value: str | None) -> str | None:
         return value or None
+
+    @field_validator("field_encryption_key", mode="before")
+    @classmethod
+    def blank_key_is_none(cls, value: Any) -> Any:
+        return value or None
+
+    @field_validator("field_encryption_key")
+    @classmethod
+    def a_fernet_key(cls, value: SecretStr | None) -> SecretStr | None:
+        if value is not None:
+            try:
+                decoded = base64.urlsafe_b64decode(value.get_secret_value().encode())
+            except ValueError as exc:
+                raise ValueError("must be 32 bytes, url-safe base64 (see .env.example)") from exc
+            if len(decoded) != FERNET_KEY_BYTES:
+                raise ValueError("must be 32 bytes, url-safe base64 (see .env.example)")
+        return value
 
 
 class RateLimitSettings(BaseSettings):
@@ -482,6 +516,31 @@ class FxSettings(BaseSettings):
     timeout_seconds: float = Field(default=5.0, gt=0, le=30)
 
 
+class AuditSettings(BaseSettings):
+    """Who changed what (roles, accounts, 2FA, the allowlist, modules, exports, deletions)."""
+
+    model_config = _group_config("AUDIT_")
+
+    # Days an entry is kept (long: an audit trail answers questions months later).
+    retention_days: int = Field(default=730, ge=30)
+
+
+class AdminSettings(BaseSettings):
+    """The admin console's usage pages."""
+
+    model_config = _group_config("ADMIN_")
+
+    # The database's size limit, to show how much is used (MongoDB Atlas M0: 512 MB).
+    db_quota_mb: int = Field(default=512, ge=1)
+    # Days a day's count of each error code is kept.
+    error_tally_days: int = Field(default=400, ge=1)
+    # Error counts are kept in memory and written at most this often (0 = at once).
+    error_tally_flush_seconds: float = Field(default=30.0, ge=0, le=3600)
+    # The usage page's span when none is asked for, and the longest it answers.
+    usage_default_days: int = Field(default=30, ge=1)
+    usage_max_days: int = Field(default=366, ge=1)
+
+
 class BootstrapSettings(BaseSettings):
     """First admin account, created or promoted by `poe seed` (skipped when unset)."""
 
@@ -519,6 +578,8 @@ class Settings(BaseModel):
     reminders: RemindersSettings
     search: SearchSettings
     fx: FxSettings
+    audit: AuditSettings
+    admin: AdminSettings
     bootstrap: BootstrapSettings
 
 
@@ -549,6 +610,8 @@ def load_settings(env_files: Sequence[Path] | None = None) -> Settings:
         reminders=RemindersSettings(_env_file=existing),
         search=SearchSettings(_env_file=existing),
         fx=FxSettings(_env_file=existing),
+        audit=AuditSettings(_env_file=existing),
+        admin=AdminSettings(_env_file=existing),
         bootstrap=BootstrapSettings(_env_file=existing),
     )
 

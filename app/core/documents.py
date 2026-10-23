@@ -18,6 +18,9 @@ from pydantic import Field
 
 
 class TimestampedDocument(Document):
+    # Fields never handed out, not even to their owner (a data export leaves them out).
+    PRIVATE_FIELDS: ClassVar[frozenset[str]] = frozenset()
+
     created_at: datetime
     updated_at: datetime
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import AsyncIterator, Iterator
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -13,8 +14,11 @@ from httpx import AsyncClient
 from jwt.algorithms import RSAAlgorithm
 
 from app.core.config import RegistrationMode
+from app.core.security import totp_code, totp_step
 from tests.helpers import (
+    FrozenClock,
     auth_settings,
+    bearer,
     build_app,
     build_settings,
     register,
@@ -158,3 +162,105 @@ async def test_keys_are_cached_between_sign_ins(
         await gclient.post("/v1/auth/google", json={"id_token": id_token(sub="cached-user")})
 
     assert google_keys.call_count == 1
+
+
+@pytest.mark.usefixtures("google_keys")
+async def test_two_step_sign_in_applies_to_google_too(mongo_uri: str) -> None:
+    clock = FrozenClock(datetime.now(UTC) - timedelta(minutes=3))  # tokens never future-dated
+    settings = build_settings(
+        mongo_uri, auth=auth_settings(google_client_id=CLIENT_ID, google_jwks_url=JWKS_URL)
+    )
+    subject = f"two-step-{unique_email()}"
+
+    def code() -> str:
+        clock.advance(seconds=30)  # a fresh code each time: none works twice
+        return totp_code(secret, totp_step(clock.now()))
+
+    async with running_client(build_app(settings, clock)) as http:
+        first = await http.post("/v1/auth/google", json={"id_token": id_token(sub=subject)})
+        headers = bearer(first.json()["access_token"])
+        secret = (await http.post("/v1/auth/totp/setup", headers=headers)).json()["secret"]
+        # No password to prove it's them: a Google sign-in made just now instead.
+        bare = await http.post("/v1/auth/totp/enable", headers=headers, json={"code": code()})
+        assert bare.json()["code"] == "AUTH_GOOGLE_REAUTH_REQUIRED"
+        on = await http.post(
+            "/v1/auth/totp/enable",
+            headers=headers,
+            json={"code": code(), "google_id_token": id_token(sub=subject)},
+        )
+        assert on.status_code == 200, on.text
+
+        asked = await http.post("/v1/auth/google", json={"id_token": id_token(sub=subject)})
+        assert asked.json()["two_factor_required"] is True
+        assert not asked.cookies.get("tt_refresh")
+        done = await http.post(
+            "/v1/auth/login/totp",
+            json={"challenge_token": asked.json()["challenge_token"], "code": code()},
+        )
+        assert done.status_code == 200
+        off = await http.post(
+            "/v1/auth/totp/disable",
+            headers=bearer(done.json()["access_token"]),
+            json={"code": code(), "google_id_token": id_token(sub=subject)},
+        )
+        assert off.status_code == 204
+
+
+@pytest.mark.usefixtures("google_keys")
+async def test_a_google_only_account_sets_its_first_password_with_google_again(
+    gclient: AsyncClient,
+) -> None:
+    subject = f"first-password-{unique_email()}"
+    email = unique_email("first")
+    first = await gclient.post(
+        "/v1/auth/google", json={"id_token": id_token(sub=subject, email=email)}
+    )
+    headers = bearer(first.json()["access_token"])
+
+    async def change(**body: Any) -> httpx.Response:
+        return await gclient.post(
+            "/v1/auth/password/change",
+            headers=headers,
+            json={"current_password": "anything", "new_password": "Brand-New-Secret-7", **body},
+        )
+
+    # A session alone could be stolen: a password set with it would open DELETE /v1/me.
+    for refused in (await change(), await change(google_id_token=id_token(sub="someone-else"))):
+        assert (refused.status_code, refused.json()["code"]) == (
+            422,
+            "AUTH_GOOGLE_REAUTH_REQUIRED",
+        )
+    assert (await change(google_id_token=id_token(sub=subject))).status_code == 200
+    signed_in = await gclient.post(
+        "/v1/auth/login", json={"email": email, "password": "Brand-New-Secret-7"}
+    )
+    assert signed_in.status_code == 200
+
+
+@pytest.mark.usefixtures("google_keys")
+async def test_a_google_only_account_signs_in_with_google_again_to_delete(
+    gclient: AsyncClient,
+) -> None:
+    subject = f"leaving-{unique_email()}"
+    email = unique_email("leaving")
+    first = await gclient.post(
+        "/v1/auth/google", json={"id_token": id_token(sub=subject, email=email)}
+    )
+    headers = bearer(first.json()["access_token"])
+
+    async def delete(**body: Any) -> httpx.Response:
+        return await gclient.request(
+            "DELETE", "/v1/me", headers=headers, json={"confirm_email": email, **body}
+        )
+
+    minutes_ago = int(time.time()) - 600  # signed in long ago: not proof it's them now
+    for refused in (
+        await delete(),
+        await delete(google_id_token=id_token(sub="someone-else")),
+        await delete(google_id_token=id_token(sub=subject, iat=minutes_ago)),
+    ):
+        assert (refused.status_code, refused.json()["code"]) == (
+            422,
+            "AUTH_GOOGLE_REAUTH_REQUIRED",
+        )
+    assert (await delete(google_id_token=id_token(sub=subject))).status_code == 204

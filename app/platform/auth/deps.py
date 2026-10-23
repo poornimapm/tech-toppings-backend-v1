@@ -25,9 +25,11 @@ from app.core.repository import Scope
 from app.core.security import PasswordHasher
 from app.platform.auth.errors import CsrfError, PasswordChangeRequiredError, SessionRevokedError
 from app.platform.auth.google import GoogleIdTokenVerifier
+from app.platform.auth.reauth import Reauth
 from app.platform.auth.service import AuthService
 from app.platform.auth.sessions import ClientInfo, SessionService
 from app.platform.auth.tokens import AccessClaims, AccessTokenService
+from app.platform.auth.two_factor import TwoFactor
 from app.platform.users.models import Role, User
 from app.platform.users.repository import UserRepository
 
@@ -36,7 +38,33 @@ _bearer = HTTPBearer(auto_error=False, description="Access token from /v1/auth/l
 USER_AGENT_MAX_LENGTH = 256
 
 
-def get_auth_service(request: Request, settings: SettingsDep, clock: ClockDep) -> AuthService:
+def get_two_factor(settings: SettingsDep, clock: ClockDep) -> TwoFactor:
+    return TwoFactor(settings, clock)
+
+
+TwoFactorDep = Annotated[TwoFactor, Depends(get_two_factor)]
+
+
+def get_reauth(request: Request, settings: SettingsDep, clock: ClockDep) -> Reauth:
+    state = request.app.state
+    return Reauth(
+        settings.auth,
+        clock,
+        cast(PasswordHasher, state.password_hasher),
+        cast(GoogleIdTokenVerifier | None, state.google_verifier),
+    )
+
+
+ReauthDep = Annotated[Reauth, Depends(get_reauth)]
+
+
+def get_auth_service(
+    request: Request,
+    settings: SettingsDep,
+    clock: ClockDep,
+    two_factor: TwoFactorDep,
+    reauth: ReauthDep,
+) -> AuthService:
     state = request.app.state
     return AuthService(
         settings=settings,
@@ -46,6 +74,8 @@ def get_auth_service(request: Request, settings: SettingsDep, clock: ClockDep) -
         tokens=AccessTokenService(settings.auth, clock),
         hasher=cast(PasswordHasher, state.password_hasher),
         google=cast(GoogleIdTokenVerifier | None, state.google_verifier),
+        two_factor=two_factor,
+        reauth=reauth,
     )
 
 

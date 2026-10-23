@@ -68,10 +68,15 @@ def resolve_range(
     max_days: int,
 ) -> DateRange:
     """Missing bounds default to the last ``default_days`` days ending today."""
-    end = end or today
-    start = start or end - timedelta(days=default_days - 1)
-    if start > end:
-        raise InvalidRangeError(details={"reason": "from_after_to"})
-    if (end - start).days + 1 > max_days:
-        raise InvalidRangeError(details={"reason": "too_long", "max_days": max_days})
-    return DateRange(start, end, timezone)
+    try:
+        end = end or today
+        start = start or end - timedelta(days=default_days - 1)
+        if start > end:
+            raise InvalidRangeError(details={"reason": "from_after_to"})
+        if (end - start).days + 1 > max_days:
+            raise InvalidRangeError(details={"reason": "too_long", "max_days": max_days})
+        span = DateRange(start, end, timezone)
+        span.previous().begins, span.ends
+    except OverflowError as exc:
+        raise InvalidRangeError(details={"reason": "out_of_range"}) from exc
+    return span

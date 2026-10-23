@@ -20,8 +20,9 @@ from app.core.security import (
     password_policy_violations,
 )
 from app.platform import PLATFORM_DOCUMENTS
+from app.platform.audit.service import AuditLog
 from app.platform.auth.sessions import SessionService
-from app.platform.users.models import Role, User
+from app.platform.users.models import TWO_FACTOR_OFF, Role, User
 from app.platform.users.repository import UserRepository, normalise_email
 
 logger = get_logger(__name__)
@@ -77,6 +78,13 @@ async def ensure_bootstrap_admin(
         return BootstrapOutcome.CREATED
     if existing.role is not Role.ADMIN and existing.id is not None:
         await users.update(existing.id, {"role": Role.ADMIN.value})
+        await _record(
+            settings,
+            clock,
+            "user.role_changed",
+            existing,
+            {"from": existing.role, "to": Role.ADMIN},
+        )
         logger.info("bootstrap_admin_promoted", user_id=str(existing.id))
         return BootstrapOutcome.PROMOTED
     return BootstrapOutcome.UNCHANGED
@@ -85,8 +93,9 @@ async def ensure_bootstrap_admin(
 async def reset_password(
     email: str, settings: Settings, clock: Clock, hasher: PasswordHasher
 ) -> str:
-    """Set a one-time password, force a change at next sign-in, sign out every device.
-    Returns the one-time password (shown once to the operator, never logged)."""
+    """Set a one-time password, force a change at next sign-in, sign out every device and turn
+    two-step sign-in off (the reset is how someone who lost their phone gets back in, even the
+    only admin). Returns the one-time password (shown once to the operator, never logged)."""
     users = UserRepository(clock)
     user = await users.by_email(email)
     if user is None or user.id is None:
@@ -99,9 +108,27 @@ async def reset_password(
             "must_change_password": True,
             "failed_logins": 0,
             "locked_until": None,
+            **TWO_FACTOR_OFF,
         },
         increment={"token_version": 1},
     )
     await SessionService(settings.auth, clock).revoke_all(user.id, "admin_password_reset")
+    await _record(
+        settings, clock, "user.password_reset", user, {"two_factor_cleared": user.two_factor}
+    )
     logger.info("auth_password_reset_by_admin", user_id=str(user.id))
     return one_time
+
+
+async def _record(
+    settings: Settings, clock: Clock, action: str, user: User, details: dict[str, object]
+) -> None:
+    """Into the audit trail like an admin's change, by the operator (no account: no actor)."""
+    await AuditLog(clock, settings).record(
+        action,
+        actor_id=None,
+        entity="user",
+        entity_id=str(user.id),
+        owner_id=user.id,
+        details={**details, "via": "operator"},
+    )

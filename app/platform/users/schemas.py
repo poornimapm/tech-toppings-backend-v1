@@ -22,6 +22,7 @@ class UserOut(BaseModel):
     ai_consent: bool
     must_change_password: bool
     has_password: bool
+    two_factor: bool
     auth_providers: list[str]
     created_at: datetime
 
@@ -40,6 +41,7 @@ class UserOut(BaseModel):
             ai_consent=user.ai_consent_at is not None,
             must_change_password=user.must_change_password,
             has_password=user.password_hash is not None,
+            two_factor=user.two_factor,
             auth_providers=[provider.provider for provider in user.auth_providers],
             created_at=user.created_at,
         )
