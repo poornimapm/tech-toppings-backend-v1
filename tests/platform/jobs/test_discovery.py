@@ -48,7 +48,10 @@ def test_the_app_knows_the_platform_and_module_jobs(app: FastAPI) -> None:
         ("notes", "notes_tick", "daily"),
         ("expenses", "expenses_recurring", "daily"),
         ("reminders", "reminders_deliver", "each"),
+        ("reminders", "reminders_push", "each"),
     } <= jobs
+    names = [item.spec.name for item in app.state.jobs]
+    assert names.index("reminders_deliver") < names.index("reminders_push")  # told, then pushed
 
 
 @pytest.mark.parametrize(

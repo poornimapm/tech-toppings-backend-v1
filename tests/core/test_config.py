@@ -6,7 +6,9 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.config import (
+    HTTP_MAX_CONNECTIONS,
     PROJECT_ROOT,
+    PUSH_JOB_HEADROOM_SECONDS,
     Environment,
     LogFormat,
     MongoSettings,
@@ -15,6 +17,7 @@ from app.core.config import (
     get_settings,
     load_settings,
 )
+from app.platform.push.webpush import new_key_pair
 
 MANAGED_VARS = (
     "APP_ENV",
@@ -28,8 +31,17 @@ MANAGED_VARS = (
     "RATE_LIMIT_JOBS_RUN",
     "JOBS_TOKEN",
     "JOBS_LEASE_SECONDS",
+    "JOBS_LAZY_TIMEOUT_SECONDS",
+    "JOBS_RUN_TIMEOUT_SECONDS",
     "REMINDERS_SEND_HOUR",
     "DEFAULT_TIMEZONE",
+    "PUSH_VAPID_PUBLIC_KEY",
+    "PUSH_VAPID_PRIVATE_KEY",
+    "PUSH_SUBJECT",
+    "PUSH_TIMEOUT_SECONDS",
+    "PUSH_DEVICE_TIMEOUT_SECONDS",
+    "PUSH_MAX_TRIES",
+    "PUSH_MAX_PARALLEL",
 )
 SECRET = "s" * 40
 
@@ -119,6 +131,15 @@ def test_a_blank_job_token_means_none(required_env: pytest.MonkeyPatch) -> None:
         ("REMINDERS_SEND_HOUR", "24", "less than or equal to 23"),
         ("REMINDERS_MAX_SNOOZE_DAYS", "5", "greater than or equal to 7"),  # the app offers 7
         ("DEFAULT_TIMEZONE", "Mars/Olympus", "unknown time zone"),
+        ("PUSH_DEVICE_TIMEOUT_SECONDS", "2.0", "shorter than PUSH_TIMEOUT_SECONDS"),
+        ("PUSH_MAX_TRIES", "0", "greater than or equal to 1"),
+        # More pushes under way than the shared HTTP client has connections would wait for one
+        # on the browser's time.
+        (
+            "PUSH_MAX_PARALLEL",
+            str(HTTP_MAX_CONNECTIONS + 1),
+            f"less than or equal to {HTTP_MAX_CONNECTIONS}",
+        ),
     ],
 )
 def test_invalid_values_are_rejected(
@@ -128,6 +149,60 @@ def test_invalid_values_are_rejected(
 
     with pytest.raises(ValidationError, match=message):
         load_settings([])
+
+
+@pytest.fixture
+def push_on(required_env: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
+    public, private = new_key_pair()
+    required_env.setenv("PUSH_VAPID_PUBLIC_KEY", public)
+    required_env.setenv("PUSH_VAPID_PRIVATE_KEY", private)
+    required_env.setenv("PUSH_SUBJECT", "mailto:ops@example.com")
+    return required_env
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        # Shorter than the bell's poll gives a job (3.0), but too little left to clear it.
+        ("PUSH_TIMEOUT_SECONDS", "2.9"),
+        ("JOBS_LAZY_TIMEOUT_SECONDS", "2.4"),  # the round takes 2.0
+        ("JOBS_RUN_TIMEOUT_SECONDS", "2.4"),
+    ],
+)
+def test_a_push_round_must_leave_its_job_time_to_clear(
+    push_on: pytest.MonkeyPatch, name: str, value: str
+) -> None:
+    push_on.setenv(name, value)
+
+    with pytest.raises(
+        ValidationError, match="PUSH_TIMEOUT_SECONDS must be at most JOBS_"
+    ) as caught:
+        load_settings([])
+    assert f"minus {PUSH_JOB_HEADROOM_SECONDS:g} seconds" in str(caught.value)
+
+
+def test_a_push_round_may_take_all_but_the_headroom(push_on: pytest.MonkeyPatch) -> None:
+    lazy = load_settings([]).jobs.lazy_timeout_seconds
+    push_on.setenv("PUSH_TIMEOUT_SECONDS", str(lazy - PUSH_JOB_HEADROOM_SECONDS))
+
+    assert load_settings([]).push.timeout_seconds == lazy - PUSH_JOB_HEADROOM_SECONDS
+
+
+def test_a_server_that_cannot_push_may_run_jobs_quicker(required_env: pytest.MonkeyPatch) -> None:
+    required_env.setenv("JOBS_LAZY_TIMEOUT_SECONDS", "1.0")
+
+    assert load_settings([]).jobs.lazy_timeout_seconds == 1.0
+
+
+@pytest.mark.usefixtures("push_on")
+def test_push_defaults_fit_in_the_jobs() -> None:
+    settings = load_settings([])
+
+    assert settings.push.available
+    assert settings.push.device_timeout_seconds < settings.push.timeout_seconds
+    room = settings.jobs.lazy_timeout_seconds - settings.push.timeout_seconds
+    assert room >= PUSH_JOB_HEADROOM_SECONDS
+    assert settings.push.max_parallel <= HTTP_MAX_CONNECTIONS
 
 
 @pytest.mark.parametrize(

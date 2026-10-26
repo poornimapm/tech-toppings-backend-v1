@@ -50,6 +50,7 @@ from app.platform.modules.router import router as modules_router
 from app.platform.notifications.router import router as notifications_router
 from app.platform.plugins import subpackages
 from app.platform.privacy.router import router as privacy_router
+from app.platform.push.router import router as push_router
 from app.platform.reminders.router import router as reminders_router
 from app.platform.search.router import router as search_router
 from app.platform.search.service import discover_search
@@ -145,6 +146,7 @@ def create_app(settings: Settings | None = None, *, clock: Clock | None = None) 
         activity_router,
         notifications_router,
         reminders_router,
+        push_router,
         search_router,
         fx_router,
         admin_router,

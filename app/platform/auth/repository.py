@@ -9,6 +9,7 @@ from beanie import PydanticObjectId
 from app.core.documents import OwnedDocument
 from app.core.repository import ScopedRepository
 from app.platform.auth.models import AuthSession
+from app.platform.push.models import PushSubscription
 
 
 class SessionRepository(ScopedRepository[AuthSession]):
@@ -20,3 +21,4 @@ class SessionRepository(ScopedRepository[AuthSession]):
             await self.update(
                 session_id, {"revoked_at": self.clock.now(), "revoked_reason": "user_revoked"}
             )
+        await PushSubscription.forget_sessions([session.id])  # that device gets no more pushes

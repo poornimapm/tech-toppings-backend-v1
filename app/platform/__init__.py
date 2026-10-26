@@ -66,6 +66,7 @@ from app.platform.jobs.models import JobRun
 from app.platform.modules.manifest import ModuleManifest, ModuleStatus, TileStat
 from app.platform.modules.models import ModuleOverride, UserModule
 from app.platform.notifications.inbox import Inbox, Notification
+from app.platform.push.models import PushSubscription
 from app.platform.reminders.models import Reminder
 from app.platform.reminders.service import Reminders
 from app.platform.search.contract import SearchHit, search
@@ -87,6 +88,7 @@ PLATFORM_DOCUMENTS = (
     AuditEntry,
     AllowedEmail,
     ErrorTally,
+    PushSubscription,
 )
 
 __all__ = [

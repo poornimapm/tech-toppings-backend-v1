@@ -153,11 +153,11 @@ async def test_a_crash_between_telling_and_marking_still_tells_once(
     await notes.due("bill", today - timedelta(days=1))
     mark_sent, crashes = Reminders._mark_sent, list[object]()
 
-    async def crash_once(self: Reminders, item: Reminder) -> int:
+    async def crash_once(self: Reminders, item: Reminder, *rest: Any) -> int:
         if not crashes:
             crashes.append(item.id)
             raise RuntimeError("the process stopped here")
-        return await mark_sent(self, item)
+        return await mark_sent(self, item, *rest)
 
     monkeypatch.setattr(Reminders, "_mark_sent", crash_once)
 

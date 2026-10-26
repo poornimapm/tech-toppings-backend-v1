@@ -21,6 +21,7 @@ from app.core.security import hash_token, new_token
 from app.platform.auth.errors import RefreshInvalidError, RefreshRaceError, RefreshReusedError
 from app.platform.auth.models import AuthSession
 from app.platform.auth.repository import SessionRepository
+from app.platform.push.models import PushSubscription
 from app.platform.users.models import User
 
 logger = get_logger(__name__)
@@ -134,8 +135,12 @@ class SessionService:
 
     async def _revoke(self, criteria: dict[str, object], reason: str) -> int:
         now = self.clock.now()
-        result = await AuthSession.get_pymongo_collection().update_many(
+        sessions = AuthSession.get_pymongo_collection()
+        result = await sessions.update_many(
             {**criteria, "revoked_at": None},
             {"$set": {"revoked_at": now, "revoked_reason": reason, "updated_at": now}},
         )
+        if result.modified_count:  # signed out there: no more pushes to that browser (ADR-0018)
+            ended = await sessions.distinct("_id", {**criteria, "revoked_at": now})
+            await PushSubscription.forget_sessions(ended)
         return int(result.modified_count)

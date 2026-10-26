@@ -6,6 +6,30 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added — Phase 11: PWA, i18n, a11y, polish
+
+- **Web Push** (`app/platform/push`, ADR-0018), with no new library:
+  - RFC 8291 message encryption and RFC 8292 VAPID, on `cryptography` and PyJWT, checked
+    against the RFC's worked example;
+  - `/v1/push`: whether pushes are on, subscribe or unsubscribe this browser, send myself a
+    test;
+  - due reminders are pushed by their own job, `reminders_push`, after delivery in the same
+    catch-up, so the inbox never waits on a push service. Each browser has its own deadline
+    (`PUSH_DEVICE_TIMEOUT_SECONDS`) inside the round's (`PUSH_TIMEOUT_SECONDS`, which must fit
+    the job budget), and at most `PUSH_MAX_PARALLEL` pushes are under way at once. A reminder tried on every browser is done; one cut short goes again after
+    the lease, at most `PUSH_MAX_TRIES` times, under the same notification tag. A browser the
+    push service says is gone is forgotten, and one that fails never stops the others;
+  - a subscription is tied to the signed-in device (the session) and to the current VAPID key:
+    signing out, signing the device out, signing out everywhere, a password change, an expired
+    session or new keys stop its pushes and delete it;
+  - only known push services are sent to (`PUSH_ALLOWED_HOSTS`, normalised), since an endpoint
+    is a URL a user supplies; a malformed endpoint, a user name or a port other than 443 gets 422;
+  - startup checks the VAPID pair (the public key must be the private key's), the allowed hosts
+    and `RATE_LIMIT_PUSH`;
+  - `poe vapid-keys` prints a key pair; settings `PUSH_*` and `RATE_LIMIT_PUSH`.
+- Push subscriptions are owned data: exported without their keys, erased with the account. No
+  user agent is stored.
+
 ### Added — Phase 10: admin console, audit, account security
 
 - **Audit trail** (`app/platform/audit`, ADR-0017): every sensitive change is one entry. That

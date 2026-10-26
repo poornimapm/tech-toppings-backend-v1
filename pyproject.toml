@@ -90,6 +90,8 @@ seed.cmd = "python scripts/seed.py"
 seed.help = "Idempotent seed data (bootstrap admin from BOOTSTRAP_ADMIN_*)"
 reset-password.cmd = "python scripts/reset_password.py"
 reset-password.help = "Admin reset: poe reset-password --email someone@example.com"
+vapid-keys.cmd = "python scripts/gen_vapid_keys.py"
+vapid-keys.help = "Print a new VAPID key pair for Web Push (PUSH_VAPID_*), for .env"
 
 openapi.cmd = "python scripts/export_openapi.py"
 openapi.help = "Write openapi.json (consumed by the frontend type generator)"

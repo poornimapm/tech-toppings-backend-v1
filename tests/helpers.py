@@ -44,6 +44,7 @@ from app.core.config import (
     ModulesSettings,
     MongoSettings,
     NotificationSettings,
+    PushSettings,
     RateLimitSettings,
     RegistrationMode,
     RemindersSettings,
@@ -116,6 +117,7 @@ def build_settings(mongo_uri: str, **groups: Any) -> Settings:
         "fx": FxSettings(_env_file=None),
         "audit": AuditSettings(_env_file=None),
         "admin": AdminSettings(_env_file=None, error_tally_flush_seconds=0),  # counted at once
+        "push": PushSettings(_env_file=None),  # off, as on a server without VAPID keys
         "bootstrap": BootstrapSettings(_env_file=None),
     }
     return Settings(**(defaults | groups))

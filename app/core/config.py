@@ -21,6 +21,8 @@ from typing import Annotated, Any, Literal
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from limits import parse as parse_rate_limit
 from pydantic import (
     BaseModel,
@@ -277,6 +279,7 @@ class RateLimitSettings(BaseSettings):
     search: str = "120/minute"  # the palette asks as the user types
     export: str = "10/minute"  # each one reads many entries
     imports: str = "60/minute"  # each reads a whole file; an import asks once per batch
+    push: str = "10/minute"  # subscribing a browser, or sending oneself a test push
 
     @field_validator(
         "auth_login",
@@ -288,6 +291,7 @@ class RateLimitSettings(BaseSettings):
         "search",
         "export",
         "imports",
+        "push",
     )
     @classmethod
     def valid_rate(cls, value: str) -> str:
@@ -541,6 +545,118 @@ class AdminSettings(BaseSettings):
     usage_max_days: int = Field(default=366, ge=1)
 
 
+# Connections the shared outbound HTTP client (app/core/http.py) has open at most.
+HTTP_MAX_CONNECTIONS = 100
+# Of each job time limit, the seconds a push round leaves for the job's writes around it:
+# claiming what is owed before the round, and noting and clearing what it pushed after.
+PUSH_JOB_HEADROOM_SECONDS = 0.5
+
+
+class PushSettings(BaseSettings):
+    """Web Push (ADR-0018): reminders reach a device even when the app is closed. Off until both
+    VAPID keys and a contact are set; `poe vapid-keys` makes a key pair."""
+
+    model_config = _group_config("PUSH_", secret=True)  # holds the private key
+
+    vapid_public_key: str | None = None
+    vapid_private_key: SecretStr | None = None
+    # How push services can reach whoever runs this server (RFC 8292): mailto: or https:.
+    subject: str | None = Field(default=None, pattern=r"^(mailto:|https://)\S+$")
+    # How long a push service keeps a message for a device that is offline (28 days at most).
+    ttl_seconds: int = Field(default=86_400, ge=0, le=2_419_200)
+    # How long one round of pushes may take, to every browser at once (pushes go out in a job,
+    # so it must leave the job's time limits PUSH_JOB_HEADROOM_SECONDS), and how long one
+    # browser of it may: a slower push service costs that browser's try, and the round still
+    # finishes.
+    timeout_seconds: float = Field(default=2.0, gt=0, le=60)
+    device_timeout_seconds: float = Field(default=1.5, gt=0, le=60)
+    # Pushes a round has under way at most; the rest wait their turn, and a browser's deadline
+    # starts only once its push is under way. Each holds a connection of the shared HTTP client.
+    max_parallel: int = Field(default=20, ge=1, le=HTTP_MAX_CONNECTIONS)
+    # Tries at pushing one reminder: one not finished on every browser goes again once its
+    # claim (JOBS_LEASE_SECONDS) passes, this many times in all; the inbox still has it.
+    max_tries: int = Field(default=3, ge=1, le=20)
+    # Browsers per account that receive pushes; past this the oldest is let go.
+    max_subscriptions: int = Field(default=10, ge=1, le=100)
+    # How long the server's signed identification is valid (push services accept up to 24h).
+    vapid_expiry_hours: int = Field(default=12, ge=1, le=24)
+    # The push services a browser's endpoint may be on (a host, or any host under it): the
+    # server sends to that URL, so it must never be one a user made up.
+    allowed_hosts: Annotated[tuple[str, ...], NoDecode] = (
+        "fcm.googleapis.com",  # Chrome, Android, Samsung Internet
+        "updates.push.services.mozilla.com",  # Firefox
+        "push.apple.com",  # Safari
+        "notify.windows.com",  # Edge
+    )
+
+    @field_validator("allowed_hosts", mode="before")
+    @classmethod
+    def hosts_from_csv(cls, value: Any) -> Any:
+        return _split_csv(value)
+
+    @field_validator("allowed_hosts")
+    @classmethod
+    def plain_hosts(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        """An endpoint's host is compared with these as is, so ``FCM.googleapis.com``,
+        ``.push.apple.com`` or ``https://fcm.googleapis.com/`` become the plain host name."""
+        hosts = tuple(
+            re.sub(r"^[a-z][a-z0-9+.-]*://", "", item.strip().lower()).strip("./") for item in value
+        )
+        for host in hosts:
+            # A dot at least: a bare "com" would let in every host under it.
+            if not re.fullmatch(r"[a-z0-9-]+(\.[a-z0-9-]+)+", host):
+                raise ValueError(f"{host!r} is not a host name, e.g. fcm.googleapis.com")
+        return hosts
+
+    @field_validator("vapid_public_key", "vapid_private_key", "subject", mode="before")
+    @classmethod
+    def blank_is_none(cls, value: Any) -> Any:
+        return value or None
+
+    @model_validator(mode="after")
+    def keys_pair_up(self) -> PushSettings:
+        public, private = self.vapid_public_key, self.vapid_private_key
+        if (public is None) != (private is None):
+            raise ValueError(
+                "set both PUSH_VAPID_PUBLIC_KEY and PUSH_VAPID_PRIVATE_KEY, or neither"
+            )
+        # Checked now: a wrong pair would only show as every push refused, and a malformed
+        # private key as every send failing.
+        if private is not None and self._public_of(private.get_secret_value()) != public:
+            raise ValueError(
+                "PUSH_VAPID_PUBLIC_KEY must be the public key of PUSH_VAPID_PRIVATE_KEY, "
+                "both as `poe vapid-keys` prints them"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def a_browser_fits_in_a_round(self) -> PushSettings:
+        # A browser as slow as the round would cut every message short, not cost its own try.
+        if self.device_timeout_seconds >= self.timeout_seconds:
+            raise ValueError(
+                "PUSH_DEVICE_TIMEOUT_SECONDS must be shorter than PUSH_TIMEOUT_SECONDS"
+            )
+        return self
+
+    @staticmethod
+    def _public_of(private: str) -> str | None:
+        """The public key (an uncompressed P-256 point) of a 32-byte scalar, both unpadded
+        base64url; None if it isn't one."""
+        if not re.fullmatch(r"[A-Za-z0-9_-]{43}", private):
+            return None
+        scalar = int.from_bytes(base64.urlsafe_b64decode(private + "="), "big")
+        try:
+            key = ec.derive_private_key(scalar, ec.SECP256R1())
+        except ValueError:  # zero, or not below the curve's order
+            return None
+        point = key.public_key().public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
+        return base64.urlsafe_b64encode(point).rstrip(b"=").decode()
+
+    @property
+    def available(self) -> bool:
+        return self.vapid_private_key is not None and self.subject is not None
+
+
 class BootstrapSettings(BaseSettings):
     """First admin account, created or promoted by `poe seed` (skipped when unset)."""
 
@@ -580,7 +696,23 @@ class Settings(BaseModel):
     fx: FxSettings
     audit: AuditSettings
     admin: AdminSettings
+    push: PushSettings
     bootstrap: BootstrapSettings
+
+    @model_validator(mode="after")
+    def a_push_round_fits_in_a_job(self) -> Settings:
+        # Pushes go out in a job, between claiming what is owed and clearing it: a round that
+        # left those writes no time would have the job killed whenever it ran to its deadline,
+        # its claims kept and the messages it finished pushed again.
+        jobs = self.jobs
+        limit = min(jobs.lazy_timeout_seconds, jobs.run_timeout_seconds)
+        if self.push.available and self.push.timeout_seconds > limit - PUSH_JOB_HEADROOM_SECONDS:
+            raise ValueError(
+                "PUSH_TIMEOUT_SECONDS must be at most JOBS_LAZY_TIMEOUT_SECONDS and "
+                f"JOBS_RUN_TIMEOUT_SECONDS minus {PUSH_JOB_HEADROOM_SECONDS:g} seconds, left for "
+                "claiming the pushes before the round and clearing them after"
+            )
+        return self
 
 
 def default_env_files() -> tuple[Path, ...]:
@@ -612,6 +744,7 @@ def load_settings(env_files: Sequence[Path] | None = None) -> Settings:
         fx=FxSettings(_env_file=existing),
         audit=AuditSettings(_env_file=existing),
         admin=AdminSettings(_env_file=existing),
+        push=PushSettings(_env_file=existing),
         bootstrap=BootstrapSettings(_env_file=existing),
     )
 

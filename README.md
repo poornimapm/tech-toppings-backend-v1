@@ -525,6 +525,25 @@ the admin routes. Everything under `/v1/admin` answers 403 to anyone else.
 3. `docs/privacy-policy-template.md` is a policy to fill in, including the Play Store Data
    Safety answers.
 
+## Reminders on a device (Web Push): try it
+
+Phase 11 (ADR-0018).
+
+1. `.venv\Scripts\poe vapid-keys` prints `PUSH_VAPID_PUBLIC_KEY` and `PUSH_VAPID_PRIVATE_KEY`.
+   Put them in `.env` with `PUSH_SUBJECT=mailto:you@example.com`. Keep the private key secret.
+2. In the app (a production build: `npm run build` then `npx vite preview` in the frontend), open
+   Notifications → "Reminders on this device" → Turn on, and allow notifications.
+3. "Send a test" pushes to every browser you turned on (`POST /v1/push/test`).
+4. A due reminder is pushed when the jobs run (the cron's `POST /v1/internal/jobs/all/run`, or
+   your own bell), by the `reminders_push` job. It pops up even with the app in front, and the
+   bell updates too.
+5. Sign out: that browser's pushes stop (so do a password change's other devices, and new VAPID
+   keys for every browser).
+
+Push needs HTTPS (or localhost). On iPhone and iPad it works only for the app added to the Home
+Screen. Push services are reached over the internet: a network that intercepts TLS stops them,
+while in-app reminders keep working.
+
 ## Tasks
 
 | Command | What it does |
@@ -540,6 +559,7 @@ the admin routes. Everything under `/v1/admin` answers 403 to anyone else.
 | `poe sync` | Make `.venv` match `requirements/dev.lock` exactly |
 | `poe seed` | Create or promote the bootstrap admin (idempotent) |
 | `poe reset-password --email …` | Admin password reset: prints a one-time password, forces a change, turns 2FA off (audited) |
+| `poe vapid-keys` | Print a new VAPID key pair for Web Push (`PUSH_VAPID_*`) |
 | `poe openapi` | Write `openapi.json` for the frontend type generator |
 | `poe eval-parser` | Accuracy of the expenses rule parser by language and field (`--misses` lists errors) |
 | `poe docker-build` | Build the production image locally |

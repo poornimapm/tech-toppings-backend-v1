@@ -30,9 +30,15 @@ keeps about you, why, for how long, and how to get it or erase it.
 | Two-step sign-in: your authenticator secret (encrypted), and your recovery codes (as one-way hashes only) | To check your codes when you sign in | Until you turn two-step sign-in off, or delete your account |
 | A security record of important account events: sign-in changes, role changes, data exports and account deletion. Each entry has your account ID and IP address, but none of your content | To protect your account and investigate misuse | {{AUDIT_RETENTION_DAYS}} days (`AUDIT_RETENTION_DAYS`) |
 | If registration is by invitation and an administrator invited you: your email address on the list of who may register | To let you register | Until you delete your account, or an administrator removes it. The security record that it was added or removed keeps the email address for {{AUDIT_RETENTION_DAYS}} days |
+| If you turn on reminders on a device: that browser's push address (given by its push service, such as Google's or Mozilla's), the keys that let only that browser read a reminder, and which of your signed-in devices turned them on | To send your reminders to that device when the app is closed, and only while you are signed in there. The reminder is encrypted so the push service can't read it | Until you turn them off on that device, sign out there (also when you sign it out from another device, sign out everywhere, change your password, or its session ends), the push service says the address is gone, or you delete your account |
 | Your recent in-app activity and notifications | To show your activity feed and your inbox | {{ACTIVITY_DAYS}} days (`DASHBOARD_ACTIVITY_RETENTION_DAYS`) and {{NOTIFICATION_DAYS}} days (`NOTIFICATIONS_RETENTION_DAYS`) |
 | Assistant requests and answers, if you use the assistant | To answer you, and to enforce daily limits | {{AGENT_RUN_DAYS}} days (`AGENT_RUN_RETENTION_DAYS`) |
 | A count of errors per day, by error type. These counts contain nothing about you | To find and fix problems | {{ERROR_TALLY_DAYS}} days (`ADMIN_ERROR_TALLY_DAYS`) |
+
+**On your device only:** entries you save and words you say while offline, and drafts waiting to
+be checked, stay in the app's storage on that device until they are sent or you dismiss them.
+They are kept for the account that made them, even after signing out on that device. Deleting
+your account on that device removes them there.
 
 We do not collect your location, contacts, photos, or advertising IDs. We do not sell your data,
 we do not show ads, and we do not use your data to build advertising profiles.
@@ -130,7 +136,8 @@ your own deployment: these answers assume the shipped defaults.
 | App activity → Other user-generated content (notes, journal and similar modules) | Yes | No | Optional | App functionality |
 | App activity → App interactions (activity feed) | Yes | No | Optional | App functionality |
 | App info and performance → Diagnostics | No (only anonymous daily error counts, not linked to anyone) | No | — | — |
-| Location, Contacts, Photos and videos, Audio, Files and docs, Calendar, Web browsing, Device or other IDs | No | No | — | — |
+| Device or other IDs (only if reminders on a device are turned on: the browser's push address) | Yes | No | Optional | App functionality |
+| Location, Contacts, Photos and videos, Audio, Files and docs, Calendar, Web browsing | No | No | — | — |
 
 **Notes on these answers:**
 

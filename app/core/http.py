@@ -7,7 +7,11 @@ from functools import lru_cache
 
 import httpx
 
-from app.core.config import AppSettings
+from app.core.config import HTTP_MAX_CONNECTIONS, AppSettings
+
+# httpx's own pool, made explicit: settings that start many calls at once (PUSH_MAX_PARALLEL)
+# are checked against its size. Idle connections kept for reuse are httpx's default too.
+LIMITS = httpx.Limits(max_connections=HTTP_MAX_CONNECTIONS, max_keepalive_connections=20)
 
 
 @lru_cache(maxsize=1)
@@ -18,4 +22,6 @@ def tls_context() -> ssl.SSLContext:
 
 
 def build_http_client(settings: AppSettings) -> httpx.AsyncClient:
-    return httpx.AsyncClient(timeout=settings.http_timeout_seconds, verify=tls_context())
+    return httpx.AsyncClient(
+        timeout=settings.http_timeout_seconds, verify=tls_context(), limits=LIMITS
+    )

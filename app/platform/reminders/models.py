@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, ClassVar
 
+from beanie import PydanticObjectId
 from pydantic import Field
 from pymongo import ASCENDING, IndexModel
 
@@ -24,6 +25,11 @@ class Reminder(OwnedDocument):
     channels: list[str] = Field(default_factory=lambda: ["in_app"])
     round: int = 0  # bumped by a snooze: each round is told once
     sent_at: datetime | None = None
+    # A push to the user's browsers is owed from then (ADR-0018); a run taking it moves it on
+    # and leaves its claim. Each claim is a try: a told round has PUSH_MAX_TRIES.
+    push_at: datetime | None = None
+    push_claim: PydanticObjectId | None = None
+    push_tries: int = 0
     snoozed_until: datetime | None = None
     dismissed_at: datetime | None = None
     purge_at: datetime
@@ -46,5 +52,6 @@ class Reminder(OwnedDocument):
                 name="user_pending",
             ),
             IndexModel([("user_id", ASCENDING), ("due_on", ASCENDING)], name="user_due"),
+            IndexModel([("user_id", ASCENDING), ("push_at", ASCENDING)], name="user_push_owed"),
             IndexModel([("purge_at", ASCENDING)], expireAfterSeconds=0, name="purge_at_ttl"),
         ]

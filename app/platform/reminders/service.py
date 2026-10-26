@@ -1,5 +1,5 @@
 """``Reminders(ctx)``: how a module reminds the user of a due date, and how due reminders
-reach the inbox.
+reach the inbox, and the user's devices as a push where they agreed to that (best effort).
 
 Each due date is told exactly once, and that never rests on a lock or on the schedule:
 
@@ -8,7 +8,9 @@ Each due date is told exactly once, and that never rests on a lock or on the sch
 * a round is first told with the inbox's ``dedupe_key`` ``reminder:{id}:{round}`` and only then
   marked sent by a guarded update, so a crash in between just repeats a notify that is deduped.
 
-A snooze starts the next round, which is told once more.
+A snooze starts the next round, which is told once more. Pushing a told round is a job of its
+own (``push_due``): best effort, up to ``PUSH_MAX_TRIES`` tries, under the same tag, so a
+repeat replaces it on the device.
 """
 
 from __future__ import annotations
@@ -19,20 +21,23 @@ from datetime import UTC, date, datetime, time, timedelta, timezone
 from typing import Any, ClassVar
 from zoneinfo import ZoneInfo
 
-from beanie import SortDirection
+from beanie import PydanticObjectId, SortDirection
 from fastapi import status
 from pymongo.errors import DuplicateKeyError
 
 from app.core.daterange import at_local
 from app.core.documents import OwnedDocument
 from app.core.errors import AppError, ErrorCode, NotFoundError
+from app.core.logging import get_logger
 from app.core.pagination import PageParams
 from app.core.repository import ScopedRepository
 from app.platform.context import ActorContext
 from app.platform.modules.service import ModuleService
 from app.platform.notifications.inbox import Inbox
+from app.platform.push.service import Push
 from app.platform.reminders.models import Reminder
 
+logger = get_logger(__name__)
 # What a reminder adds to its notification's params itself, so a module may not use them.
 RESERVED_PARAMS = frozenset({"module", "dedupe_key", "reminder_id", "ref_id", "due_on"})
 SOONEST_DUE: tuple[tuple[str, int], ...] = (("due_on", 1), ("remind_at", 1), ("_id", 1))
@@ -50,6 +55,17 @@ def notice_params(item: Reminder) -> dict[str, Any]:
     """What its notification says besides the module: which reminder and due date, plus the
     module's own params."""
     return {"reminder_id": str(item.id), "due_on": item.due_on, **item.params}
+
+
+def round_tag(item: Reminder) -> str:
+    """The round's ``dedupe_key`` in the inbox, and its push's tag on the device."""
+    return f"reminder:{item.id}:{item.round}"
+
+
+def push_message(item: Reminder) -> dict[str, Any]:
+    """What a push carries: the notification's type and params, and the round's tag."""
+    params = {"module": item.module_key, **notice_params(item)}
+    return {"type": item.type, "params": params, "tag": round_tag(item)}
 
 
 class Reminders(ScopedRepository[Reminder]):
@@ -131,24 +147,83 @@ class Reminders(ScopedRepository[Reminder]):
             .to_list()
         )
         inbox = Inbox(self.scope, self.clock, self.ctx.settings)
+        # A push is owed only where there is a browser to push to; push_due() sends it.
+        push_at = self.clock.now() if await Push(self.ctx).has_browsers() else None
         told = 0
         for item in due:
+            params = notice_params(item)
             await inbox.notify(
-                item.type,
-                module=item.module_key,
-                dedupe_key=f"reminder:{item.id}:{item.round}",
-                **notice_params(item),
+                item.type, module=item.module_key, dedupe_key=round_tag(item), **params
             )
-            told += await self._mark_sent(item)
+            told += await self._mark_sent(item, push_at)
         return told
 
-    async def _mark_sent(self, item: Reminder) -> int:
-        """Only the round just told: a snooze in the meantime has started the next one."""
+    async def _mark_sent(self, item: Reminder, push_at: datetime | None) -> int:
+        """Only the round just told: a snooze in the meantime has started the next one. Only the
+        run that marks it sent makes its push owed, with tries of its own."""
+        owed = {"push_at": push_at, "push_claim": None, "push_tries": 0}
         result = await Reminder.get_pymongo_collection().update_one(
             {"_id": item.id, "sent_at": None, "round": item.round},
-            {"$set": {"sent_at": self.clock.now(), **self._stamp()}},
+            {"$set": {"sent_at": self.clock.now(), **owed, **self._stamp()}},
         )
         return result.modified_count
+
+    async def push_due(self) -> int:
+        """Push the told rounds whose push is owed to the user's browsers, in one round of at most
+        ``PUSH_MAX_PARALLEL`` pushes at a time (ADR-0018).
+        A job of its own, so a slow push service never holds up the inbox. What is owed is
+        claimed for ``JOBS_LEASE_SECONDS`` first, each claim a try. A push tried on every
+        browser is done, even in a round cut short (``PUSH_TIMEOUT_SECONDS``); the rest, and
+        all of a run killed (the job's time limit, a restart), go again once the claim passes,
+        up to ``PUSH_MAX_TRIES`` tries. Returns how many were pushed."""
+        claimed, claim = await self._claim_pushes()
+        if not claimed:
+            return 0
+        sent = await Push(self.ctx).send(*(push_message(item) for item in claimed))
+        tries = self.ctx.settings.push.max_tries
+        pushed = [item.id for item, done in zip(claimed, sent.done, strict=True) if done]
+        given_up = [
+            item.id
+            for item, done in zip(claimed, sent.done, strict=True)
+            if not done and item.push_tries >= tries
+        ]
+        if given_up:
+            logger.warning("reminder_push_given_up", reminders=len(given_up), tries=tries)
+        await Reminder.get_pymongo_collection().update_many(
+            {"_id": {"$in": pushed + given_up}, "push_claim": claim},
+            {"$set": {"push_at": None}},
+        )
+        return len(pushed)
+
+    async def _claim_pushes(self) -> tuple[list[Reminder], PydanticObjectId]:
+        """This run takes what is owed, earliest first, in one write under a claim of its own;
+        one running at the same moment (another tab, the cron) then finds it taken. A told
+        round that has had its tries is owed no more. Not stamped as a change: ``updated_at``
+        orders the user's writes."""
+        now, claim = self.clock.now(), PydanticObjectId()
+        owed = self.query(
+            {
+                "push_at": {"$lte": now},
+                "sent_at": {"$ne": None},
+                "dismissed_at": None,
+                "push_tries": {"$not": {"$gte": self.ctx.settings.push.max_tries}},
+            }
+        )
+        items = (
+            await Reminder.find(owed)
+            .sort([("push_at", SortDirection.ASCENDING), ("_id", SortDirection.ASCENDING)])
+            .limit(self.settings.deliver_batch)
+            .to_list()
+        )
+        if not items:
+            return [], claim  # the usual case on every poll: one indexed read
+        ids = [item.id for item in items]
+        until = now + timedelta(seconds=self.ctx.settings.jobs.lease_seconds)
+        await Reminder.get_pymongo_collection().update_many(
+            {**owed, "_id": {"$in": ids}},
+            {"$set": {"push_at": until, "push_claim": claim}, "$inc": {"push_tries": 1}},
+        )
+        return await Reminder.find({"_id": {"$in": ids}, "push_claim": claim}).to_list(), claim
 
     # ------------------------------------------------------------------ for the user
 
@@ -166,6 +241,7 @@ class Reminders(ScopedRepository[Reminder]):
             "remind_at": remind_at,
             "snoozed_until": remind_at,
             "sent_at": None,
+            "push_at": None,  # the user has seen it: the next round is pushed instead
             "purge_at": self._purge_at(current.due_on, remind_at),
         }
         result = await Reminder.get_pymongo_collection().update_one(
@@ -181,7 +257,7 @@ class Reminders(ScopedRepository[Reminder]):
         current = await self.get(reminder_id)
         await Reminder.get_pymongo_collection().update_one(
             {"_id": current.id, "dismissed_at": None},
-            {"$set": {"dismissed_at": self.clock.now(), **self._stamp()}},
+            {"$set": {"dismissed_at": self.clock.now(), "push_at": None, **self._stamp()}},
         )
 
     async def rezone(self, previous: str) -> None:
@@ -215,8 +291,9 @@ class Reminders(ScopedRepository[Reminder]):
         return {"updated_at": self.clock.now(), "updated_by": self.scope.actor_id}
 
     async def _cancel(self, criteria: Mapping[str, Any]) -> int:
+        cancelled = {"deleted_at": self.clock.now(), "push_at": None, **self._stamp()}
         result = await Reminder.get_pymongo_collection().update_many(
-            self.query(criteria), {"$set": {"deleted_at": self.clock.now(), **self._stamp()}}
+            self.query(criteria), {"$set": cancelled}
         )
         return result.modified_count
 
