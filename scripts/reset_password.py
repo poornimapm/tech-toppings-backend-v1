@@ -11,6 +11,7 @@ import argparse
 import asyncio
 from collections.abc import Sequence
 
+from app.core.backup import Target
 from app.core.clock import SystemClock
 from app.core.config import get_settings
 from app.core.logging import configure_logging
@@ -28,6 +29,8 @@ async def run(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     settings = get_settings()
     configure_logging(settings.log)
+    where = Target.of(settings.mongo.uri.get_secret_value()).hosts
+    print(f"Resetting on {where} (APP_ENV={settings.app.env})")
     async with platform_database(settings):
         try:
             one_time = await reset_password(

@@ -560,6 +560,9 @@ while in-app reminders keep working.
 | `poe seed` | Create or promote the bootstrap admin (idempotent) |
 | `poe reset-password --email …` | Admin password reset: prints a one-time password, forces a change, turns 2FA off (audited) |
 | `poe vapid-keys` | Print a new VAPID key pair for Web Push (`PUSH_VAPID_*`) |
+| `poe backup` | Back up the whole database (`MONGO_URI`) to a new folder under `BACKUP_DIR`, encrypted with `BACKUP_ENCRYPTION_KEY` (required for a database on another machine) |
+| `poe restore --from backups/<folder>` | Restore a checked backup into empty collections (`--drop` replaces them); asks for the target `host/database` |
+| `poe smoke-live --app https://… [--api https://…]` | Check the live app end to end from outside (`SMOKE_EMAIL`/`SMOKE_PASSWORD` also sign in) |
 | `poe openapi` | Write `openapi.json` for the frontend type generator |
 | `poe eval-parser` | Accuracy of the expenses rule parser by language and field (`--misses` lists errors) |
 | `poe docker-build` | Build the production image locally |
@@ -585,6 +588,18 @@ docker compose up --build   # API on :8000, MongoDB 8.0 on host port 27018
 
 The image is multi-stage, runs as a non-root user, has a health check, and logs JSON. Render
 injects `PORT`.
+
+## Deployment
+
+[`docs/deployment.md`](docs/deployment.md) is the runbook: the accounts to create (Atlas,
+Render, Cloudflare; all free, no card), the secrets to make, the first deploy from
+[`render.yaml`](render.yaml), the first admin, the GitHub secrets, the live checks, and how to
+run it day to day (backups, monitoring, limits, rotating secrets). In production:
+- the API answers only through the app's `/api` proxy (`SECURITY_PROXY_SECRET`);
+- it refuses to start with an unsafe setting;
+- it gzips answers over 1 KB.
+
+See ADR-0019.
 
 ## Project layout
 

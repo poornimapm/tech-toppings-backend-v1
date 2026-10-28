@@ -22,29 +22,17 @@ from tests.helpers import (
     with_database,
 )
 
-SETTINGS_ENV_PREFIXES = (
-    "APP_",
-    "MONGO_",
-    "LOG_",
-    "CORS_",
-    "SECURITY_",
-    "AUTH_",
-    "RATE_LIMIT_",
-    "API_",
-    "DEFAULT_",
-    "MODULES_",
-    "AGENT_",
-    "DASHBOARD_",
-    "NOTIFICATIONS_",
-    "JOBS_",
-    "REMINDERS_",
-    "BOOTSTRAP_ADMIN_",
+# Every settings group's prefix, so a group added later is covered too.
+SETTINGS_ENV_PREFIXES = tuple(
+    str(field.annotation.model_config["env_prefix"])  # type: ignore[union-attr]
+    for field in Settings.model_fields.values()
 )
 
 
 @pytest.fixture(scope="session", autouse=True)
 def _hermetic_environment() -> Iterator[None]:
-    """Tests must not depend on the developer's shell or .env (poe loads .env into the env)."""
+    """Tests must not depend on the developer's shell or .env (`poe test` loads .env into the
+    env)."""
     with pytest.MonkeyPatch.context() as patch:
         for name in list(os.environ):
             if name.startswith(SETTINGS_ENV_PREFIXES):

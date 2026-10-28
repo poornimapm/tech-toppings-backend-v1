@@ -47,11 +47,13 @@ dev = [
 packages = ["app"]
 
 # ---------------------------------------------------------------- tasks (poe)
-[tool.poe]
-envfile = { optional = [".env"] }  # HOST, PORT, TEST_MONGO_URI ... for local runs
+# Only the tasks that need .env in their environment load it (HOST, PORT; TEST_MONGO_URI). The
+# others read it through the settings, below the real environment, so `$env:APP_ENV =
+# "production"` picks environments/production.env for seed, backup and restore (ADR-0019).
 
 [tool.poe.tasks]
 dev.cmd = "uvicorn app.main:create_app --factory --reload --host ${HOST} --port ${PORT} --no-access-log"
+dev.envfile = { optional = [".env"] }
 dev.env = { HOST.default = "127.0.0.1", PORT.default = "8000" }
 dev.help = "Run the API with auto-reload"
 
@@ -67,6 +69,7 @@ fmt.default_item_type = "cmd"
 fmt.help = "Auto-format and auto-fix"
 
 test.cmd = "pytest --cov --cov-report=term-missing"
+test.envfile = { optional = [".env"] }
 test.help = "Run the test suite with coverage (needs MongoDB, see README)"
 audit.cmd = "pip-audit --requirement requirements/base.lock --no-deps --disable-pip --progress-spinner off"
 audit.help = "Check pinned runtime dependencies for known vulnerabilities"
@@ -90,6 +93,12 @@ seed.cmd = "python scripts/seed.py"
 seed.help = "Idempotent seed data (bootstrap admin from BOOTSTRAP_ADMIN_*)"
 reset-password.cmd = "python scripts/reset_password.py"
 reset-password.help = "Admin reset: poe reset-password --email someone@example.com"
+backup.cmd = "python scripts/backup_db.py"
+backup.help = "Back up the whole database (MONGO_URI) to a new folder under BACKUP_DIR"
+restore.cmd = "python scripts/restore_db.py"
+restore.help = "Restore a backup: poe restore --from backups/<folder> [--drop] [--yes]"
+smoke-live.cmd = "python scripts/smoke_live.py"
+smoke-live.help = "Check the live app end to end: poe smoke-live --app https://... [--api https://...]"
 vapid-keys.cmd = "python scripts/gen_vapid_keys.py"
 vapid-keys.help = "Print a new VAPID key pair for Web Push (PUSH_VAPID_*), for .env"
 

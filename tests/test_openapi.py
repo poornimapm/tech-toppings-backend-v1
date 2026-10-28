@@ -34,8 +34,9 @@ async def test_openapi_documents_the_error_envelope(client: AsyncClient) -> None
 
 
 async def test_docs_can_be_disabled(mongo_uri: str) -> None:
+    # As in production, where it must be off (tests/core/test_config.py checks that).
     settings = build_settings(
-        mongo_uri, app=AppSettings(_env_file=None, env=Environment.PRODUCTION, docs_enabled=False)
+        mongo_uri, app=AppSettings(_env_file=None, env=Environment.TEST, docs_enabled=False)
     )
     async with running_client(create_app(settings)) as http:
         docs = await http.get("/docs")

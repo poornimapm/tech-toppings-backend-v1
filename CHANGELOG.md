@@ -6,6 +6,49 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added — Phase 12: deployment + hardening
+
+- **Runbook** `docs/deployment.md` (ADR-0019): the accounts to create, the secrets to make, the
+  first deploy, the first admin, the GitHub secrets, the live checks, and day-to-day running
+  (backups, monitoring, limits, rotating secrets, troubleshooting).
+- **Render Blueprint** `render.yaml`: one free Docker service in Singapore, health check
+  `/healthz`, deploys `main` after CI passes, production settings set and every secret asked
+  for (none in git). A test starts it in production; another keeps `.env.example` complete.
+- **Origin lock**: with `SECURITY_PROXY_SECRET` set, the API answers only calls that carry it
+  (the app's `/api` proxy sends it), but `SECURITY_PROXY_EXEMPT_PATHS` (`/healthz`). The client
+  address the proxy passes on can then be trusted.
+- **Production guard**: with `APP_ENV=production` the server refuses to start without HSTS, the
+  proxy secret, a `Secure` cookie, docs off, JSON logs, rate limits on and https-only CORS, and
+  names every problem.
+- **Compression**: answers of `API_GZIP_MIN_BYTES` (1000) or more are gzipped, never sign-in
+  answers (`API_GZIP_SKIP_PATHS`, BREACH). Render's free plan now counts 5 GB out a month.
+- **Backups**: `poe backup` and `poe restore` (`BACKUP_*`).
+  - Every collection is saved as canonical Extended JSON, gzipped and Fernet-encrypted (always,
+    for a database on another machine), with a manifest of source, counts and indexes.
+  - A backup is written whole or not at all. Only this database's oldest complete backups are
+    let go.
+  - Restoring checks every file before writing, writes into empty collections (or `--drop`),
+    checks each count before the indexes, and says how far it got if it stops.
+  - It asks for the target `host/database` first.
+  - `environments/production.env.example` sets these commands up for the live database, which
+    every maintenance command names before it starts.
+- **Live checks**: `poe smoke-live --app … [--api …]`, and the `smoke-live` workflow (daily and
+  by hand; its failure email is the monitoring). It checks the page's headers, a deep link, the
+  install files, caching, the API awake and its database, strangers refused, the CSRF rule,
+  docs hidden, the origin lock, and, with a test account, sign-in and sign-out.
+
+### Changed — Phase 12
+
+- `docs/free-tier-limits.md` re-checked (2026-10-28):
+  - Render's free bandwidth is now 5 GB a month;
+  - Atlas's M0 is now the "Free cluster", offered in AWS Singapore;
+  - Frankfurter's v2 is current (v1 still works);
+  - Gemini and Groq free models changed.
+- The jobs cron calls the API through the app's `/api` (`JOBS_API_URL`).
+- Only `poe dev` and `poe test` load `.env` into the environment, so `$env:APP_ENV` reaches
+  `environments/<APP_ENV>.env` for seed, backup, restore and password resets.
+- Tests clear every settings group's variables, whatever groups are added later.
+
 ### Added — Phase 11: PWA, i18n, a11y, polish
 
 - **Web Push** (`app/platform/push`, ADR-0018), with no new library:

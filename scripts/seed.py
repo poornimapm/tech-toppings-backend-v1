@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 
+from app.core.backup import Target
 from app.core.clock import SystemClock
 from app.core.config import get_settings
 from app.core.logging import configure_logging
@@ -19,6 +20,8 @@ from app.platform.auth.maintenance import ensure_bootstrap_admin, platform_datab
 async def run() -> int:
     settings = get_settings()
     configure_logging(settings.log)
+    where = Target.of(settings.mongo.uri.get_secret_value()).hosts
+    print(f"Seeding {where} (APP_ENV={settings.app.env})")
     async with platform_database(settings):
         outcome = await ensure_bootstrap_admin(
             settings, SystemClock(), PasswordHasher(settings.auth)

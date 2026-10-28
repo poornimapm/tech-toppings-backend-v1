@@ -32,6 +32,7 @@ from app.core.config import (
     AppSettings,
     AuditSettings,
     AuthSettings,
+    BackupSettings,
     BootstrapSettings,
     CorsSettings,
     DashboardSettings,
@@ -119,6 +120,7 @@ def build_settings(mongo_uri: str, **groups: Any) -> Settings:
         "admin": AdminSettings(_env_file=None, error_tally_flush_seconds=0),  # counted at once
         "push": PushSettings(_env_file=None),  # off, as on a server without VAPID keys
         "bootstrap": BootstrapSettings(_env_file=None),
+        "backup": BackupSettings(_env_file=None),
     }
     return Settings(**(defaults | groups))
 

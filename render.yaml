@@ -1,0 +1,71 @@
+# Render Blueprint for the API (ADR-0006, ADR-0019): one free web service, built from the
+# Dockerfile. Render → New → Blueprint → this repository. Values marked `sync: false` are
+# secrets: Render asks for them when the Blueprint is first applied, and they never live in
+# git. docs/deployment.md says how to make each one, and where else it goes.
+
+services:
+  - type: web
+    name: tech-toppings-api
+    runtime: docker
+    plan: free
+    # Closest Render region to India; put the Atlas M0 cluster in the same place (AWS
+    # Singapore, ap-southeast-1) so every query stays in one city.
+    region: singapore
+    branch: main
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    # The one path the API answers without the proxy's secret (SECURITY_PROXY_EXEMPT_PATHS).
+    healthCheckPath: /healthz
+    # Deploy a commit of `main` only once its CI checks have passed.
+    autoDeployTrigger: checksPass
+    envVars:
+      # ---------------------------------------------------------------- fixed for production
+      - key: APP_ENV
+        value: production
+      - key: APP_DOCS_ENABLED
+        value: "false"
+      - key: LOG_FORMAT
+        value: json
+      - key: LOG_LEVEL
+        value: INFO
+      - key: SECURITY_HSTS_MAX_AGE_SECONDS
+        value: "31536000"
+      # Every request comes through the /api proxy, which sets X-Forwarded-For; the proxy
+      # secret below makes sure nothing else reaches the API.
+      - key: FORWARDED_ALLOW_IPS
+        value: "*"
+      - key: AUTH_REFRESH_COOKIE_SECURE
+        value: "true"
+      - key: AUTH_REGISTRATION_MODE
+        value: allowlist
+      - key: RATE_LIMIT_ENABLED
+        value: "true"
+      # Atlas M0 allows 500 connections and 100 operations a second: one small pool.
+      - key: MONGO_MAX_POOL_SIZE
+        value: "10"
+      # ---------------------------------------------------------------- secrets (sync: false)
+      - key: MONGO_URI
+        sync: false
+      # Only the API ever needs it, so Render makes it.
+      - key: AUTH_JWT_SECRET
+        generateValue: true
+      # Also set in Cloudflare Pages as API_PROXY_SECRET.
+      - key: SECURITY_PROXY_SECRET
+        sync: false
+      # Also set in GitHub (backend repository) as the JOBS_TOKEN secret, for the jobs cron.
+      - key: JOBS_TOKEN
+        sync: false
+      - key: AUTH_FIELD_ENCRYPTION_KEY
+        sync: false
+      - key: AUTH_ALLOWED_EMAILS
+        sync: false
+      - key: AUTH_GOOGLE_CLIENT_ID
+        sync: false
+      - key: AGENT_PROVIDERS
+        sync: false
+      - key: PUSH_VAPID_PUBLIC_KEY
+        sync: false
+      - key: PUSH_VAPID_PRIVATE_KEY
+        sync: false
+      - key: PUSH_SUBJECT
+        sync: false

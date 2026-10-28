@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import re
+from collections.abc import AsyncIterator
 
 import pytest
 from httpx import AsyncClient
+from pydantic import SecretStr
 
-from app.core.config import CorsSettings, SecuritySettings
+from app.core.config import ApiSettings, CorsSettings, SecuritySettings
 from app.main import create_app
 from tests.helpers import build_settings, json_log_lines, running_client
 
@@ -62,6 +64,70 @@ async def test_cors_allows_only_configured_origins(mongo_uri: str) -> None:
     assert allowed.headers["Access-Control-Allow-Origin"] == "http://app.test"
     assert allowed.headers["Access-Control-Allow-Credentials"] == "true"
     assert "Access-Control-Allow-Origin" not in denied.headers
+
+
+PROXY_SECRET = "proxy-" * 8
+
+
+@pytest.fixture
+async def guarded(mongo_uri: str) -> AsyncIterator[AsyncClient]:
+    """The API behind its /api proxy: it answers only what carries the proxy's secret."""
+    security = SecuritySettings(_env_file=None, proxy_secret=SecretStr(PROXY_SECRET))
+    async with running_client(create_app(build_settings(mongo_uri, security=security))) as http:
+        yield http
+
+
+async def test_through_the_proxy_the_api_answers(guarded: AsyncClient) -> None:
+    response = await guarded.get("/readyz", headers={"X-TT-Proxy": PROXY_SECRET})
+
+    assert response.status_code == 200
+
+
+@pytest.mark.parametrize("given", [None, "", "wrong", PROXY_SECRET[:-1], PROXY_SECRET + "x"])
+async def test_around_the_proxy_the_api_refuses(
+    guarded: AsyncClient, capsys: pytest.CaptureFixture[str], given: str | None
+) -> None:
+    headers = {"X-Request-ID": "around-proxy-01"} | ({"X-TT-Proxy": given} if given else {})
+    capsys.readouterr()
+
+    response = await guarded.post("/v1/auth/login", headers=headers, json={})
+
+    assert response.status_code == 403
+    assert response.json()["code"] == "FORBIDDEN"
+    assert response.json()["request_id"] == "around-proxy-01"
+    assert response.headers["X-Content-Type-Options"] == "nosniff"  # still a hardened answer
+    out = capsys.readouterr().out
+    events = [e for e in json_log_lines(out) if e["event"] == "http_request"]
+    assert [(e["path"], e["status"]) for e in events] == [("/v1/auth/login", 403)]
+    assert PROXY_SECRET not in out
+
+
+async def test_the_host_health_check_needs_no_proxy(guarded: AsyncClient) -> None:
+    assert (await guarded.get("/healthz")).status_code == 200
+    assert (await guarded.get("/readyz")).status_code == 403  # only the paths named
+
+
+GZIP = {"Accept-Encoding": "gzip"}
+
+
+async def test_a_big_answer_is_gzipped_for_whoever_accepts_it(client: AsyncClient) -> None:
+    zipped = await client.get("/openapi.json", headers=GZIP)
+    plain = await client.get("/openapi.json", headers={"Accept-Encoding": "identity"})
+
+    assert zipped.headers["Content-Encoding"] == "gzip"
+    assert zipped.json() == plain.json()  # the same answer, smaller on the wire
+    assert "Content-Encoding" not in plain.headers
+    assert "Content-Encoding" not in (await client.get("/healthz", headers=GZIP)).headers
+
+
+async def test_sign_in_answers_are_never_gzipped(mongo_uri: str) -> None:
+    api = ApiSettings(_env_file=None, gzip_min_bytes=1)
+    async with running_client(create_app(build_settings(mongo_uri, api=api))) as http:
+        signed_in = await http.post("/v1/auth/login", headers=GZIP, json={})
+        elsewhere = await http.get("/healthz", headers=GZIP)
+
+    assert "Content-Encoding" not in signed_in.headers
+    assert elsewhere.headers["Content-Encoding"] == "gzip"
 
 
 async def test_no_cors_headers_when_no_origins_configured(client: AsyncClient) -> None:

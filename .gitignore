@@ -28,6 +28,9 @@ htmlcov/
 # --- generated ---
 openapi.json
 
+# --- database backups (poe backup): everyone's data, never in git ---
+backups/
+
 # --- editors / OS ---
 .idea/
 .vscode/

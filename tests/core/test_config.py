@@ -42,6 +42,13 @@ MANAGED_VARS = (
     "PUSH_DEVICE_TIMEOUT_SECONDS",
     "PUSH_MAX_TRIES",
     "PUSH_MAX_PARALLEL",
+    "APP_DOCS_ENABLED",
+    "AUTH_REFRESH_COOKIE_SECURE",
+    "RATE_LIMIT_ENABLED",
+    "SECURITY_HSTS_MAX_AGE_SECONDS",
+    "SECURITY_PROXY_SECRET",
+    "SECURITY_PROXY_HEADER",
+    "SECURITY_PROXY_EXEMPT_PATHS",
 )
 SECRET = "s" * 40
 
@@ -111,6 +118,8 @@ def test_defaults_are_safe() -> None:
     assert settings.rate_limit.enabled is True
     assert settings.jobs.token is None  # the jobs endpoint refuses every call until it is set
     assert settings.bootstrap.email is None
+    assert settings.security.proxy_secret is None  # answers directly, as in development
+    assert settings.security.proxy_exempt_paths == ("/healthz",)
 
 
 def test_a_blank_job_token_means_none(required_env: pytest.MonkeyPatch) -> None:
@@ -132,6 +141,9 @@ def test_a_blank_job_token_means_none(required_env: pytest.MonkeyPatch) -> None:
         ("REMINDERS_MAX_SNOOZE_DAYS", "5", "greater than or equal to 7"),  # the app offers 7
         ("DEFAULT_TIMEZONE", "Mars/Olympus", "unknown time zone"),
         ("PUSH_DEVICE_TIMEOUT_SECONDS", "2.0", "shorter than PUSH_TIMEOUT_SECONDS"),
+        ("SECURITY_PROXY_SECRET", "too-short", "32\\+ printable ASCII"),
+        ("SECURITY_PROXY_SECRET", "with a space " * 4, "32\\+ printable ASCII"),
+        ("SECURITY_PROXY_HEADER", "X TT Proxy", "should match pattern"),
         ("PUSH_MAX_TRIES", "0", "greater than or equal to 1"),
         # More pushes under way than the shared HTTP client has connections would wait for one
         # on the browser's time.
@@ -205,8 +217,69 @@ def test_push_defaults_fit_in_the_jobs() -> None:
     assert settings.push.max_parallel <= HTTP_MAX_CONNECTIONS
 
 
+@pytest.fixture
+def production(required_env: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
+    """A production server as the runbook sets it up (docs/deployment.md)."""
+    for name, value in {
+        "APP_ENV": "production",
+        "APP_DOCS_ENABLED": "false",
+        "LOG_FORMAT": "json",
+        "SECURITY_HSTS_MAX_AGE_SECONDS": "31536000",
+        "SECURITY_PROXY_SECRET": "p" * 40,
+    }.items():
+        required_env.setenv(name, value)
+    return required_env
+
+
+@pytest.mark.usefixtures("production")
+def test_a_hardened_production_server_starts() -> None:
+    settings = load_settings([])
+
+    assert settings.app.env is Environment.PRODUCTION
+    assert settings.security.proxy_secret is not None
+
+
 @pytest.mark.parametrize(
-    "name", ["JOBS_TOKEN", "AUTH_FIELD_ENCRYPTION_KEY", "AUTH_JWT_SECRET", "MONGO_URI"]
+    ("name", "value", "problem"),
+    [
+        ("SECURITY_HSTS_MAX_AGE_SECONDS", "0", "SECURITY_HSTS_MAX_AGE_SECONDS must be above 0"),
+        ("SECURITY_PROXY_SECRET", "", "SECURITY_PROXY_SECRET must be set"),
+        ("AUTH_REFRESH_COOKIE_SECURE", "false", "AUTH_REFRESH_COOKIE_SECURE must be true"),
+        ("APP_DOCS_ENABLED", "true", "APP_DOCS_ENABLED must be false"),
+        ("LOG_FORMAT", "console", "LOG_FORMAT must be json"),
+        ("RATE_LIMIT_ENABLED", "false", "RATE_LIMIT_ENABLED must be true"),
+        ("CORS_ALLOWED_ORIGINS", "https://a.test,http://b.test", "only https:// origins"),
+        ("CORS_ALLOWED_ORIGINS", "*", "only https:// origins"),
+    ],
+)
+def test_production_refuses_a_weakening_setting(
+    production: pytest.MonkeyPatch, name: str, value: str, problem: str
+) -> None:
+    production.setenv(name, value)
+
+    with pytest.raises(ValidationError, match=problem):
+        load_settings([])
+
+
+def test_production_names_every_problem_at_once(required_env: pytest.MonkeyPatch) -> None:
+    required_env.setenv("APP_ENV", "production")  # and nothing else hardened
+
+    with pytest.raises(ValidationError) as caught:
+        load_settings([])
+
+    for name in ("SECURITY_HSTS_MAX_AGE_SECONDS", "SECURITY_PROXY_SECRET", "APP_DOCS_ENABLED"):
+        assert name in str(caught.value)
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "JOBS_TOKEN",
+        "AUTH_FIELD_ENCRYPTION_KEY",
+        "AUTH_JWT_SECRET",
+        "MONGO_URI",
+        "SECURITY_PROXY_SECRET",
+    ],
 )
 def test_a_rejected_secret_is_not_echoed(required_env: pytest.MonkeyPatch, name: str) -> None:
     required_env.setenv(name, "mistyped-SECRET")

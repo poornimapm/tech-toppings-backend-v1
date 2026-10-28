@@ -159,14 +159,56 @@ class CorsSettings(BaseSettings):
         return _split_csv(value)
 
 
+PROXY_SECRET_MIN_LENGTH = 32
+
+
 class SecuritySettings(BaseSettings):
-    model_config = _group_config("SECURITY_")
+    model_config = _group_config("SECURITY_", secret=True)  # the proxy secret
 
     # 0 disables the Strict-Transport-Security header (local http development).
     hsts_max_age_seconds: int = Field(default=0, ge=0)
+    # Shared with the frontend's /api proxy, which sends it in `proxy_header` (ADR-0019). Set,
+    # the API answers nothing else, but `proxy_exempt_paths` (the host's health check): nobody
+    # reaches it around the proxy, so the client address the proxy passes on can be trusted.
+    proxy_secret: SecretStr | None = None
+    proxy_header: str = Field(default="X-TT-Proxy", pattern=r"^[A-Za-z0-9-]+$")
+    proxy_exempt_paths: Annotated[tuple[str, ...], NoDecode] = ("/healthz",)
+
+    @field_validator("proxy_secret", mode="before")
+    @classmethod
+    def blank_secret_is_none(cls, value: Any) -> Any:
+        return value or None
+
+    @field_validator("proxy_secret")
+    @classmethod
+    def strong_secret(cls, value: SecretStr | None) -> SecretStr | None:
+        if value is not None and not re.fullmatch(
+            rf"[!-~]{{{PROXY_SECRET_MIN_LENGTH},}}", value.get_secret_value()
+        ):
+            raise ValueError(
+                f"must be {PROXY_SECRET_MIN_LENGTH}+ printable ASCII characters, no spaces"
+            )
+        return value
+
+    @field_validator("proxy_exempt_paths", mode="before")
+    @classmethod
+    def split_paths(cls, value: Any) -> Any:
+        return _split_csv(value)
 
 
 FERNET_KEY_BYTES = 32
+
+
+def _fernet_key(value: SecretStr | None) -> SecretStr | None:
+    """A Fernet key, if any: 32 bytes, url-safe base64."""
+    if value is not None:
+        try:
+            decoded = base64.urlsafe_b64decode(value.get_secret_value().encode())
+        except ValueError as exc:
+            raise ValueError("must be 32 bytes, url-safe base64 (see .env.example)") from exc
+        if len(decoded) != FERNET_KEY_BYTES:
+            raise ValueError("must be 32 bytes, url-safe base64 (see .env.example)")
+    return value
 
 
 class AuthSettings(BaseSettings):
@@ -254,14 +296,7 @@ class AuthSettings(BaseSettings):
     @field_validator("field_encryption_key")
     @classmethod
     def a_fernet_key(cls, value: SecretStr | None) -> SecretStr | None:
-        if value is not None:
-            try:
-                decoded = base64.urlsafe_b64decode(value.get_secret_value().encode())
-            except ValueError as exc:
-                raise ValueError("must be 32 bytes, url-safe base64 (see .env.example)") from exc
-            if len(decoded) != FERNET_KEY_BYTES:
-                raise ValueError("must be 32 bytes, url-safe base64 (see .env.example)")
-        return value
+        return _fernet_key(value)
 
 
 class RateLimitSettings(BaseSettings):
@@ -307,6 +342,17 @@ class ApiSettings(BaseSettings):
     # Largest request body any route takes; a bigger one is refused (413) before it is read.
     # The CSV import needs its file base64-encoded (a third bigger) plus its mapping.
     max_body_bytes: int = Field(default=3_000_000, ge=1024)
+    # Answers this big or bigger are gzipped when the caller accepts it (0 = never): the free
+    # host counts every byte the API sends (ADR-0019). Never those under `gzip_skip_paths`,
+    # where a token is sent back: compressed next to what a caller sent, its length could
+    # give it away (BREACH).
+    gzip_min_bytes: int = Field(default=1000, ge=0)
+    gzip_skip_paths: Annotated[tuple[str, ...], NoDecode] = ("/v1/auth",)
+
+    @field_validator("gzip_skip_paths", mode="before")
+    @classmethod
+    def split_paths(cls, value: Any) -> Any:
+        return _split_csv(value)
 
 
 class DefaultsSettings(BaseSettings):
@@ -672,6 +718,44 @@ class BootstrapSettings(BaseSettings):
         return value or None
 
 
+class BackupSettings(BaseSettings):
+    """Copies of the whole database, made and restored from the owner's own machine by
+    `poe backup` and `poe restore` (ADR-0019); the server never uses these."""
+
+    model_config = _group_config("BACKUP_", secret=True)
+
+    # Where backups are written (relative to the project), one folder each. Git ignores it.
+    dir: Path = Path("backups")
+    # Fernet key that encrypts each backup (same shape as AUTH_FIELD_ENCRYPTION_KEY, but a key
+    # of its own, kept somewhere other than the backups). Empty = written as plain files.
+    encryption_key: SecretStr | None = None
+    # Backups kept in `dir`; older ones are deleted after a new one is written.
+    keep: int = Field(default=7, ge=1)
+    # Collections left out, e.g. caches that refill themselves (comma-separated).
+    skip_collections: Annotated[tuple[str, ...], NoDecode] = ()
+    # Documents written to the database at a time when restoring.
+    restore_batch: int = Field(default=500, ge=1, le=10_000)
+
+    @field_validator("encryption_key", mode="before")
+    @classmethod
+    def blank_key_is_none(cls, value: Any) -> Any:
+        return value or None
+
+    @field_validator("encryption_key")
+    @classmethod
+    def a_fernet_key(cls, value: SecretStr | None) -> SecretStr | None:
+        return _fernet_key(value)
+
+    @field_validator("skip_collections", mode="before")
+    @classmethod
+    def split_names(cls, value: Any) -> Any:
+        return _split_csv(value)
+
+    @property
+    def path(self) -> Path:
+        return self.dir if self.dir.is_absolute() else PROJECT_ROOT / self.dir
+
+
 class Settings(BaseModel):
     """Root settings object; one attribute per configuration group."""
 
@@ -698,6 +782,38 @@ class Settings(BaseModel):
     admin: AdminSettings
     push: PushSettings
     bootstrap: BootstrapSettings
+    backup: BackupSettings
+
+    @model_validator(mode="after")
+    def production_is_hardened(self) -> Settings:
+        # A production server refuses to start on a setting that would quietly weaken it.
+        if self.app.env is not Environment.PRODUCTION:
+            return self
+        problems = [
+            problem
+            for problem, wrong in (
+                (
+                    "SECURITY_HSTS_MAX_AGE_SECONDS must be above 0",
+                    self.security.hsts_max_age_seconds <= 0,
+                ),
+                (
+                    "SECURITY_PROXY_SECRET must be set (the API answers only through /api)",
+                    self.security.proxy_secret is None,
+                ),
+                ("AUTH_REFRESH_COOKIE_SECURE must be true", not self.auth.refresh_cookie_secure),
+                ("APP_DOCS_ENABLED must be false", self.app.docs_enabled),
+                ("LOG_FORMAT must be json", self.log.format is not LogFormat.JSON),
+                ("RATE_LIMIT_ENABLED must be true", not self.rate_limit.enabled),
+                (
+                    "CORS_ALLOWED_ORIGINS may list only https:// origins",
+                    any(not origin.startswith("https://") for origin in self.cors.allowed_origins),
+                ),
+            )
+            if wrong
+        ]
+        if problems:
+            raise ValueError("unsafe for APP_ENV=production: " + "; ".join(problems))
+        return self
 
     @model_validator(mode="after")
     def a_push_round_fits_in_a_job(self) -> Settings:
@@ -746,6 +862,7 @@ def load_settings(env_files: Sequence[Path] | None = None) -> Settings:
         admin=AdminSettings(_env_file=existing),
         push=PushSettings(_env_file=existing),
         bootstrap=BootstrapSettings(_env_file=existing),
+        backup=BackupSettings(_env_file=existing),
     )
 
 

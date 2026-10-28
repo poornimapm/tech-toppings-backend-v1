@@ -4,7 +4,8 @@ name: jobs-cron
 # jobs of recently active users. The first path is the app itself (each user's notification
 # bell), so a late or skipped run only delays things. GitHub runs schedules from the default
 # branch only. Until the repository secrets JOBS_API_URL and JOBS_TOKEN are set, every run
-# is a no-op.
+# is a no-op. JOBS_API_URL is the app's own address plus /api (https://<project>.pages.dev/api):
+# the API answers only through that proxy (SECURITY_PROXY_SECRET, docs/deployment.md).
 
 on:
   schedule:

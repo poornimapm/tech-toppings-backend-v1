@@ -1,4 +1,5 @@
-"""ASGI middleware: request context + access log, security headers, CORS, body size limit.
+"""ASGI middleware: request context + access log, security headers, the proxy guard, CORS,
+compression, body size limit.
 
 Pure ASGI classes (not ``BaseHTTPMiddleware``) so they add no task overhead and work with
 streaming responses.
@@ -6,6 +7,7 @@ streaming responses.
 
 from __future__ import annotations
 
+import hmac
 import re
 import time
 import uuid
@@ -14,6 +16,7 @@ import structlog
 from fastapi import FastAPI
 from starlette.datastructures import Headers, MutableHeaders
 from starlette.middleware.cors import CORSMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -114,6 +117,53 @@ class SecurityHeadersMiddleware:
         await self.app(scope, receive, send_with_headers)
 
 
+class ProxyGuardMiddleware:
+    """Answers only requests that carry the /api proxy's shared secret (ADR-0019), but those
+    to ``exempt_paths``: nobody reaches the API around the proxy, so the client address the
+    proxy passes on (X-Forwarded-For) is the real one. The rest get a 403, read no further."""
+
+    def __init__(
+        self, app: ASGIApp, *, secret: str, header: str, exempt_paths: tuple[str, ...]
+    ) -> None:
+        self.app = app
+        self.secret = secret.encode()
+        self.header = header
+        self.exempt_paths = frozenset(exempt_paths)
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or scope["path"] in self.exempt_paths or self._through(scope):
+            await self.app(scope, receive, send)
+            return
+        request_id = scope.get("state", {}).get("request_id")
+        body = ErrorResponse(
+            code=ErrorCode.FORBIDDEN,
+            message="This API answers only through the app.",
+            request_id=request_id,
+        )
+        await JSONResponse(body.model_dump(), status_code=403)(scope, receive, send)
+
+    def _through(self, scope: Scope) -> bool:
+        given = Headers(scope=scope).get(self.header, "").encode()
+        return hmac.compare_digest(given, self.secret)
+
+
+class CompressionMiddleware:
+    """Gzips answers of ``minimum_size`` bytes or more for callers that accept it (the free host
+    counts every byte the API sends), but never those under ``skip_prefixes``: an answer that
+    holds a token is never compressed next to what the caller sent (BREACH)."""
+
+    def __init__(self, app: ASGIApp, *, minimum_size: int, skip_prefixes: tuple[str, ...]) -> None:
+        self.app = app
+        self.gzip = GZipMiddleware(app, minimum_size=minimum_size, compresslevel=6)
+        self.skip_prefixes = skip_prefixes
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http" and not scope["path"].startswith(self.skip_prefixes):
+            await self.gzip(scope, receive, send)
+            return
+        await self.app(scope, receive, send)
+
+
 class BodyLimitMiddleware:
     """Refuses a request body larger than ``max_bytes`` (413, the usual error envelope) before
     the app reads any of it: by its Content-Length, or, for a body sent in chunks without one,
@@ -171,9 +221,17 @@ class BodyLimitMiddleware:
 
 def install_middleware(app: FastAPI, settings: Settings) -> None:
     """Register middleware. Starlette runs the last-added one outermost, so the order below
-    is body limit (innermost) -> CORS -> security headers -> request context (outermost): a
-    refused body still gets CORS and security headers, its request id and its log line."""
+    is body limit (innermost) -> compression -> CORS -> proxy guard -> security headers ->
+    request context (outermost): a refused request still gets security headers, its request id
+    and its log line, and one from around the proxy is refused before anything else looks at
+    it."""
     app.add_middleware(BodyLimitMiddleware, max_bytes=settings.api.max_body_bytes)
+    if settings.api.gzip_min_bytes > 0:
+        app.add_middleware(
+            CompressionMiddleware,
+            minimum_size=settings.api.gzip_min_bytes,
+            skip_prefixes=settings.api.gzip_skip_paths,
+        )
     if settings.cors.allowed_origins:
         app.add_middleware(
             CORSMiddleware,
@@ -184,6 +242,14 @@ def install_middleware(app: FastAPI, settings: Settings) -> None:
             # A client tells a replayed create (a retry after a lost reply) by its header, and
             # names a downloaded file (export.csv) as the server did.
             expose_headers=[REQUEST_ID_HEADER, REPLAYED_HEADER, "Content-Disposition"],
+        )
+    security = settings.security
+    if security.proxy_secret is not None:
+        app.add_middleware(
+            ProxyGuardMiddleware,
+            secret=security.proxy_secret.get_secret_value(),
+            header=security.proxy_header,
+            exempt_paths=security.proxy_exempt_paths,
         )
     app.add_middleware(
         SecurityHeadersMiddleware,

@@ -1,0 +1,65 @@
+name: smoke-live
+
+# The live app checked end to end from outside (scripts/smoke_live.py, docs/deployment.md):
+# daily, and by hand after a deploy. A failed run emails the repository's owner, which makes it
+# the free monitoring. Until the repository variable SMOKE_APP_URL is set, every run is a no-op.
+# Optional: variable SMOKE_API_URL (the API host's own address, to check it refuses strangers),
+# secrets SMOKE_EMAIL and SMOKE_PASSWORD (a test account without two-step sign-in).
+
+on:
+  schedule:
+    - cron: "17 3 * * *" # daily, 08:47 in India, off the busy top of the hour
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smoke-live
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: check the live app
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SMOKE_APP_URL: ${{ vars.SMOKE_APP_URL }}
+      SMOKE_API_URL: ${{ vars.SMOKE_API_URL }}
+    steps:
+      - name: Check configuration
+        id: guard
+        run: |
+          if [ -z "$SMOKE_APP_URL" ]; then
+            echo "::notice::SMOKE_APP_URL is not set, so there is nothing to check."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v7
+        if: steps.guard.outputs.ready == 'true'
+
+      - uses: actions/setup-python@v7
+        if: steps.guard.outputs.ready == 'true'
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements/base.lock
+
+      # The script needs only the pinned runtime packages, not the project itself.
+      - name: Install the pinned dependencies
+        if: steps.guard.outputs.ready == 'true'
+        run: pip install --requirement requirements/base.lock
+
+      # The test account's secrets reach this step only. The password and tokens are never
+      # printed; one line per check.
+      - name: Check the live app
+        if: steps.guard.outputs.ready == 'true'
+        env:
+          SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
+          SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
+        run: |
+          args=(--app "$SMOKE_APP_URL" --wait 150)
+          if [ -n "$SMOKE_API_URL" ]; then args+=(--api "$SMOKE_API_URL"); fi
+          python scripts/smoke_live.py "${args[@]}"
