@@ -1,0 +1,33 @@
+﻿"""What the routes take and give. Named after the module, so its API types stay its own."""
+
+from __future__ import annotations
+
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from %%module%%.models import %%Key%%Item
+
+TEXT_MAX = 200
+
+
+class %%Key%%ItemIn(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    text: str = Field(min_length=1, max_length=TEXT_MAX)
+
+
+class %%Key%%ItemOut(BaseModel):
+    id: str
+    text: str
+    created_at: datetime
+    updated_at: datetime
+
+    @classmethod
+    def of(cls, item: %%Key%%Item) -> %%Key%%ItemOut:
+        return cls(
+            id=str(item.id),
+            text=item.text,
+            created_at=item.created_at,
+            updated_at=item.updated_at,
+        )

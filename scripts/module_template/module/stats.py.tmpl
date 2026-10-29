@@ -1,0 +1,10 @@
+﻿"""The figure on the module's Welcome tile: how many items the user keeps."""
+
+from __future__ import annotations
+
+from %%module%%.service import %%Key%%Items
+from app.platform import Clock, Scope, TileStat
+
+
+async def item_count(scope: Scope, clock: Clock) -> TileStat | None:
+    return TileStat(value=await %%Key%%Items(scope, clock).count(), label="items")

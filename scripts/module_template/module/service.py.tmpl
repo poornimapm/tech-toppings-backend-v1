@@ -1,0 +1,36 @@
+﻿"""The module's rules, between its routes and its data: one user's items, and only theirs."""
+
+from __future__ import annotations
+
+from %%module%%.models import %%Key%%Item, %%Key%%ItemRepository
+from app.platform import Clock, PageParams, Scope, parse_sort
+
+SORT_FIELDS = ("created_at", "text")
+NEWEST = "-created_at"
+
+
+class %%Key%%Items:
+    def __init__(self, scope: Scope, clock: Clock) -> None:
+        self.repository = %%Key%%ItemRepository(scope, clock)
+
+    async def add(self, text: str) -> %%Key%%Item:
+        return await self.repository.create({"text": text})
+
+    async def page(
+        self, params: PageParams, sort: str | None
+    ) -> tuple[list[%%Key%%Item], int]:
+        # Ties (the same text, the same instant) in one fixed order, so pages never overlap.
+        order = [*parse_sort(sort, SORT_FIELDS, NEWEST), ("_id", -1)]
+        return await self.repository.list(params, order)
+
+    async def get(self, item_id: str) -> %%Key%%Item:
+        return await self.repository.get(item_id)
+
+    async def change(self, item_id: str, text: str) -> %%Key%%Item:
+        return await self.repository.update(item_id, {"text": text})
+
+    async def delete(self, item_id: str) -> None:
+        await self.repository.soft_delete(item_id)
+
+    async def count(self) -> int:
+        return await %%Key%%Item.find(self.repository.query()).count()

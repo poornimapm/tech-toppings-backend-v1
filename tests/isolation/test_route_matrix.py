@@ -1,8 +1,9 @@
 """Brief §7.3: user A must never read, change or delete user B's data, on any endpoint.
 
 Every ``/v1`` route that takes a resource id is enumerated from the running app. Each id
-parameter needs a factory below that creates such a resource for a user; a route with an
-unknown parameter fails ``test_every_id_route_is_covered``, so new endpoints can't skip this.
+parameter needs a factory below that creates such a resource for a user, or one in its module's
+``tests/modules/<key>/isolation.py``; a route with an unknown parameter fails
+``test_every_id_route_is_covered``, so new endpoints can't skip this.
 
 Shared catalog keys (module ``{key}``) are not owned, so another user may use the same key; for
 those the guarantee is that the call only ever changes the caller's own state.
@@ -10,6 +11,9 @@ those the guarantee is that the call only ever changes the caller's own state.
 
 from __future__ import annotations
 
+import importlib
+import importlib.util
+import pkgutil
 import re
 import uuid
 from collections.abc import Awaitable, Callable
@@ -27,6 +31,7 @@ from app.platform.context import ActorContext
 from app.platform.notifications.inbox import Inbox
 from app.platform.reminders.service import Reminders
 from app.platform.users.models import User
+from tests import modules as modules_tests
 from tests.helpers import CSRF, Account, FrozenClock, api_operations, build_settings, register
 
 PATH_PARAM = re.compile(r"{(\w+)}")
@@ -397,6 +402,33 @@ CATALOG: dict[str, tuple[Factory, Snapshot]] = {
 }
 
 
+def module_resources() -> dict[str, dict[str, tuple[Factory, Checker]]]:
+    """A module's own factories, by the prefix of its routes: ``tests/modules/<key>/isolation.py``
+    defines ``PREFIX`` and ``RESOURCES``, as the module generator writes it (ADR-0020). Two
+    modules may then name their ids alike (``item_id``)."""
+    found: dict[str, dict[str, tuple[Factory, Checker]]] = {}
+    for info in pkgutil.iter_modules(modules_tests.__path__):
+        if not info.ispkg:  # a shared conftest or helper, not a module's tests
+            continue
+        name = f"{modules_tests.__name__}.{info.name}.isolation"
+        if importlib.util.find_spec(name) is None:
+            continue
+        module = importlib.import_module(name)
+        found[module.PREFIX] = module.RESOURCES
+    return found
+
+
+MODULE_RESOURCES = module_resources()
+
+
+def resource_for(route: IdRoute) -> tuple[Factory, Checker] | None:
+    """How to make and check what the route's id names: the module's own way, else the shared."""
+    for prefix, resources in MODULE_RESOURCES.items():
+        if route.path.startswith(prefix) and route.param in resources:
+            return resources[route.param]
+    return RESOURCES.get(route.param)
+
+
 # ------------------------------------------------------------------ tests
 
 
@@ -404,7 +436,9 @@ def test_every_id_route_is_covered(app: FastAPI) -> None:
     routes = id_routes(app)
 
     assert routes, "expected at least one id route"
-    uncovered = sorted({r.param for r in routes} - set(RESOURCES) - set(CATALOG))
+    uncovered = sorted(
+        {f"{r.param} ({r.path})" for r in routes if not resource_for(r) and r.param not in CATALOG}
+    )
     assert uncovered == [], f"add factories for: {uncovered}"
 
 
@@ -416,9 +450,10 @@ async def test_another_user_gets_not_found_on_every_id_route(
     checked: list[str] = []
 
     for route in id_routes(app):
-        if route.param not in RESOURCES:
+        factories = resource_for(route)
+        if factories is None:
             continue
-        create, verify = RESOURCES[route.param]
+        create, verify = factories
         resource_id = await create(client, owner)
 
         response = await other_client.request(
@@ -433,7 +468,7 @@ async def test_another_user_gets_not_found_on_every_id_route(
         await verify(client, owner, resource_id)  # the owner's data is untouched
         checked.append(f"{route.method} {route.path}")
 
-    assert len(checked) == len([r for r in id_routes(app) if r.param in RESOURCES])
+    assert len(checked) == len([r for r in id_routes(app) if resource_for(r)])
 
 
 async def test_catalog_routes_only_change_the_callers_own_state(

@@ -1,0 +1,20 @@
+"""What the module keeps: items, each a short text, owned by one user."""
+
+from __future__ import annotations
+
+from typing import ClassVar
+
+from app.platform import OwnedDocument, ScopedRepository
+
+
+class %%Key%%Item(OwnedDocument):
+    MODULE_KEY: ClassVar[str] = "%%key%%"
+
+    text: str
+
+    class Settings:
+        name = "%%key%%_items"
+
+
+class %%Key%%ItemRepository(ScopedRepository[%%Key%%Item]):
+    model: ClassVar[type[OwnedDocument]] = %%Key%%Item

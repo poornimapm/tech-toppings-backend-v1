@@ -23,13 +23,13 @@ def manifest(key: str, order: int = 1, **extra: str) -> str:
 def test_discovers_the_real_modules() -> None:
     modules = discover_modules(("app.modules",))
 
-    statuses = {module.manifest.key: module.manifest.status for module in modules}
-    assert next(iter(statuses)) == "expenses"  # the first module to be built leads the list
-    assert statuses.pop("expenses") is ModuleStatus.BETA
-    assert set(statuses) == {
-        "medicine", "receipts", "study", "gov_docs", "meals", "habits", "journal"
-    }  # fmt: skip
-    assert set(statuses.values()) == {ModuleStatus.COMING_SOON}
+    manifests = {module.manifest.key: module.manifest for module in modules}
+    assert manifests["expenses"].status is ModuleStatus.BETA
+    shipped = {"medicine", "receipts", "study", "gov_docs", "meals", "habits", "journal"}
+    assert shipped <= set(manifests)  # shipped as upcoming; `poe new-module` may build any
+    for manifest in manifests.values():
+        # Upcoming: a tile and nothing behind it; built: its own routes.
+        assert (manifest.status is ModuleStatus.COMING_SOON) == (manifest.router is None)
 
 
 def test_orders_by_manifest_order_then_key(plugin_package: MakePackage) -> None:

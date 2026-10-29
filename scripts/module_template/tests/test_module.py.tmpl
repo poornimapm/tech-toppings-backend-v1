@@ -1,0 +1,84 @@
+"""The module made by `poe new-module`: its routes round trip, its text is checked, its tile
+counts the user's items, and one user never sees another's."""
+
+from __future__ import annotations
+
+import pytest
+from httpx import AsyncClient
+
+from tests.helpers import register
+
+ITEMS = "/v1/%%slug%%/items"
+
+
+async def test_an_item_is_added_read_changed_and_deleted(client: AsyncClient) -> None:
+    headers = (await register(client)).headers
+
+    added = await client.post(ITEMS, headers=headers, json={"text": "  First  "})
+    assert added.status_code == 201, added.text
+    item = added.json()
+    assert item["text"] == "First"  # spaces around it are dropped
+    url = f"{ITEMS}/{item['id']}"
+
+    assert (await client.get(url, headers=headers)).json() == item
+    changed = await client.patch(url, headers=headers, json={"text": "Second"})
+    assert changed.json()["text"] == "Second"
+    listed = (await client.get(ITEMS, headers=headers)).json()
+    assert [entry["text"] for entry in listed["items"]] == ["Second"]
+
+    assert (await client.delete(url, headers=headers)).status_code == 204
+    assert (await client.get(url, headers=headers)).status_code == 404
+    assert (await client.get(ITEMS, headers=headers)).json()["total"] == 0
+
+
+async def test_items_are_sorted_as_asked(client: AsyncClient) -> None:
+    headers = (await register(client)).headers
+    for text in ("b", "a", "c"):
+        await client.post(ITEMS, headers=headers, json={"text": text})
+
+    by_text = (await client.get(f"{ITEMS}?sort=text", headers=headers)).json()
+    unknown = await client.get(f"{ITEMS}?sort=colour", headers=headers)
+
+    assert [item["text"] for item in by_text["items"]] == ["a", "b", "c"]
+    assert unknown.status_code == 422
+
+
+@pytest.mark.parametrize("text", ["", "   ", "x" * 201])
+async def test_the_text_is_short_and_never_empty(client: AsyncClient, text: str) -> None:
+    headers = (await register(client)).headers
+
+    response = await client.post(ITEMS, headers=headers, json={"text": text})
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "VALIDATION_ERROR"
+
+
+async def test_the_tile_counts_the_users_own_items(
+    client: AsyncClient, other_client: AsyncClient
+) -> None:
+    owner, other = await register(client), await register(other_client)
+    for text in ("a", "b"):
+        await client.post(ITEMS, headers=owner.headers, json={"text": text})
+    await other_client.post(ITEMS, headers=other.headers, json={"text": "c"})
+
+    view = (await client.get("/v1/modules/%%key%%", headers=owner.headers)).json()
+
+    assert (view["status"], view["available"]) == ("%%status_value%%", True)
+    assert view["stat"] == {"value": 2, "format": "number", "currency": None, "label": "items"}
+
+
+async def test_one_user_never_sees_anothers_items(
+    client: AsyncClient, other_client: AsyncClient
+) -> None:
+    owner, intruder = await register(client), await register(other_client)
+    item = (await client.post(ITEMS, headers=owner.headers, json={"text": "mine"})).json()
+    url = f"{ITEMS}/{item['id']}"
+
+    listed = (await other_client.get(ITEMS, headers=intruder.headers)).json()
+    read = await other_client.get(url, headers=intruder.headers)
+    changed = await other_client.patch(url, headers=intruder.headers, json={"text": "theirs"})
+    deleted = await other_client.delete(url, headers=intruder.headers)
+
+    assert listed["total"] == 0
+    assert (read.status_code, changed.status_code, deleted.status_code) == (404, 404, 404)
+    assert (await client.get(url, headers=owner.headers)).json()["text"] == "mine"

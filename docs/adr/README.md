@@ -24,3 +24,4 @@ New ADRs take the next number. Never edit an accepted ADR's decision; supersede 
 | [0017](0017-admin-console-audit-trail-two-step-sign-in-and-data-rights.md) | Admin console, audit trail, two-step sign-in and data rights | Accepted |
 | [0018](0018-installable-offline-app-web-push-simple-mode-and-budgets.md) | Installable offline app, Web Push, Simple mode and budgets | Accepted |
 | [0019](0019-deployment-origin-lock-headers-backups-and-live-checks.md) | Deployment: origin lock, headers, backups and live checks | Accepted |
+| [0020](0020-module-generator-and-store-paths.md) | A module generator, and the paths to the app stores | Accepted |

@@ -6,6 +6,39 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added — Phase 13: generator + future scaffolds
+
+- **`poe new-module --spec <file>`** (`scripts/new_module.py`, ADR-0020) makes a working module in
+  both repositories from one YAML spec ([`docs/modules/new-module.md`](docs/modules/new-module.md),
+  example in `docs/modules/example-module.yaml`).
+  - **Spec checks**, all before anything is written: the key (2-24 characters, parts joined by
+    single `_`, not a Python keyword, a platform path or a module already there), the icon and
+    colour (by the frontend's generator, `--check`), status, order, and texts in en/ta/hi,
+    short enough, tidied to one line, and nothing left in English.
+  - **Backend**: the module (`app/modules/<key>`: an item with a short text, routes under
+    `/v1/<slug>/items`, a tile figure) and its tests (`tests/modules/<key>`).
+  - **Frontend**: the module next door, plus regenerated API types.
+  - **Checks**: the new module's tests and the shared checks run on both sides.
+  - **Safety**: it never writes over a folder; a run that fails or is stopped (Ctrl+C) while
+    writing is undone, on both sides. Files that fail the final checks are kept, to look into.
+  - Options: `--frontend`, `--backend-only` (the frontend's check still runs when the frontend
+    is there), `--no-check`.
+  - The English name and tagline go into the module's docstring as ASCII (curly quotes and
+    dashes as plain ones), so the project's lint takes any text.
+- **`docs/roadmap.md`**: what's next, a first slice for each of the seven upcoming modules, how
+  to build one, and the open platform items.
+- **`docs/mobile.md`**: the Play Store path (a Trusted Web Activity with Bubblewrap and Digital
+  Asset Links) and the iPhone path (a Home Screen web app), with what each needs and costs.
+
+### Changed — Phase 13
+
+- The route matrix also takes a module's own factories (`tests/modules/<key>/isolation.py`), by
+  its route prefix.
+- The catalog and discovery tests read the module list from discovery, so a new module needs no
+  edit there.
+- Ruff names the project's packages (`known-first-party`), so a file about to be written sorts
+  like one already there.
+
 ### Added — Phase 12: deployment + hardening
 
 - **Runbook** `docs/deployment.md` (ADR-0019): the accounts to create, the secrets to make, the

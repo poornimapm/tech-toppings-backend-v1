@@ -8,11 +8,26 @@ import pytest
 from beanie import PydanticObjectId
 from httpx import AsyncClient
 
+from app.platform.modules.discovery import discover_modules
+from app.platform.modules.manifest import ModuleStatus
 from app.platform.modules.models import ModuleOverride, UserModule
-from tests.helpers import Account, FrozenClock, register
+from tests.helpers import TEST_MODULE_PACKAGES, Account, FrozenClock, register
 
-UPCOMING = {"medicine", "receipts", "study", "gov_docs", "meals", "habits", "journal"}
-ALL = UPCOMING | {"expenses", "notes"}  # expenses is in beta; notes is the test module
+# Every module of the test app, in its default order: the real ones (with any a developer has
+# made with `poe new-module`) and the test-only notes.
+DISCOVERED = discover_modules(TEST_MODULE_PACKAGES)
+DEFAULT_ORDER = [module.manifest.key for module in DISCOVERED]
+ALL = set(DEFAULT_ORDER)
+UPCOMING = {
+    module.manifest.key
+    for module in DISCOVERED
+    if module.manifest.status is ModuleStatus.COMING_SOON
+}
+# An upcoming module to try things on, whichever are still upcoming as they get built.
+UPCOMING_EXAMPLE = min(UPCOMING, default=None)
+needs_an_upcoming_module = pytest.mark.skipif(
+    UPCOMING_EXAMPLE is None, reason="every module is built: none is upcoming"
+)
 
 
 async def modules(client: AsyncClient, account: Account, query: str = "") -> list[dict[str, Any]]:
@@ -38,10 +53,9 @@ async def test_lists_every_module_in_default_order(client: AsyncClient) -> None:
 
     items = await modules(client, account)
 
-    assert keys(items)[:2] == ["notes", "expenses"]  # manifest order 5, then 10
-    assert set(keys(items)) == ALL
+    assert keys(items) == DEFAULT_ORDER  # by manifest order (notes 5, expenses 10 ...), then key
     assert [item["position"] for item in items] == list(range(len(items)))
-    notes = items[0]
+    notes = next(item for item in items if item["key"] == "notes")
     assert notes == {
         "key": "notes",
         "slug": "notes",
@@ -51,15 +65,14 @@ async def test_lists_every_module_in_default_order(client: AsyncClient) -> None:
         "enabled": True,
         "available": True,
         "pinned": False,
-        "position": 0,
+        "position": DEFAULT_ORDER.index("notes"),
         "notify_requested": False,
         "has_settings": True,
         "stat": {"value": 0, "format": "number", "currency": None, "label": "stat_notes"},
     }
-    upcoming = next(item for item in items if item["key"] == "gov_docs")
-    assert upcoming["slug"] == "gov-docs"
-    assert upcoming["available"] is False
-    assert upcoming["stat"] is None
+    assert all(item["slug"] == item["key"].replace("_", "-") for item in items)  # gov_docs
+    for upcoming in (item for item in items if item["key"] in UPCOMING):
+        assert (upcoming["available"], upcoming["stat"]) == (False, None)
 
 
 async def test_tile_stat_counts_only_the_callers_records(
@@ -73,7 +86,7 @@ async def test_tile_stat_counts_only_the_callers_records(
 
     mine = await modules(client, owner)
 
-    assert mine[0]["stat"]["value"] == 2
+    assert next(item for item in mine if item["key"] == "notes")["stat"]["value"] == 2
 
 
 async def test_filters_sorts_and_paginates(client: AsyncClient) -> None:
@@ -250,19 +263,21 @@ async def test_admin_overrides_status_and_order(client: AsyncClient) -> None:
 # ------------------------------------------------------------------ notify me
 
 
+@needs_an_upcoming_module
 async def test_notify_me_is_idempotent_and_can_be_cancelled(
     client: AsyncClient, clock: FrozenClock
 ) -> None:
     account = await register(client)
     owner = PydanticObjectId(account.user_id)
+    interest = f"/v1/modules/{UPCOMING_EXAMPLE}/interest"
 
-    first = await client.post("/v1/modules/receipts/interest", headers=account.headers)
-    requested_at = await UserModule.find_one({"user_id": owner, "module_key": "receipts"})
+    first = await client.post(interest, headers=account.headers)
+    requested_at = await UserModule.find_one({"user_id": owner, "module_key": UPCOMING_EXAMPLE})
     clock.advance(minutes=5)
-    again = await client.post("/v1/modules/receipts/interest", headers=account.headers)
-    kept = await UserModule.find_one({"user_id": owner, "module_key": "receipts"})
-    cancelled = await client.delete("/v1/modules/receipts/interest", headers=account.headers)
-    cancelled_again = await client.delete("/v1/modules/receipts/interest", headers=account.headers)
+    again = await client.post(interest, headers=account.headers)
+    kept = await UserModule.find_one({"user_id": owner, "module_key": UPCOMING_EXAMPLE})
+    cancelled = await client.delete(interest, headers=account.headers)
+    cancelled_again = await client.delete(interest, headers=account.headers)
 
     assert first.json()["notify_requested"] is True
     assert again.json()["notify_requested"] is True

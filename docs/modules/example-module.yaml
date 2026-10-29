@@ -1,0 +1,49 @@
+# A new module for `poe new-module --spec <this file>` (docs/modules/new-module.md).
+# Copy it, change every value, and keep the three languages in step: the same keys in each,
+# and Tamil and Hindi really translated (a test refuses English left in them).
+
+# The module's key: 2-24 characters, lowercase letters and digits in parts joined by single "_",
+# each part starting with a letter; not a Python keyword or one of the platform's paths (admin,
+# modules ...: new-module.md lists the rules). The URL uses it with "-" for "_"
+# (house_plants -> /m/house-plants).
+key: plants
+# A lucide icon's name, as exported by lucide-react (https://lucide.dev/icons): PawPrint, Sprout ...
+# (MapIcon for Map, and the like: a name JavaScript has already is refused, as are deprecated icons.)
+icon: Sprout
+# The tile's colour: emerald, rose, amber, sky, indigo, orange, violet, teal or slate.
+accent: sky
+# live (open to everyone) or beta (open, with a "Beta" badge). Upcoming modules are written by
+# hand: a manifest and a tile, no pages (see app/modules/journal).
+status: beta
+# Its place on the Welcome page (lower comes first); the existing modules use 0-80.
+order: 90
+# Extra words people might search for, in any language.
+keywords: [garden, watering, தோட்டம், बगीचा]
+
+# Every text, in English, Tamil and Hindi. The module keeps one kind of record, a short text
+# (a plant's name, a pet's, a book's ...).
+strings:
+  en:
+    name: Plants                      # the tile and the page heading
+    tagline: Water and care for your plants   # one line under the name on the tile
+    description: Keep a note for each plant, and see at a glance how many you look after.
+    items: plants                     # after the count on the tile: "3 plants"
+    add: Add a plant                  # the add button
+    field: Plant                      # the label of the record's text
+    empty: No plants yet. Add the first one.
+  ta:
+    name: செடிகள்
+    tagline: உங்கள் செடிகளுக்கு நீரும் கவனிப்பும்
+    description: ஒவ்வொரு செடிக்கும் ஒரு குறிப்பு வைத்திருங்கள், எத்தனை செடிகளைப் பார்த்துக்கொள்கிறீர்கள் என்று ஒரே பார்வையில் அறியுங்கள்.
+    items: செடிகள்
+    add: செடியைச் சேர்
+    field: செடி
+    empty: இன்னும் செடிகள் இல்லை. முதலாவதைச் சேருங்கள்.
+  hi:
+    name: पौधे
+    tagline: अपने पौधों को पानी और देखभाल
+    description: हर पौधे के लिए एक नोट रखिए, और एक नज़र में देखिए कि आप कितने पौधों की देखभाल करते हैं।
+    items: पौधे
+    add: पौधा जोड़ें
+    field: पौधा
+    empty: अभी कोई पौधा नहीं। पहला जोड़िए।

@@ -1,0 +1,11 @@
+﻿from app.platform import ModuleManifest, ModuleStatus
+
+MANIFEST = ModuleManifest(
+    key="%%key%%",
+    version="0.1.0",
+    status=ModuleStatus.%%status%%,
+    order=%%order%%,
+    router="%%module%%.router:router",
+    documents=("%%module%%.models:%%Key%%Item",),
+    tile_stat="%%module%%.stats:item_count",
+)

@@ -560,6 +560,7 @@ while in-app reminders keep working.
 | `poe seed` | Create or promote the bootstrap admin (idempotent) |
 | `poe reset-password --email …` | Admin password reset: prints a one-time password, forces a change, turns 2FA off (audited) |
 | `poe vapid-keys` | Print a new VAPID key pair for Web Push (`PUSH_VAPID_*`) |
+| `poe new-module --spec <file>` | Make a working module in both repositories from a spec (`docs/modules/new-module.md`) |
 | `poe backup` | Back up the whole database (`MONGO_URI`) to a new folder under `BACKUP_DIR`, encrypted with `BACKUP_ENCRYPTION_KEY` (required for a database on another machine) |
 | `poe restore --from backups/<folder>` | Restore a checked backup into empty collections (`--drop` replaces them); asks for the target `host/database` |
 | `poe smoke-live --app https://… [--api https://…]` | Check the live app end to end from outside (`SMOKE_EMAIL`/`SMOKE_PASSWORD` also sign in) |
@@ -588,6 +589,20 @@ docker compose up --build   # API on :8000, MongoDB 8.0 on host port 27018
 
 The image is multi-stage, runs as a non-root user, has a health check, and logs JSON. Render
 injects `PORT`.
+
+## A new module
+
+1. Copy [`docs/modules/example-module.yaml`](docs/modules/example-module.yaml) and fill in the
+   module's key, icon, colour, and texts in English, Tamil and Hindi.
+2. Run `.venv\Scripts\poe new-module --spec <file>` (Node 24 on `PATH`). It:
+   - writes the backend module and its tests here, and the frontend module next door;
+   - updates the frontend's API types;
+   - runs the new module's tests on both sides.
+3. Grow it from there.
+
+[`docs/modules/new-module.md`](docs/modules/new-module.md) says what it makes.
+[`docs/roadmap.md`](docs/roadmap.md) lists the upcoming modules and how to build one.
+[`docs/mobile.md`](docs/mobile.md) covers the paths to the Play Store and iPhone.
 
 ## Deployment
 

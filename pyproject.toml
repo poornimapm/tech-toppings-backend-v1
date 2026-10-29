@@ -93,6 +93,8 @@ seed.cmd = "python scripts/seed.py"
 seed.help = "Idempotent seed data (bootstrap admin from BOOTSTRAP_ADMIN_*)"
 reset-password.cmd = "python scripts/reset_password.py"
 reset-password.help = "Admin reset: poe reset-password --email someone@example.com"
+new-module.cmd = "python scripts/new_module.py"
+new-module.help = "Make a module in both repositories: poe new-module --spec docs/modules/<key>.yaml"
 backup.cmd = "python scripts/backup_db.py"
 backup.help = "Back up the whole database (MONGO_URI) to a new folder under BACKUP_DIR"
 restore.cmd = "python scripts/restore_db.py"
@@ -126,6 +128,11 @@ ignore = [
 
 [tool.ruff.lint.pylint]
 max-args = 6
+
+[tool.ruff.lint.isort]
+# Named, not guessed from the folders on disk: a module `poe new-module` is about to write
+# sorts the same as one already there.
+known-first-party = ["app", "scripts", "tests"]
 
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"

@@ -1,0 +1,46 @@
+﻿"""The module's routes, under ``/v1/<its slug>``: every one is the signed-in user's own."""
+
+from __future__ import annotations
+
+from typing import Annotated
+
+from fastapi import APIRouter, Query, status
+
+from %%module%%.schemas import %%Key%%ItemIn, %%Key%%ItemOut
+from %%module%%.service import %%Key%%Items
+from app.platform import ClockDep, Page, PageParamsDep, UserScope
+
+router = APIRouter()
+
+
+@router.post("/items", status_code=status.HTTP_201_CREATED)
+async def add_item(body: %%Key%%ItemIn, scope: UserScope, clock: ClockDep) -> %%Key%%ItemOut:
+    return %%Key%%ItemOut.of(await %%Key%%Items(scope, clock).add(body.text))
+
+
+@router.get("/items")
+async def list_items(
+    scope: UserScope,
+    clock: ClockDep,
+    params: PageParamsDep,
+    sort: Annotated[str | None, Query()] = None,
+) -> Page[%%Key%%ItemOut]:
+    items, total = await %%Key%%Items(scope, clock).page(params, sort)
+    return Page[%%Key%%ItemOut].build([%%Key%%ItemOut.of(item) for item in items], params, total)
+
+
+@router.get("/items/{item_id}")
+async def get_item(item_id: str, scope: UserScope, clock: ClockDep) -> %%Key%%ItemOut:
+    return %%Key%%ItemOut.of(await %%Key%%Items(scope, clock).get(item_id))
+
+
+@router.patch("/items/{item_id}")
+async def change_item(
+    item_id: str, body: %%Key%%ItemIn, scope: UserScope, clock: ClockDep
+) -> %%Key%%ItemOut:
+    return %%Key%%ItemOut.of(await %%Key%%Items(scope, clock).change(item_id, body.text))
+
+
+@router.delete("/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_item(item_id: str, scope: UserScope, clock: ClockDep) -> None:
+    await %%Key%%Items(scope, clock).delete(item_id)
