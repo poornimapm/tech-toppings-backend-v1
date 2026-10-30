@@ -35,6 +35,8 @@ All notable changes to this project are documented here. The format follows
 
 - What a worker is owed counted days recorded before the project's start date, but what they
   earned didn't: both now count every day up to the report's end.
+- `GET /v1/agents` lists only the skills of modules the account may use, as a run serves only
+  those: a module given to some accounts isn't listed for the others.
 
 ### Added — Phase 16: Labor Management
 

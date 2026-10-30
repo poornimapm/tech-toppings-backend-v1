@@ -16,6 +16,7 @@ from app.platform.agents.schemas import AgentView, RunIn, RunOut, SkillView
 from app.platform.agents.tools import Proposal
 from app.platform.auth.deps import UserScope
 from app.platform.context import ActorDep
+from app.platform.modules.service import ModuleService
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
@@ -67,6 +68,9 @@ async def list_agents(runtime: RuntimeDep, ctx: ActorDep, params: PageParamsDep)
     catalog, user = runtime.catalog, ctx.user
     remaining = await runtime.quota.remaining(user.id) if user.id else 0
     for_photos = await runtime.blocker(user, vision=True)
+    # As a run does: only the skills of modules this account may use (a module given to some
+    # accounts only isn't there at all for the others).
+    usable = await ModuleService.of(ctx).usable_owners()
     views = []
     for agent in catalog.agents.values():
         availability = await runtime.availability(agent, user)
@@ -79,6 +83,7 @@ async def list_agents(runtime: RuntimeDep, ctx: ActorDep, params: PageParamsDep)
                 photo_mode=runtime.plan_for(s, for_photos).mode if "photo" in s.reads else None,
             )
             for s in catalog.skills_of(agent)
+            if usable(s.owner)
         ]
         views.append(
             AgentView(
