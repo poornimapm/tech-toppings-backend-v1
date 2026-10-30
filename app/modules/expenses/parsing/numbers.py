@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-import unicodedata
 from dataclasses import dataclass
 from decimal import Decimal
 
@@ -27,14 +26,6 @@ class Number:
 
 
 Item = Word | Number
-
-
-def western_digits(text: str) -> str:
-    """Tamil and Devanagari digits written as 0-9."""
-    return "".join(
-        str(unicodedata.digit(letter)) if letter.isdigit() and not letter.isascii() else letter
-        for letter in text
-    )
 
 
 def _run(words: list[Word], start: int, lexicon: Lexicon) -> tuple[int, Decimal | None]:

@@ -1,0 +1,17 @@
+TRENDS FASHION
+Phoenix Mall, Velachery
+
+GSTIN: 33AABCT3518Q1zV
+
+Invoice: TF/26/10/0912
+
+Date: 09/10/2026
+
+Description        Qty      MRP    Amount
+Cotton Shirt         1 1289300   1299.00
+Denim Jeans          1, 1899.00   1899.00
+Total MRP                          3198.00
+Discount                            640.00
+Net Amount                         2558.00
+Card                               2558.00
+Incl. GSE™12%                       274.07

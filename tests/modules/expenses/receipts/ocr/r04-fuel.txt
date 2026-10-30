@@ -1,0 +1,13 @@
+INDIAN OIL CORPORATION LTD
+SRI BALAJI FUEL STATION
+NH-44, Krishnagiri
+
+Tel: 04343-234567
+Date: 20/10/2026    Time: 08:14
+Nozzle: 3     Product: PETROL
+Rate (Rs/L):           102.63
+Volume (L):              4.87
+Amount (Rs):           500.00
+Mode: CASH
+
+        Thank You. Drive Safely!

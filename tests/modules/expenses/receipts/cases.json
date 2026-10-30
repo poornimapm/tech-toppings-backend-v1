@@ -1,0 +1,675 @@
+{
+  "about": "20 made-up shop receipts, labelled. `paper` is what is printed; `truth` is what reading it should give: the shop (any of `merchant`), the day, each item line as printed and the total paid. `look` is how the photo of it is faked (tilt in degrees, blur in px, fade 0-1, font). Images: images/<id>.jpg (frontend: npm run receipt-samples render). Text read on a device: ocr/<id>.txt (npm run receipt-samples ocr). Scores: poe eval-receipts.",
+  "today": "2026-10-29",
+  "cases": [
+    {
+      "id": "r01-grocery",
+      "lang": "en",
+      "look": { "tilt": -1.2, "blur": 0.3, "fade": 0.1, "font": "mono" },
+      "paper": [
+        "             TAX INVOICE",
+        "          SRI MURUGAN STORES",
+        "   12, Gandhi Road, Chennai-600017",
+        "   Ph: 044-24567890",
+        "   GSTIN: 33ABCDE1234F1Z5",
+        "Bill No: 4521        Date: 12/10/2026",
+        "----------------------------------------",
+        "Item              Qty    Rate    Amount",
+        "----------------------------------------",
+        "Tomato 1kg          2   40.00     80.00",
+        "Toor Dal 1kg        1  145.00    145.00",
+        "Milk 500ml          2   27.00     54.00",
+        "Sunflower Oil 1L    1  165.00    165.00",
+        "Basmati Rice 5kg    1  520.00    520.00",
+        "Sugar 1kg           1   48.00     48.00",
+        "----------------------------------------",
+        "Sub Total                       1012.00",
+        "CGST 2.5%                         24.10",
+        "SGST 2.5%                         24.10",
+        "Total Qty: 8",
+        "GRAND TOTAL                     1012.00",
+        "Cash                            1100.00",
+        "Change                            88.00",
+        "        Thank you! Visit again"
+      ],
+      "truth": {
+        "merchant": ["Sri Murugan Stores"],
+        "date": "2026-10-12",
+        "total": 1012.0,
+        "items": [
+          ["Tomato 1kg", 80.0],
+          ["Toor Dal 1kg", 145.0],
+          ["Milk 500ml", 54.0],
+          ["Sunflower Oil 1L", 165.0],
+          ["Basmati Rice 5kg", 520.0],
+          ["Sugar 1kg", 48.0]
+        ]
+      }
+    },
+    {
+      "id": "r02-restaurant",
+      "lang": "en",
+      "look": { "tilt": 1.8, "blur": 0.5, "fade": 0.2, "font": "mono" },
+      "paper": [
+        "           HOTEL ANNAPOORNA",
+        "          Restaurant & Sweets",
+        "        45 Mount Road, Chennai",
+        "GSTIN 33AAACH7409R1ZX",
+        "Table: 7        Waiter: Ravi",
+        "Bill No: R-2231      Dt: 11-10-2026",
+        "----------------------------------------",
+        "Item                Qty  Price   Amount",
+        "Masala Dosa           2  90.00   180.00",
+        "Filter Coffee         2  35.00    70.00",
+        "Paneer Butter Masala  1 220.00   220.00",
+        "Butter Naan           3  45.00   135.00",
+        "----------------------------------------",
+        "Sub Total                        605.00",
+        "Service Charge 5%                 30.25",
+        "CGST 2.5%                         15.13",
+        "SGST 2.5%                         15.13",
+        "----------------------------------------",
+        "Grand Total                      665.51",
+        "Round Off                         -0.51",
+        "Net Payable                      665.00"
+      ],
+      "truth": {
+        "merchant": ["Hotel Annapoorna"],
+        "date": "2026-10-11",
+        "total": 665.0,
+        "items": [
+          ["Masala Dosa", 180.0],
+          ["Filter Coffee", 70.0],
+          ["Paneer Butter Masala", 220.0],
+          ["Butter Naan", 135.0]
+        ]
+      }
+    },
+    {
+      "id": "r03-pharmacy",
+      "lang": "en",
+      "look": { "tilt": -2.5, "blur": 0.4, "fade": 0.3, "font": "mono" },
+      "paper": [
+        "            APOLLO PHARMACY",
+        "        Store #1123, Anna Nagar",
+        "        DL No: TN-01-20B-1234",
+        "Inv No: AP1123-8891",
+        "Date: 05/10/2026 18:42",
+        "----------------------------------------",
+        "Item                  Qty    MRP  Amount",
+        "Paracetamol 650mg 15s   1  32.00   32.00",
+        "Cetirizine 10mg 10s     1  24.50   24.50",
+        "Vitamin C 500mg 30s     1 120.00  120.00",
+        "ORS Sachet              4  21.00   84.00",
+        "----------------------------------------",
+        "Gross Amount                     260.50",
+        "Discount (10%)                    26.05",
+        "----------------------------------------",
+        "Net Amount                       234.45",
+        "Paid by UPI                      234.45",
+        "            Get well soon!"
+      ],
+      "truth": {
+        "merchant": ["Apollo Pharmacy"],
+        "date": "2026-10-05",
+        "total": 234.45,
+        "items": [
+          ["Paracetamol 650mg 15s", 32.0],
+          ["Cetirizine 10mg 10s", 24.5],
+          ["Vitamin C 500mg 30s", 120.0],
+          ["ORS Sachet", 84.0]
+        ]
+      }
+    },
+    {
+      "id": "r04-fuel",
+      "lang": "en",
+      "look": { "tilt": 0.8, "blur": 0.6, "fade": 0.4, "font": "mono" },
+      "paper": [
+        "     INDIAN OIL CORPORATION LTD",
+        "       SRI BALAJI FUEL STATION",
+        "          NH-44, Krishnagiri",
+        "Tel: 04343-234567",
+        "Date: 20/10/2026     Time: 08:14",
+        "Nozzle: 3       Product: PETROL",
+        "Rate (Rs/L):                 102.63",
+        "Volume (L):                    4.87",
+        "Amount (Rs):                 500.00",
+        "Mode: CASH",
+        "       Thank You. Drive Safely!"
+      ],
+      "truth": {
+        "merchant": ["Sri Balaji Fuel Station", "Indian Oil Corporation Ltd"],
+        "date": "2026-10-20",
+        "total": 500.0,
+        "items": [["Petrol", 500.0]]
+      }
+    },
+    {
+      "id": "r05-bakery",
+      "lang": "en",
+      "look": { "tilt": -0.6, "blur": 0.2, "fade": 0.0, "font": "sans" },
+      "paper": [
+        "        GOLDEN CRUST BAKERY",
+        "       7th Cross, Indiranagar",
+        "         Bengaluru 560038",
+        "Date: 18-10-2026",
+        "--------------------------------",
+        "Veg Puff x2             Rs 60",
+        "Plum Cake 250g          Rs 180",
+        "Milk Bread              Rs 45",
+        "Chocolate Pastry x2     Rs 140",
+        "--------------------------------",
+        "TOTAL                   Rs 425",
+        "       Fresh every morning!"
+      ],
+      "truth": {
+        "merchant": ["Golden Crust Bakery"],
+        "date": "2026-10-18",
+        "total": 425.0,
+        "items": [
+          ["Veg Puff", 60.0],
+          ["Plum Cake 250g", 180.0],
+          ["Milk Bread", 45.0],
+          ["Chocolate Pastry", 140.0]
+        ]
+      }
+    },
+    {
+      "id": "r06-kirana-handwritten",
+      "lang": "en",
+      "look": { "tilt": 2.2, "blur": 0.3, "fade": 0.2, "font": "hand" },
+      "paper": [
+        "  Lakshmi Provision Stores",
+        "  Date 14/10/26",
+        "  Rice 5 kg          325",
+        "  Atta 2 kg           96",
+        "  Salt                22",
+        "  Biscuits            40",
+        "  Soap 2              70",
+        "  -----------------------",
+        "  Total              553"
+      ],
+      "truth": {
+        "merchant": ["Lakshmi Provision Stores"],
+        "date": "2026-10-14",
+        "total": 553.0,
+        "items": [
+          ["Rice 5 kg", 325.0],
+          ["Atta 2 kg", 96.0],
+          ["Salt", 22.0],
+          ["Biscuits", 40.0],
+          ["Soap", 70.0]
+        ]
+      }
+    },
+    {
+      "id": "r07-clothing",
+      "lang": "en",
+      "look": { "tilt": -1.6, "blur": 0.3, "fade": 0.15, "font": "mono" },
+      "paper": [
+        "             TRENDS FASHION",
+        "        Phoenix Mall, Velachery",
+        "GSTIN: 33AABCT3518Q1ZV",
+        "Invoice: TF/26/10/0912",
+        "Date: 09/10/2026",
+        "------------------------------------------",
+        "Description        Qty      MRP    Amount",
+        "Cotton Shirt         1  1299.00   1299.00",
+        "Denim Jeans          1  1899.00   1899.00",
+        "------------------------------------------",
+        "Total MRP                         3198.00",
+        "Discount                           640.00",
+        "------------------------------------------",
+        "Net Amount                        2558.00",
+        "Card                              2558.00",
+        "Incl. GST 12%                      274.07"
+      ],
+      "truth": {
+        "merchant": ["Trends Fashion"],
+        "date": "2026-10-09",
+        "total": 2558.0,
+        "items": [
+          ["Cotton Shirt", 1299.0],
+          ["Denim Jeans", 1899.0]
+        ]
+      }
+    },
+    {
+      "id": "r08-cafe",
+      "lang": "en",
+      "look": { "tilt": 1.1, "blur": 0.4, "fade": 0.1, "font": "sans" },
+      "paper": [
+        "           BREW & BEAN CAFE",
+        "         Koramangala, Bengaluru",
+        "GSTIN 29AAJCB4567K1Z2",
+        "Order #A-118    12-Oct-2026 16:05",
+        "--------------------------------------",
+        "Cappuccino         2 x 160    320.00",
+        "Chicken Sandwich   1 x 240    240.00",
+        "Blueberry Muffin   1 x 120    120.00",
+        "--------------------------------------",
+        "Subtotal                      680.00",
+        "CGST @ 2.5%                    17.00",
+        "SGST @ 2.5%                    17.00",
+        "--------------------------------------",
+        "TOTAL                    INR  714.00"
+      ],
+      "truth": {
+        "merchant": ["Brew & Bean Cafe"],
+        "date": "2026-10-12",
+        "total": 714.0,
+        "items": [
+          ["Cappuccino", 320.0],
+          ["Chicken Sandwich", 240.0],
+          ["Blueberry Muffin", 120.0]
+        ]
+      }
+    },
+    {
+      "id": "r09-hardware",
+      "lang": "en",
+      "look": { "tilt": -0.9, "blur": 0.5, "fade": 0.35, "font": "mono" },
+      "paper": [
+        "       RAJ ELECTRICALS & HARDWARE",
+        "      22 Ranganathan St, T.Nagar",
+        "      GSTIN 33ADKPR5621M1ZQ",
+        "Bill: 3381            Date: 03/10/2026",
+        "---------------------------------------------",
+        "Item                 HSN       Qty    Amount",
+        "LED Bulb 9W          85395000   4     396.00",
+        "Ceiling Fan          84145110   1   2,450.00",
+        "Extension Board 4way 85366990   1     549.00",
+        "---------------------------------------------",
+        "Taxable Value                       2,877.12",
+        "CGST 9%                               258.94",
+        "SGST 9%                               258.94",
+        "---------------------------------------------",
+        "Total                               3,395.00"
+      ],
+      "truth": {
+        "merchant": ["Raj Electricals & Hardware"],
+        "date": "2026-10-03",
+        "total": 3395.0,
+        "items": [
+          ["LED Bulb 9W", 396.0],
+          ["Ceiling Fan", 2450.0],
+          ["Extension Board 4way", 549.0]
+        ]
+      }
+    },
+    {
+      "id": "r10-vegetables",
+      "lang": "en",
+      "look": { "tilt": 3.0, "blur": 0.3, "fade": 0.25, "font": "mono" },
+      "paper": [
+        "        FRESH FARM VEGETABLES",
+        "          Mylapore, Chennai",
+        "Date: 25/10/2026",
+        "------------------------------------",
+        "Item          Kg     Rate   Amount",
+        "Tomato       1.500   40.00   60.00",
+        "Onion        2.000   35.00   70.00",
+        "Potato       1.000   30.00   30.00",
+        "Carrot       0.500   60.00   30.00",
+        "Beans        0.250  120.00   30.00",
+        "------------------------------------",
+        "Total                       220.00"
+      ],
+      "truth": {
+        "merchant": ["Fresh Farm Vegetables"],
+        "date": "2026-10-25",
+        "total": 220.0,
+        "items": [
+          ["Tomato", 60.0],
+          ["Onion", 70.0],
+          ["Potato", 30.0],
+          ["Carrot", 30.0],
+          ["Beans", 30.0]
+        ]
+      }
+    },
+    {
+      "id": "r11-supermarket-long",
+      "lang": "en",
+      "look": { "tilt": -0.4, "blur": 0.35, "fade": 0.1, "font": "mono" },
+      "paper": [
+        "      D-MART (AVENUE SUPERMARTS)",
+        "    Old Mahabalipuram Rd, Chennai",
+        "GSTIN: 33AACCA8432H1ZJ",
+        "Bill No: 100245678   Date: 27/10/2026",
+        "------------------------------------------",
+        "Particulars              Qty  Rate  Amount",
+        "Aashirvaad Atta 5kg        1 245.00 245.00",
+        "Fortune Sunflower Oil 1L   2 152.00 304.00",
+        "Tata Salt 1kg              1  28.00  28.00",
+        "Toor Dal 1kg               1 139.00 139.00",
+        "Sugar 1kg                  2  44.00  88.00",
+        "Amul Butter 100g           1  58.00  58.00",
+        "Britannia Bread            1  45.00  45.00",
+        "Maggi Noodles 4pk          1  56.00  56.00",
+        "Surf Excel 1kg             1 135.00 135.00",
+        "Colgate 200g               1 112.00 112.00",
+        "Dettol Soap 3pk            1  99.00  99.00",
+        "Parle G 800g               1  85.00  85.00",
+        "Red Label Tea 500g         1 270.00 270.00",
+        "Bru Coffee 100g            1 185.00 185.00",
+        "Basmati Rice 1kg           2 110.00 220.00",
+        "Moong Dal 500g             1  72.00  72.00",
+        "Rajma 500g                 1  85.00  85.00",
+        "Poha 1kg                   1  56.00  56.00",
+        "Haldi Powder 200g          1  48.00  48.00",
+        "Chilli Powder 200g         1  62.00  62.00",
+        "Vim Bar 3pk                1  30.00  30.00",
+        "Harpic 500ml               1  92.00  92.00",
+        "------------------------------------------",
+        "Total Items: 22",
+        "TOTAL                           2514.00",
+        "You Saved Rs                     186.00",
+        "Card                            2514.00"
+      ],
+      "truth": {
+        "merchant": ["D-Mart", "Avenue Supermarts"],
+        "date": "2026-10-27",
+        "total": 2514.0,
+        "items": [
+          ["Aashirvaad Atta 5kg", 245.0],
+          ["Fortune Sunflower Oil 1L", 304.0],
+          ["Tata Salt 1kg", 28.0],
+          ["Toor Dal 1kg", 139.0],
+          ["Sugar 1kg", 88.0],
+          ["Amul Butter 100g", 58.0],
+          ["Britannia Bread", 45.0],
+          ["Maggi Noodles 4pk", 56.0],
+          ["Surf Excel 1kg", 135.0],
+          ["Colgate 200g", 112.0],
+          ["Dettol Soap 3pk", 99.0],
+          ["Parle G 800g", 85.0],
+          ["Red Label Tea 500g", 270.0],
+          ["Bru Coffee 100g", 185.0],
+          ["Basmati Rice 1kg", 220.0],
+          ["Moong Dal 500g", 72.0],
+          ["Rajma 500g", 85.0],
+          ["Poha 1kg", 56.0],
+          ["Haldi Powder 200g", 48.0],
+          ["Chilli Powder 200g", 62.0],
+          ["Vim Bar 3pk", 30.0],
+          ["Harpic 500ml", 92.0]
+        ]
+      }
+    },
+    {
+      "id": "r12-coffee-house",
+      "lang": "en",
+      "look": { "tilt": 1.4, "blur": 0.45, "fade": 0.3, "font": "mono" },
+      "paper": [
+        "          MADRAS COFFEE HOUSE",
+        "       Besant Nagar, Chennai-90",
+        "FSSAI 12417002000123",
+        "Bill: MCH/4471     Date 26/10/2026",
+        "---------------------------------------",
+        "Idli (2 pcs)        1    40.00    40.00",
+        "Vada                2    30.00    60.00",
+        "Pongal              1    70.00    70.00",
+        "Ghee Roast          1   110.00   110.00",
+        "Filter Coffee       3    30.00    90.00",
+        "---------------------------------------",
+        "Total                            370.00",
+        "GST 5%                            18.50",
+        "Round Off                          0.50",
+        "Amount Payable                   389.00"
+      ],
+      "truth": {
+        "merchant": ["Madras Coffee House"],
+        "date": "2026-10-26",
+        "total": 389.0,
+        "items": [
+          ["Idli (2 pcs)", 40.0],
+          ["Vada", 60.0],
+          ["Pongal", 70.0],
+          ["Ghee Roast", 110.0],
+          ["Filter Coffee", 90.0]
+        ]
+      }
+    },
+    {
+      "id": "r13-ta-grocery",
+      "lang": "ta",
+      "look": { "tilt": -1.0, "blur": 0.3, "fade": 0.1, "font": "mono" },
+      "paper": [
+        "        ஸ்ரீ லட்சுமி மளிகை",
+        "     12, காந்தி தெரு, மதுரை",
+        "தொலைபேசி: 0452-2345678",
+        "தேதி: 15/10/2026",
+        "-------------------------------------",
+        "பொருள்            அளவு   விலை    தொகை",
+        "அரிசி 5 கிலோ           1  300.00  300.00",
+        "துவரம் பருப்பு 1 கிலோ    1  140.00  140.00",
+        "சர்க்கரை 1 கிலோ         1   45.00   45.00",
+        "நல்லெண்ணெய் 1 லிட்டர்   1  280.00  280.00",
+        "பால் 500 மிலி           2   28.00   56.00",
+        "-------------------------------------",
+        "மொத்தம்                        821.00",
+        "     நன்றி, மீண்டும் வருக!"
+      ],
+      "truth": {
+        "merchant": ["ஸ்ரீ லட்சுமி மளிகை"],
+        "date": "2026-10-15",
+        "total": 821.0,
+        "items": [
+          ["அரிசி 5 கிலோ", 300.0],
+          ["துவரம் பருப்பு 1 கிலோ", 140.0],
+          ["சர்க்கரை 1 கிலோ", 45.0],
+          ["நல்லெண்ணெய் 1 லிட்டர்", 280.0],
+          ["பால் 500 மிலி", 56.0]
+        ]
+      }
+    },
+    {
+      "id": "r14-ta-hotel",
+      "lang": "ta",
+      "look": { "tilt": 1.5, "blur": 0.4, "fade": 0.2, "font": "sans" },
+      "paper": [
+        "      ஸ்ரீ அன்னபூர்ணா உணவகம்",
+        "   ரயில் நிலையம் அருகில், திருச்சி",
+        "தேதி: 22-10-2026",
+        "மேசை: 4",
+        "------------------------------------",
+        "இட்லி           2    20.00    40.00",
+        "தோசை            1    60.00    60.00",
+        "பொங்கல்          1    55.00    55.00",
+        "காபி            2    25.00    50.00",
+        "------------------------------------",
+        "மொத்தம்                      205.00"
+      ],
+      "truth": {
+        "merchant": ["ஸ்ரீ அன்னபூர்ணா உணவகம்"],
+        "date": "2026-10-22",
+        "total": 205.0,
+        "items": [
+          ["இட்லி", 40.0],
+          ["தோசை", 60.0],
+          ["பொங்கல்", 55.0],
+          ["காபி", 50.0]
+        ]
+      }
+    },
+    {
+      "id": "r15-ta-vegetables",
+      "lang": "ta",
+      "look": { "tilt": -2.0, "blur": 0.35, "fade": 0.3, "font": "sans" },
+      "paper": [
+        "     முருகன் காய்கறி கடை",
+        "     தேதி 28/10/2026",
+        "தக்காளி 2 கிலோ          60.00",
+        "வெங்காயம் 1 கிலோ        40.00",
+        "உருளைக்கிழங்கு 1 கிலோ    35.00",
+        "கேரட் 500 கிராம்         30.00",
+        "கொத்தமல்லி             10.00",
+        "-----------------------------",
+        "மொத்தம்                175.00"
+      ],
+      "truth": {
+        "merchant": ["முருகன் காய்கறி கடை"],
+        "date": "2026-10-28",
+        "total": 175.0,
+        "items": [
+          ["தக்காளி 2 கிலோ", 60.0],
+          ["வெங்காயம் 1 கிலோ", 40.0],
+          ["உருளைக்கிழங்கு 1 கிலோ", 35.0],
+          ["கேரட் 500 கிராம்", 30.0],
+          ["கொத்தமல்லி", 10.0]
+        ]
+      }
+    },
+    {
+      "id": "r16-ta-medical",
+      "lang": "ta",
+      "look": { "tilt": 0.6, "blur": 0.4, "fade": 0.15, "font": "mono" },
+      "paper": [
+        "       ஸ்ரீ ராம் மெடிக்கல்ஸ்",
+        "     SRI RAM MEDICALS, SALEM",
+        "DL No: TN-05-21-0456",
+        "Date: 19/10/2026",
+        "-----------------------------------",
+        "Dolo 650 Tab 15s        1    33.60",
+        "Crocin Syrup 60ml       1    45.00",
+        "Bandage Roll            2    50.00",
+        "Betadine 30ml           1    85.00",
+        "-----------------------------------",
+        "Total                       213.60",
+        "தள்ளுபடி 5%                   10.68",
+        "செலுத்த வேண்டியது              202.92"
+      ],
+      "truth": {
+        "merchant": ["ஸ்ரீ ராம் மெடிக்கல்ஸ்", "Sri Ram Medicals"],
+        "date": "2026-10-19",
+        "total": 202.92,
+        "items": [
+          ["Dolo 650 Tab 15s", 33.6],
+          ["Crocin Syrup 60ml", 45.0],
+          ["Bandage Roll", 50.0],
+          ["Betadine 30ml", 85.0]
+        ]
+      }
+    },
+    {
+      "id": "r17-hi-kirana",
+      "lang": "hi",
+      "look": { "tilt": 1.0, "blur": 0.3, "fade": 0.1, "font": "mono" },
+      "paper": [
+        "         शर्मा किराना स्टोर",
+        "        मुख्य बाजार, जयपुर",
+        "फोन: 0141-2567890",
+        "दिनांक: 16/10/2026",
+        "-----------------------------------",
+        "सामान            मात्रा    दर    राशि",
+        "चावल 5 किलो         1  280.00  280.00",
+        "आटा 10 किलो         1  420.00  420.00",
+        "चीनी 2 किलो         1   90.00   90.00",
+        "सरसों तेल 1 लीटर     1  175.00  175.00",
+        "दूध 1 लीटर          2   60.00  120.00",
+        "-----------------------------------",
+        "कुल राशि                    1085.00",
+        "      धन्यवाद! फिर पधारें"
+      ],
+      "truth": {
+        "merchant": ["शर्मा किराना स्टोर"],
+        "date": "2026-10-16",
+        "total": 1085.0,
+        "items": [
+          ["चावल 5 किलो", 280.0],
+          ["आटा 10 किलो", 420.0],
+          ["चीनी 2 किलो", 90.0],
+          ["सरसों तेल 1 लीटर", 175.0],
+          ["दूध 1 लीटर", 120.0]
+        ]
+      }
+    },
+    {
+      "id": "r18-hi-dhaba",
+      "lang": "hi",
+      "look": { "tilt": -1.4, "blur": 0.45, "fade": 0.25, "font": "sans" },
+      "paper": [
+        "        शेर-ए-पंजाब ढाबा",
+        "          NH-48, गुड़गांव",
+        "दिनांक 21-10-2026",
+        "टेबल: 3",
+        "------------------------------------",
+        "दाल मखनी          1   180.00   180.00",
+        "पनीर टिक्का        1   260.00   260.00",
+        "तंदूरी रोटी         4    15.00    60.00",
+        "लस्सी             2    60.00   120.00",
+        "------------------------------------",
+        "उप योग                       620.00",
+        "जीएसटी 5%                      31.00",
+        "------------------------------------",
+        "कुल योग                       651.00"
+      ],
+      "truth": {
+        "merchant": ["शेर-ए-पंजाब ढाबा"],
+        "date": "2026-10-21",
+        "total": 651.0,
+        "items": [
+          ["दाल मखनी", 180.0],
+          ["पनीर टिक्का", 260.0],
+          ["तंदूरी रोटी", 60.0],
+          ["लस्सी", 120.0]
+        ]
+      }
+    },
+    {
+      "id": "r19-hi-medical",
+      "lang": "hi",
+      "look": { "tilt": 2.4, "blur": 0.3, "fade": 0.2, "font": "mono" },
+      "paper": [
+        "        गुप्ता मेडिकल स्टोर",
+        "   GUPTA MEDICAL STORE, LUCKNOW",
+        "D.L. No. UP-32-20B-7788",
+        "Date: 24/10/2026",
+        "------------------------------------",
+        "Pan 40 Tab 15s          1   165.00",
+        "Azithral 500 Tab 5s     1   119.50",
+        "Volini Gel 30g          1    95.00",
+        "------------------------------------",
+        "कुल                          379.50"
+      ],
+      "truth": {
+        "merchant": ["गुप्ता मेडिकल स्टोर", "Gupta Medical Store"],
+        "date": "2026-10-24",
+        "total": 379.5,
+        "items": [
+          ["Pan 40 Tab 15s", 165.0],
+          ["Azithral 500 Tab 5s", 119.5],
+          ["Volini Gel 30g", 95.0]
+        ]
+      }
+    },
+    {
+      "id": "r20-hi-sweets",
+      "lang": "hi",
+      "look": { "tilt": -0.7, "blur": 0.5, "fade": 0.3, "font": "sans" },
+      "paper": [
+        "    बीकानेरवाला मिष्ठान भंडार",
+        "       चांदनी चौक, दिल्ली",
+        "दिनांक: 27/10/2026",
+        "------------------------------------",
+        "काजू कतली 500 ग्राम      1   450.00",
+        "रसगुल्ला 1 किलो         1   240.00",
+        "समोसा                4    80.00",
+        "------------------------------------",
+        "कुल                         770.00"
+      ],
+      "truth": {
+        "merchant": ["बीकानेरवाला मिष्ठान भंडार"],
+        "date": "2026-10-27",
+        "total": 770.0,
+        "items": [
+          ["काजू कतली 500 ग्राम", 450.0],
+          ["रसगुल्ला 1 किलो", 240.0],
+          ["समोसा", 80.0]
+        ]
+      }
+    }
+  ]
+}

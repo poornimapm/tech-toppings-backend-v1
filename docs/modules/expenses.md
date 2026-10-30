@@ -91,6 +91,89 @@ Known gaps, from the held-out misses:
 To measure one, set `AGENT_PROVIDERS`, give consent, and ask the assistant the same inputs
 (`skill: track-expenses`); record the results in this table.
 
+## Receipts (Phase 14, ADR-0021)
+
+**Scan a receipt**, under the quick-add bar, takes a photo from the system's picker (camera
+or gallery). Its lines land on the same confirm card as anything said or typed:
+
+1. **A photo AI would read** (the scan skill's `photo_mode` in `GET /v1/agents` is `agent`, and
+   the device isn't set to *Read photos on this device only*; decided as the photo is picked,
+   by what the note beside the button said): the app shrinks the photo to a JPEG of
+   `VITE_SCAN_PHOTO_PX` on its long side (which also drops its location and camera details)
+   and sends it to `POST /v1/agents/assistant/photo-runs?skill=scan-receipt`. The run reads it
+   in memory and sends it only to providers marked `"vision": true`; the `scan-receipt` skill
+   files one draft per item line. Until the page knows where a photo would go, the scan waits.
+2. **Otherwise**, or when AI stops before drafting anything (quota, a provider out of breath):
+   the photo is read **on the device** by Tesseract.js (English, Tamil, Hindi), from the app's
+   own `ocr/<hash>/` files, fetched on the first such scan. Before reading, the photo is made
+   ready in a worker (`src/core/scan/photo-image.ts`): grey, cropped to the paper, the table round it
+   whitened (a shadow on the paper is kept), straightened, its light evened, and the paper's
+   own shadow cleared. The text goes to the same skill (`POST .../runs`,
+   `context.input_type: "ocr"`, up to `AGENT_MAX_OCR_CHARS`): its static script, the **receipt
+   reader** (`parsing/receipt.py`), or AI if it is on. If the reader can't start (no
+   connection on the first scan, or `VITE_SCAN_READ_TIMEOUT_MS`), the scan says so.
+3. The drafts add up to the amount paid: prices usually include tax already, so a GST summary
+   under the items is not added; a total above the items adds one draft for the charges (or
+   *Rest of the receipt*, marked to check); a total below them takes the discount off the
+   largest item, marked to check.
+4. On the card, a receipt's lines can be **combined into one entry** (the shop's name, the
+   total, the most used category; whatever any line was unsure of, marked on the whole). Not
+   while saving.
+
+The photo is never stored: not on the server (the run keeps a count of photos only; tested
+by searching every collection and the logs for it), and not on the device (only the drafts
+are kept; tested). The receipt reader's words are data in
+`skills/scan-receipt/references/receipt.yaml`.
+
+### Scan accuracy
+
+`poe eval-receipts` scores 20 labelled sample receipts
+(`tests/modules/expenses/receipts/cases.json`: 12 English, 4 Tamil, 4 Hindi; grocery,
+restaurant, pharmacy, fuel, bakery, a handwritten kirana bill, clothing, cafe, hardware,
+vegetables, a 22-item supermarket bill, sweets). They are made up, and drawn as photos of a
+receipt on a table, a little tilted, soft, faded and unevenly lit (`npm run receipt-samples
+render` in the frontend). Each photo's OCR text is committed (`ocr/`, from `npm run
+receipt-samples ocr`: shrunk and prepared as the app does, and read by Tesseract.js in Node,
+whose engine build may differ a little from a phone's browser), so CI gates the reader on it
+(`tests/modules/expenses/test_receipt_samples.py`). Measured 2026-10-29, after the Phase 14
+review's fixes:
+
+*total*: the total read is the amount paid. *sum*: the drafts add up to it. *items*: printed
+item lines found (title and amount). *drafts*: drafts that are an item or what balances
+them. *shop*, *date*: as printed.
+
+| The rules, on the text as printed (`--paper`) | total | sum | items | drafts | shop | date |
+|---|---|---|---|---|---|---|
+| English (12) | 12/12 | 12/12 | 61/64 (95%) | 64/67 (96%) | 12/12 | 12/12 |
+| Tamil (4) | 4/4 | 4/4 | 17/18 (94%) | 17/18 (94%) | 4/4 | 4/4 |
+| Hindi (4) | 4/4 | 4/4 | 15/15 | 16/16 | 4/4 | 4/4 |
+
+| The rules, on the OCR text (no AI) | total | sum | items | drafts | shop | date |
+|---|---|---|---|---|---|---|
+| English (12) | 12/12 | 11/12 (92%) | 44/64 (69%) | 47/58 (81%) | 12/12 | 12/12 |
+| Tamil (4) | 4/4 | 4/4 | 17/18 (94%) | 17/18 (94%) | 4/4 | 4/4 |
+| Hindi (4) | 2/4 (50%) | 2/4 (50%) | 6/15 (40%) | 6/12 (50%) | 4/4 | 0/4 |
+
+What the numbers say:
+- The reader itself is sound: on clean text it misses only by design (three discounts taken
+  off an item, and a fuel slip named for its station).
+- OCR is the weak step, and weakest in Hindi: it drops or misreads digits (`24/0/2026`,
+  `085.00`), so dates and totals are lost there. Making the photo ready first matters most:
+  without it, OCR lost most lines of a tilted or shadowed photo (English items were about 60%).
+- The review's fixes traded a little on these samples for safety on photos they don't have:
+  before them the OCR rows read English 48/64, Tamil 16/18 and Hindi 8/15 items and 17 of 20
+  totals, but faded print on a dark table came out tilted 5 degrees and lines under a shadow
+  were cut away. Now every shop and 18 of 20 totals read.
+- These are synthetic photos: real ones (crumpled, thermal print fading, at an angle) will
+  score lower. To measure real ones, add photos with their truth to `cases.json`, run
+  `npm run receipt-samples ocr`, then `poe eval-receipts --misses`.
+
+**AI on the photos** has not been measured: no provider key is configured where this was
+built (and this network blocks outside AI services). To measure it, set `AGENT_PROVIDERS`
+with a provider marked `"vision": true` and run `poe eval-receipts --ai` (about 60 calls;
+`--pause` sets the seconds between receipts). It runs the app's prompt, context, skill and
+tools, with their checks (drafts the app would refuse are refused); record the results here.
+
 ## Products and prices
 
 A product is something the user buys again and again, known by one or more names

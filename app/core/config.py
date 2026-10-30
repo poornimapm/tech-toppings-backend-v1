@@ -390,6 +390,10 @@ class ModulesSettings(BaseSettings):
         return _split_csv(value)
 
 
+# The photo formats the API can recognise from their first bytes (app/platform/agents/photos.py).
+PhotoType = Literal["image/jpeg", "image/png", "image/webp"]
+
+
 class AgentMode(StrEnum):
     AGENT = "agent"  # an AI agent runs the skill
     STATIC = "static"  # the skill's deterministic script runs; no AI involved
@@ -407,6 +411,8 @@ class ProviderSettings(BaseModel):
     timeout_seconds: float = Field(default=20.0, gt=0, le=120)
     temperature: float = Field(default=0.2, ge=0, le=2)
     max_tokens: int = Field(default=800, ge=16, le=8192)
+    # The model reads images: photos go only to providers marked so (Gemini's models do).
+    vision: bool = False
 
 
 class AgentSettings(BaseSettings):
@@ -428,6 +434,17 @@ class AgentSettings(BaseSettings):
     packages: Annotated[tuple[str, ...], NoDecode] = ("app.platform",)
     max_steps: int = Field(default=6, ge=1, le=20)
     max_input_chars: int = Field(default=1000, ge=10, le=10000)
+    # Text read from a photo on the device (a receipt's lines) is longer than anything typed.
+    max_ocr_chars: int = Field(default=4000, ge=10, le=20000)
+    # A photo for a vision provider: kept in memory for the run, never stored. The app shrinks
+    # it on the device first; the type is checked against the bytes, not only the header. At
+    # most API_MAX_BODY_BYTES (checked at startup).
+    max_photo_bytes: int = Field(default=1_500_000, ge=10_000, le=10_000_000)
+    photo_types: Annotated[tuple[PhotoType, ...], NoDecode] = (
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+    )
     user_daily_calls: int = Field(default=30, ge=0)
     global_daily_calls: int = Field(default=800, ge=0)
     run_retention_days: int = Field(default=7, ge=1)
@@ -446,7 +463,7 @@ class AgentSettings(BaseSettings):
             return {name.strip(): mode.strip() for name, mode in pairs}
         return value
 
-    @field_validator("packages", mode="before")
+    @field_validator("packages", "photo_types", mode="before")
     @classmethod
     def split_packages(cls, value: Any) -> Any:
         return _split_csv(value)
@@ -813,6 +830,14 @@ class Settings(BaseModel):
         ]
         if problems:
             raise ValueError("unsafe for APP_ENV=production: " + "; ".join(problems))
+        return self
+
+    @model_validator(mode="after")
+    def a_photo_fits_in_a_request(self) -> Settings:
+        # The body limit refuses a request before the photo route sees it: a larger photo limit
+        # would never apply, and photos between the two would be refused under another code.
+        if self.agent.max_photo_bytes > self.api.max_body_bytes:
+            raise ValueError("AGENT_MAX_PHOTO_BYTES must be at most API_MAX_BODY_BYTES")
         return self
 
     @model_validator(mode="after")

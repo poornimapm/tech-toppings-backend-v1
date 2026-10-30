@@ -1,0 +1,29 @@
+# Static mode for the scan-bill skill: how a bill's text (read from its photo on the device)
+# becomes one receipt to keep, with no AI. The platform reads the slip itself (its lines, totals,
+# shop and day: app/platform/slips/words.yaml); these are a bill's own words.
+# English words match whole; Tamil and Hindi ones at the start of a word, as stems (with an
+# ending attached), except words of three letters or fewer, which match whole. Case doesn't matter.
+#
+# Message codes (worded by the module's frontend manifest, strings.replies):
+#   scan-bill.ready        a receipt was filled in ({total} when the bill shows one)
+#   scan-bill.unreadable   nothing on it could be read as a bill
+#   scan-bill.on_device    a photo came without AI to read it: the app reads it on the device
+
+tool: receipts_draft
+
+# Labels before the bill's own number ("Invoice No: INV/26/0042").
+bill_number: [bill no, bill number, "bill #", invoice no, invoice number, "invoice #", inv no,
+              receipt no, receipt number, cash memo no, பில் எண், ரசீது எண், விலைப்பட்டியல் எண்,
+              बिल नं, बिल संख्या, बिल नंबर, चालान संख्या, रसीद नं]
+# Labels before the thing's own number (not a line's "S.No", which only counts the lines).
+serial_number: [serial no, serial number, s/n, imei, imei no, product serial, வரிசை எண், सीरियल नंबर]
+# A line naming a warranty; its length is on it ("Warranty: 2 Years") or on the next line.
+warranty: [warranty, guarantee, வாரண்டி, உத்தரவாதம், वारंटी, गारंटी]
+# The length's unit, after its count ("1 year", "2yrs", "6 மாதம்").
+months: [months, month, mths, mth, mon, m, மாதம், மாதங்கள், महीने, महीना, माह]
+years: [years, year, yrs, yr, y, வருடம், வருடங்கள், ஆண்டு, ஆண்டுகள், साल, वर्ष]
+
+# A bill kept for its warranty may be years old: older than this is more likely a misread date.
+max_age_days: 3650
+# Figures above this aren't prices (phone numbers, bill numbers).
+max_amount: 5000000

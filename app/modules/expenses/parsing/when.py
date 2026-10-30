@@ -8,21 +8,10 @@ from datetime import date, timedelta
 
 from app.modules.expenses.parsing.lexicon import Lexicon, known, lookup
 from app.modules.expenses.parsing.numbers import Item, Number, Word
+from app.platform import on_or_before
 
 NUMERIC = re.compile(r"^(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?$")
 MONTH_DAYS = 31
-CENTURY = 2000
-
-
-def on_or_before(today: date, day: int, month: int, year: int | None = None) -> date | None:
-    """That day and month, in the year given or else the latest one that isn't in the future."""
-    try:
-        if year is not None:
-            return date(year + CENTURY if year < 100 else year, month, day)  # noqa: PLR2004
-        found = date(today.year, month, day)
-        return found if found <= today else date(today.year - 1, month, day)
-    except ValueError:
-        return None
 
 
 def _day_number(item: Item | None) -> int | None:

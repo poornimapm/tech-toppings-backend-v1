@@ -28,6 +28,7 @@ from httpx import AsyncClient
 
 from app.core.repository import Scope
 from app.platform.context import ActorContext
+from app.platform.modules.repository import UserModuleRepository
 from app.platform.notifications.inbox import Inbox
 from app.platform.reminders.service import Reminders
 from app.platform.users.models import User
@@ -74,9 +75,27 @@ ROUTE_BODIES: dict[tuple[str, str], dict[str, object]] = {
     ("POST", "/v1/reminders/{reminder_id}/snooze"): {"days": 1},
 }
 
+# Query parameters a route needs before it looks anything up.
+ROUTE_QUERIES: dict[tuple[str, str], str] = {
+    ("POST", "/v1/agents/{name}/photo-runs"): "?skill=scan-receipt",
+}
+
 
 def body_for(method: str, path: str) -> dict[str, object] | None:
     return ROUTE_BODIES.get((method, path), WRITE_BODIES.get(method))
+
+
+async def member(app: FastAPI, client: AsyncClient, name: str = "Asha") -> Account:
+    """A new account given every module only some accounts may use (an admin would): their
+    routes are reached, so it is each route's own owner check that answers, not the module
+    being hidden."""
+    account = await register(client, name=name)
+    owner = Scope.for_user(PydanticObjectId(account.user_id))
+    preferences = UserModuleRepository(owner, FrozenClock())
+    for module in app.state.modules:
+        if module.manifest.audience == "granted":
+            await preferences.upsert(module.manifest.key, {"granted_at": FrozenClock().now()})
+    return account
 
 
 @dataclass(frozen=True)
@@ -86,7 +105,8 @@ class IdRoute:
     param: str
 
     def url(self, resource_id: str) -> str:
-        return self.path.replace(f"{{{self.param}}}", resource_id)
+        query = ROUTE_QUERIES.get((self.method, self.path), "")
+        return self.path.replace(f"{{{self.param}}}", resource_id) + query
 
 
 def id_routes(app: FastAPI) -> list[IdRoute]:
@@ -415,6 +435,9 @@ def module_resources() -> dict[str, dict[str, tuple[Factory, Checker]]]:
             continue
         module = importlib.import_module(name)
         found[module.PREFIX] = module.RESOURCES
+        # Valid bodies and queries for its routes that would fail validation before the lookup.
+        ROUTE_BODIES.update(getattr(module, "ROUTE_BODIES", {}))
+        ROUTE_QUERIES.update(getattr(module, "ROUTE_QUERIES", {}))
     return found
 
 
@@ -445,8 +468,8 @@ def test_every_id_route_is_covered(app: FastAPI) -> None:
 async def test_another_user_gets_not_found_on_every_id_route(
     app: FastAPI, client: AsyncClient, other_client: AsyncClient
 ) -> None:
-    owner = await register(client, name="Owner")
-    intruder = await register(other_client, name="Intruder")
+    owner = await member(app, client, name="Owner")
+    intruder = await member(app, other_client, name="Intruder")
     checked: list[str] = []
 
     for route in id_routes(app):
@@ -474,8 +497,8 @@ async def test_another_user_gets_not_found_on_every_id_route(
 async def test_catalog_routes_only_change_the_callers_own_state(
     app: FastAPI, client: AsyncClient, other_client: AsyncClient
 ) -> None:
-    owner = await register(client, name="Owner")
-    intruder = await register(other_client, name="Intruder")
+    owner = await member(app, client, name="Owner")
+    intruder = await member(app, other_client, name="Intruder")
     routes = [r for r in id_routes(app) if r.param in CATALOG]
     assert routes, "expected catalog routes"
 
@@ -499,7 +522,7 @@ async def test_catalog_routes_only_change_the_callers_own_state(
 async def test_unknown_ids_are_not_found_for_their_owner_too(
     app: FastAPI, client: AsyncClient, bogus_id: str
 ) -> None:
-    owner = await register(client)
+    owner = await member(app, client)
 
     for route in id_routes(app):
         response = await client.request(
@@ -512,10 +535,10 @@ async def test_unknown_ids_are_not_found_for_their_owner_too(
 
 
 async def test_lists_only_ever_contain_the_callers_records(
-    client: AsyncClient, other_client: AsyncClient
+    app: FastAPI, client: AsyncClient, other_client: AsyncClient
 ) -> None:
-    owner = await register(client)
-    intruder = await register(other_client)
+    owner = await member(app, client)
+    intruder = await member(app, other_client)
     await create_note(client, owner)
     await create_note(other_client, intruder)
 

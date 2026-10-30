@@ -1,0 +1,25 @@
+TAX INVOICE
+SRI MURUGAN STORES
+
+12, Gandhi Road, Chennai-600017
+
+Ph: 044-24567890
+
+GSTIN: 33ABCDE1234F1Z5
+Bill No: 4521        Date: 12/10/2026
+Item              Qty    Rate    Amount
+Tomato 1lkg          2   40.00     80.00
+Toor Dal 1kg        1 145.00    145.00
+Milk 500ml          2   27.00     54.00
+Sunflower Oil 1L    I 165.00    165.00
+Basmati Rice 5kg    IS 5207.00    520.00
+Sugar 1lkg           1   48.00     48.00
+Sub Total                        101.2800
+GEST 215%                          24.10
+SGSIE2.5%                          24.10
+Total Oty:M8
+GRAND TOTAL                     1012.00
+Cash                            1100.00
+Change                            88.00
+
+Thank you! Visit again

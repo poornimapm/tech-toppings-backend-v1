@@ -1,0 +1,12 @@
+FRESH FARM VEGETABLES
+Mylapore, Chennai
+
+Date: 25/10/2026
+
+Item          Kg     Rate   Amount
+Tomato       1.500   40.00   60.00
+Onion        2.000   35°00   70.00
+Potato         1.000    30.00    30.00
+Carrot       0.500   60.00   30.00
+Beans        0.250 120.00   30.00
+Total                        220.00

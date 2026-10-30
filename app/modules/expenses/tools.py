@@ -33,6 +33,7 @@ from app.platform import ActorContext, PageParams, to_major, tool
 Day = Annotated[date | None, Field(description="YYYY-MM-DD")]
 DAY_TEXT = r"^\d{4}-\d{2}-\d{2}$"  # a day as the model writes it; checked again when saved
 MAX_DRAFTS = 10
+MAX_ENTRY_DRAFTS = 40  # a long shop receipt (scan-receipt)
 MAX_MATCHES = 20
 
 
@@ -131,7 +132,7 @@ async def expenses_list(
 @tool("client")
 async def expenses_draft(
     ctx: ActorContext,
-    drafts: Annotated[list[DraftIn], Field(min_length=1, max_length=MAX_DRAFTS)],
+    drafts: Annotated[list[DraftIn], Field(min_length=1, max_length=MAX_ENTRY_DRAFTS)],
 ) -> None:
     """Show the user draft entries to check and save: one for each thing they spent on or
     received. Nothing is saved until they do."""

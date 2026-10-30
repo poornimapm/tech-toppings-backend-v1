@@ -7,7 +7,6 @@ spreadsheet would run as a formula is written so it can't be."""
 
 from __future__ import annotations
 
-import csv
 import io
 from collections.abc import AsyncIterator
 from typing import Any, ClassVar
@@ -16,7 +15,7 @@ from app.modules.expenses.features.categories.service import Categories
 from app.modules.expenses.features.entries.models import Entry, EntryRepository
 from app.modules.expenses.features.entries.schemas import EntryFilters
 from app.modules.expenses.listing import listing
-from app.platform import ActorContext, AppError, major_text
+from app.platform import ActorContext, AppError, csv_writer, major_text, safe_text
 
 COLUMNS = (
     "date",
@@ -36,8 +35,6 @@ COLUMNS = (
 )
 TAG_SEPARATOR = ";"
 BATCH = 500  # rows written before the text so far is sent
-# A cell starting with one of these is a formula to a spreadsheet (OWASP "CSV injection").
-FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
 NEWEST_FIRST = [("date", -1), ("created_at", -1), ("_id", -1)]
 
 
@@ -45,13 +42,6 @@ class ExportTooLargeError(AppError):
     status_code = 422
     code: ClassVar[str] = "EXPENSE_EXPORT_TOO_LARGE"
     default_message = "That's more entries than one file can take. Choose a shorter period."
-
-
-def safe_text(value: str | None) -> str:
-    """Text a spreadsheet would run as a formula, written so it can't be."""
-    if not value:
-        return ""
-    return f"'{value}" if value.startswith(FORMULA_START) else value
 
 
 def _row(entry: dict[str, Any], categories: dict[str, str]) -> list[str]:
@@ -101,8 +91,7 @@ class Exports:
             for item in await Categories(self.ctx.scope, self.ctx.clock).all()
         }
         buffer = io.StringIO()
-        writer = csv.writer(buffer, lineterminator="\r\n")
-        buffer.write("﻿")
+        writer = csv_writer(buffer)
         writer.writerow(COLUMNS)
         cursor = Entry.get_pymongo_collection().find(self._criteria(filters)).sort(NEWEST_FIRST)
         written = 0

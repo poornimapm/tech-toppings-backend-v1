@@ -24,6 +24,10 @@ from app.platform.agents.tools import TOOL_ATTRIBUTE, ToolBox, ToolSpec
 from app.platform.plugins import PluginError, contributions, load_script, package_dir
 
 NAME_PATTERN = r"^[a-z0-9]+(-[a-z0-9]+)*$"
+# What a skill may be given besides typed or spoken words (its metadata `reads`): text read
+# from a photo on the device, or the photo itself.
+INPUT_KINDS = frozenset({"ocr", "photo"})
+MIN_OUTPUT_TOKENS, MAX_OUTPUT_TOKENS = 16, 32768
 SKILL_FIELDS = {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}
 AGENT_FIELDS = {"name", "description", "skills"}
 MAX_DESCRIPTION = 1024
@@ -61,6 +65,10 @@ class SkillSpec:
     allowed_tools: tuple[str, ...]
     folder: Path
     static: StaticHandler | None
+    reads: frozenset[str] = frozenset()  # INPUT_KINDS it takes (metadata `reads`)
+    # The answer it needs room for (metadata `max-output-tokens`): one call drafting a long
+    # receipt is far longer than a sentence's answer. None: the provider's own max_tokens.
+    max_tokens: int | None = None
 
 
 @dataclass(frozen=True)
@@ -119,6 +127,22 @@ def _names(value: Any) -> tuple[str, ...]:
     return tuple(str(item) for item in items)
 
 
+def _metadata(meta: Any, source: Path) -> tuple[frozenset[str], int | None]:
+    """The skill's `reads` and `max-output-tokens` (Agent Skills metadata: strings)."""
+    metadata = meta if isinstance(meta, dict) else {}
+    reads = frozenset(str(metadata.get("reads", "")).split())
+    _check(reads <= INPUT_KINDS, f"{source}: metadata reads {sorted(reads - INPUT_KINDS)}")
+    budget = metadata.get("max-output-tokens")
+    if budget is None:
+        return reads, None
+    _check(str(budget).isdigit(), f"{source}: metadata max-output-tokens must be a number")
+    _check(
+        MIN_OUTPUT_TOKENS <= int(budget) <= MAX_OUTPUT_TOKENS,
+        f"{source}: max-output-tokens out of range",
+    )
+    return reads, int(budget)
+
+
 def _load_skill(folder: Path, owner: str) -> SkillSpec:
     source = folder / "SKILL.md"
     doc = frontmatter.read(source)
@@ -134,9 +158,9 @@ def _load_skill(folder: Path, owner: str) -> SkillSpec:
         module = load_script(script, f"tt_skill_{owner}_{name.replace('-', '_')}_static")
         static = getattr(module, "run", None)
         _check(callable(static), f"{script}: must define async def run(request, tools)")
-    return SkillSpec(
-        name, owner, description, doc.body, _names(doc.meta.get("allowed-tools")), folder, static
-    )
+    reads, budget = _metadata(doc.meta.get("metadata"), source)
+    tools = _names(doc.meta.get("allowed-tools"))
+    return SkillSpec(name, owner, description, doc.body, tools, folder, static, reads, budget)
 
 
 def _load_agent(path: Path) -> AgentSpec:

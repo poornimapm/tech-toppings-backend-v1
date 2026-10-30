@@ -82,6 +82,10 @@ class ScopedRepository(Generic[TDoc]):
         criteria = self.query({"_id": object_id}, include_deleted=include_deleted)
         return await self.model.find_one(criteria)
 
+    async def first(self, filters: Mapping[str, Any]) -> TDoc | None:
+        """The scope's first record matching ``filters`` (in no set order: for a unique match)."""
+        return await self.model.find_one(self.query(filters))
+
     async def get(
         self, entity_id: str | PydanticObjectId, *, include_deleted: bool = False
     ) -> TDoc:

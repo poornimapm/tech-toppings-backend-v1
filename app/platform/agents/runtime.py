@@ -33,6 +33,7 @@ from app.platform.agents.catalog import (
     UnknownSkillError,
 )
 from app.platform.agents.models import AgentRun, RunStatus, RunStep
+from app.platform.agents.photos import Photo
 from app.platform.agents.policy import Blocker, Plan, plan
 from app.platform.agents.providers import ProviderChain, ProvidersUnavailableError, ToolCall
 from app.platform.agents.quota import Quota
@@ -66,6 +67,7 @@ class RunRequest:
     skill: str | None
     locale: str
     context: Mapping[str, Any]
+    photos: tuple[Photo, ...] = ()  # for a provider that reads images; never stored
 
 
 @dataclass
@@ -129,11 +131,14 @@ class AgentRuntime:
             text = pattern.sub("[redacted]", text)
         return text
 
-    async def blocker(self, user: User) -> Blocker | None:
+    async def blocker(self, user: User, *, vision: bool = False) -> Blocker | None:
+        """What keeps AI from this user now; ``vision``: for a run with photos."""
         if user.ai_consent_at is None:
             return Blocker.CONSENT
-        if not self.chain.configured:
+        if not self.chain.configured(vision=vision):
             return Blocker.NO_PROVIDER
+        if not self.chain.ready(vision=vision):
+            return Blocker.PROVIDERS_FAILED
         if user.id is not None and await self.quota.remaining(user.id) <= 0:
             return Blocker.QUOTA
         return None
@@ -148,11 +153,15 @@ class AgentRuntime:
     async def availability(self, agent: AgentSpec, user: User) -> Plan:
         return self._plan(self.catalog.skills_of(agent), None, await self.blocker(user))
 
+    def plan_for(self, skill: SkillSpec, blocker: Blocker | None) -> Plan:
+        """The mode a run of this one skill would use, given what blocks AI."""
+        return self._plan([skill], skill.name, blocker)
+
     # ------------------------------------------------------------------ runs
 
     @staticmethod
     def _modules(ctx: ActorContext) -> ModuleService:
-        return ModuleService(ctx.state.modules, ctx.scope, ctx.clock, ctx.settings)
+        return ModuleService.of(ctx)
 
     async def run(self, request: RunRequest, ctx: ActorContext) -> AgentRun:
         agent = self.catalog.agent(request.agent)
@@ -161,12 +170,16 @@ class AgentRuntime:
         skills = [
             skill for skill in self.catalog.skills_of(agent, request.skill) if usable(skill.owner)
         ]
+        if request.skill and not skills:  # asked for by name, but its module is switched off
+            raise ModuleDisabledError(details={"module": self.catalog.skills[request.skill].owner})
         box = ToolBox(
             self.catalog.tools_of(skills),
             ctx,
             timedelta(minutes=self.settings.proposal_ttl_minutes),
         )
-        decision = self._plan(skills, request.skill, await self.blocker(ctx.user))
+        decision = self._plan(
+            skills, request.skill, await self.blocker(ctx.user, vision=bool(request.photos))
+        )
         outcome = _Outcome(skill=request.skill)
         if decision.mode is AgentMode.AGENT:
             try:
@@ -236,6 +249,14 @@ class AgentRuntime:
             return {"error": "tool_not_loaded"}
         return await box.call(call.name, call.arguments)
 
+    def _user_content(self, request: RunRequest) -> str | list[dict[str, Any]]:
+        """The user's words, masked; with photos, the words (if any) and then each photo."""
+        text = self.redact(request.input)
+        if not request.photos:
+            return text
+        words = [{"type": "text", "text": text}] if text.strip() else []
+        return [*words, *(photo.part() for photo in request.photos)]
+
     async def _agent(
         self,
         agent: AgentSpec,
@@ -253,17 +274,21 @@ class AgentRuntime:
             {"role": "system", "content": self._system_prompt(agent, skills, request, ctx)}
         ]
         messages += [{"role": "system", "content": skill.instructions} for skill in loaded.values()]
-        messages.append({"role": "user", "content": self.redact(request.input)})
+        messages.append({"role": "user", "content": self._user_content(request)})
         for _ in range(self.settings.max_steps):
             if ctx.user.id is None or not await self.quota.take(ctx.user.id):
-                self._stop(out, Blocker.QUOTA)
+                self._stop(out, box, Blocker.QUOTA)
                 return
+            budgets = [skill.max_tokens for skill in loaded.values() if skill.max_tokens]
             try:
                 completion = await self.chain.complete(
-                    messages, self._definitions(loaded, list(by_name))
+                    messages,
+                    self._definitions(loaded, list(by_name)),
+                    vision=bool(request.photos),
+                    max_tokens=max(budgets, default=None),
                 )
             except ProvidersUnavailableError:
-                self._stop(out, Blocker.PROVIDERS_FAILED)
+                self._stop(out, box, Blocker.PROVIDERS_FAILED)
                 return
             out.calls += 1
             out.provider = completion.provider
@@ -290,9 +315,11 @@ class AgentRuntime:
         out.status = RunStatus.INCOMPLETE
 
     @staticmethod
-    def _stop(out: _Outcome, blocker: Blocker) -> None:
-        """Blocked before the first answer: let the switches decide. Later: keep what we have."""
-        if out.calls == 0:
+    def _stop(out: _Outcome, box: ToolBox, blocker: Blocker) -> None:
+        """Blocked before anything was produced (only reads so far, as when a scan's first
+        call fetched the categories): let the switches decide, so a photo is read on the device.
+        After something was: keep what we have."""
+        if not box.proposals and not box.client_actions:
             raise _Blocked(blocker)
         out.status, out.reason = RunStatus.INCOMPLETE, blocker
 
@@ -355,6 +382,7 @@ class AgentRuntime:
                 "mode": decision.mode,
                 "reason": out.reason or decision.reason,
                 "input": self.redact(request.input),
+                "photos": len(request.photos),  # how many, never what
                 "locale": request.locale,
                 "message": out.message,
                 "message_code": out.code,

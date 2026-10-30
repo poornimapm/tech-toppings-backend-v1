@@ -25,3 +25,7 @@ New ADRs take the next number. Never edit an accepted ADR's decision; supersede 
 | [0018](0018-installable-offline-app-web-push-simple-mode-and-budgets.md) | Installable offline app, Web Push, Simple mode and budgets | Accepted |
 | [0019](0019-deployment-origin-lock-headers-backups-and-live-checks.md) | Deployment: origin lock, headers, backups and live checks | Accepted |
 | [0020](0020-module-generator-and-store-paths.md) | A module generator, and the paths to the app stores | Accepted |
+| [0021](0021-receipt-scan-photo-runs-and-an-on-device-reader.md) | Receipt scan: photo runs, and an on-device reader | Accepted |
+| [0022](0022-receipts-and-warranty-on-a-shared-scan.md) | Receipts & warranty, on a shared scan | Accepted |
+| [0023](0023-labor-management-owners-granted-modules-and-private-pictures.md) | Labor Management: owners, granted modules and private pictures | Accepted |
+| [0024](0024-labor-extras-offline-marks-report-files-and-marks-by-voice.md) | Labor's extras: offline marks, report files and marks by voice | Accepted |

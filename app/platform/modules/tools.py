@@ -16,7 +16,7 @@ ModuleKey = Annotated[str, Field(description="A module key from modules_list")]
 
 
 def _service(ctx: ActorContext) -> ModuleService:
-    return ModuleService(ctx.state.modules, ctx.scope, ctx.clock, ctx.settings)
+    return ModuleService.of(ctx)
 
 
 @tool("read")

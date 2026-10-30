@@ -12,7 +12,7 @@ from tests.platform.agents.conftest import AgentClient, ask
 SHOWN = {
     "en": [
         {"key": "habits", "name": "Habit tracker"},
-        {"key": "receipts", "name": "Receipts & warranty"},
+        {"key": "medicine", "name": "Medicine"},
         {"key": "journal", "name": "Journal"},
         {"key": "study", "name": "Study helper"},
     ],
@@ -38,11 +38,11 @@ async def static_run(agent_client: AgentClient, text: str, language: str = "en")
             "Habit tracker",
         ),
         (
-            "notify me when receipts launches",
+            "notify me when medicine launches",
             "en",
             "modules_set_interest",
             {"wanted": True},
-            "Receipts & warranty",
+            "Medicine",
         ),
         ("hide journal", "en", "modules_set_preferences", {"enabled": False}, "Journal"),
         (

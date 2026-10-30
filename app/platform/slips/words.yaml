@@ -1,0 +1,67 @@
+# How a printed slip (a shop's receipt, a bill, an invoice) is read, in English, Tamil and Hindi
+# (reader.py). A module adds its own words (a kind of shop, a warranty) in its skill's references.
+# English words match whole; Tamil and Hindi ones at the start of a word, as stems (with an
+# ending attached), except words of three letters or fewer, which match whole: कुल is not कुल्फी.
+# Case doesn't matter.
+
+# Lines that only name the paper or the shop's details: never items, never the shop's name.
+headers: [tax invoice, invoice, cash memo, cash bill, bill of supply, receipt, estimate, duplicate,
+          original, customer copy, welcome, ரசீது, பில், விலைப்பட்டியல், बिल, रसीद, चालान]
+
+# The amount paid. A line with one of these words (and none of `not_total`) is a total; the
+# last such line is the one paid ("Grand Total" before "Net Payable" after a round-off).
+total: [grand total, net total, net amount, total amount, amount payable, net payable,
+        bill amount, net amt, bill amt, total amt, amt payable, total, payable, amount, amt,
+        மொத்தம், மொத்த தொகை, கூடுதல், செலுத்த வேண்டிய, कुल, कुल राशि, कुल योग, योग, देय]
+not_total: [sub total, subtotal, sub-total, qty, quantity, items, item, savings, saved, discount,
+            tax, gst, cgst, sgst, taxable, துணை, உப, எண்ணிக்கை, उप योग, मात्रा, संख्या]
+
+# How it was paid, and the change: never the total, though "Cash Received Amount" says amount.
+payment: [cash, change, balance, card, upi, paytm, gpay, phonepe, paid, tendered, received,
+          नकद, शेष, भुगतान, பணம், மீதி]
+
+# Added on top of the items: only these (and taxes) explain a total higher than the items.
+charges: [service charge, service chg, packing, packaging, delivery, convenience fee, tip,
+          சேவை கட்டணம், पैकिंग, सेवा शुल्क]
+taxes: [cgst, sgst, igst, gst, vat, cess, service tax, வரி, जीएसटी]
+discount: [discount, disc, coupon, offer, less, தள்ளுபடி, छूट]
+
+# Lines with these words are never items: subtotals, codes, numbers and contact details.
+not_items: [sub total, subtotal, sub-total, round off, rounding, roundoff, hsn, sac, bill, invoice,
+            inv, kot, order, gstin, fssai, cin, phone, ph, tel, mob, mobile, email, www, thank,
+            thanks, visit again, cashier, counter, table, waiter, token, time, date, taxable,
+            volume, nozzle, density, vehicle, points, member, terminal, txn, approval, saved,
+            savings, you save, துணை மொத்தம், நன்றி, தொலைபேசி, தேதி, மேசை, उप योग, धन्यवाद, फोन,
+            दिनांक, तारीख, टेबल]
+
+# Column labels: a line that is only one is a header; after an item's name, it is cut off
+# ("Sugar 1kg MRP 50.00 45.00" is Sugar 1kg).
+labels: [mrp, rate, price, qty, amount, amt, दर, राशि, விலை, தொகை]
+
+# Dates as printed: the groups' order is d(ay), m(onth, a number or a name) and y(ear).
+dates:
+  - pattern: '(?<!\d)(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})(?!\d)'
+    order: dmy
+  - pattern: '(?<!\d)(\d{4})[/.-](\d{1,2})[/.-](\d{1,2})(?!\d)'
+    order: ymd
+  - pattern: '(?<!\d)(\d{1,2})[ -]?([^\W\d_]{3,9})[ ,-]+(\d{2,4})(?!\d)'
+    order: dmy
+# Month names, January first.
+months:
+  - [january, jan]
+  - [february, feb]
+  - [march, mar]
+  - [april, apr]
+  - [may]
+  - [june, jun]
+  - [july, jul]
+  - [august, aug]
+  - [september, sep, sept]
+  - [october, oct]
+  - [november, nov]
+  - [december, dec]
+
+# Characters a camera often reads in place of digits, within a figure.
+ocr_digits: {O: "0", o: "0", D: "0", I: "1", l: "1", "|": "1", "!": "1", S: "5", s: "5", B: "8",
+             Z: "2", z: "2"}
+currency: ["₹", "rs.", "rs", "inr", "/-", "र", "ரூ"]

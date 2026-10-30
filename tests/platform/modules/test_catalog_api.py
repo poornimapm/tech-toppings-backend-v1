@@ -16,7 +16,10 @@ from tests.helpers import TEST_MODULE_PACKAGES, Account, FrozenClock, register
 # Every module of the test app, in its default order: the real ones (with any a developer has
 # made with `poe new-module`) and the test-only notes.
 DISCOVERED = discover_modules(TEST_MODULE_PACKAGES)
-DEFAULT_ORDER = [module.manifest.key for module in DISCOVERED]
+# What an account sees: a module only some accounts are given isn't listed for the others.
+DEFAULT_ORDER = [
+    module.manifest.key for module in DISCOVERED if module.manifest.audience == "everyone"
+]
 ALL = set(DEFAULT_ORDER)
 UPCOMING = {
     module.manifest.key

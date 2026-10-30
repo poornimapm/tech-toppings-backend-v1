@@ -128,7 +128,7 @@ async def catch_up(ctx: ActorContext, *, within: float, only: str | None = None)
     that job). Each, its lease included, may take ``within`` seconds. Nothing here raises: a
     failing or slow job is logged and counted and the rest still run, so neither the bell's
     poll nor the cron's sweep fails because of one."""
-    service = ModuleService(ctx.state.modules, ctx.scope, ctx.clock, ctx.settings)
+    service = ModuleService.of(ctx)
     usable = await settle(service.usable_owners(), within=within, event="jobs_catch_up_failed")
     if usable is None:
         return JobCounts(failed=1)  # nothing could run this time; counted as one failure

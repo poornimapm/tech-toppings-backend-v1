@@ -22,8 +22,10 @@ class RunContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     modules: list[ModuleName] = Field(default_factory=list, max_length=100)
-    input_type: Literal["text", "speech", "sms"] | None = Field(
-        default=None, description="How the input was given, when a page asks on purpose"
+    input_type: Literal["text", "speech", "sms", "ocr"] | None = Field(
+        default=None,
+        description="How the input was given, when a page asks on purpose; ocr: text read from "
+        "a photo on the device (limit: AGENT_MAX_OCR_CHARS, for a skill that reads it)",
     )
 
 
@@ -62,6 +64,12 @@ class SkillView(BaseModel):
     description: str
     mode: AgentMode
     has_static: bool
+    photo_mode: AgentMode | None = Field(
+        default=None,
+        description="For a skill that reads photos: what a photo run would use right now (agent: "
+        "the photo goes to AI; static: read it on the device); null: it takes no photos or "
+        "can't run",
+    )
 
 
 class AgentView(BaseModel):

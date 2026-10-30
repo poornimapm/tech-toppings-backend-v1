@@ -1,0 +1,15 @@
+APOLLO PHARMACY
+Store #1123, Anna Nagar
+DL No: TN-01-20B-1234
+Inv No: AP1123-8891
+Date: 05/10/2026 18:42
+Item                  Qty    MRP Amount
+Paracetamol 650mg 15s   1 32.00   32.00
+Cetirizine 10mg 10s     1 24.50   24.50
+Vitamin C 500mg 30s     1 120.00 120.00
+ORS Sachet              4 21.00   84.00
+Gross Amount                     260.50
+Discount (10%)                    26.05
+Net Amount                       234.45
+Paid by UPI                      234.45
+Get well soon!

@@ -1,29 +1,37 @@
 """The rule parser: free text (typed, spoken or a pasted bank SMS) to draft entries, or loans
 (``ious.py``), with no AI. It is the static mode of the track-expenses skill, and what answers
-when AI can't.
+when AI can't. ``receipt.py`` reads a shop receipt's text the same way (the scan-receipt skill).
 
-Everything it knows about languages, units, categories and SMS formats is data in the skill's
-``references/`` folder; ``scripts/eval_parser.py`` measures it against labelled inputs.
+Everything it knows about languages, units, categories and SMS formats is data in the skills'
+``references/`` folders; ``scripts/eval_parser.py`` and ``scripts/eval_receipts.py`` measure it
+against labelled inputs.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Set
 from datetime import date
+from typing import Any
 
 from app.modules.expenses.parsing import sentence, sms
 from app.modules.expenses.parsing.ious import IouDraft, load_ious, read_ious
 from app.modules.expenses.parsing.lexicon import Lexicon, load
+from app.modules.expenses.parsing.receipt import Receipt, ReceiptWords, load_receipt, read_receipt
 from app.modules.expenses.parsing.sentence import Draft, has_money_words
 
 __all__ = [
     "Draft",
     "IouDraft",
     "Lexicon",
+    "Receipt",
+    "ReceiptWords",
+    "arguments",
     "load",
     "load_ious",
+    "load_receipt",
     "parse",
     "read_ious",
+    "read_receipt",
     "speaks_of_money",
 ]
 
@@ -46,3 +54,19 @@ def parse(
     if sms.looks_like(text, lexicon):
         return [sms.parse(text, today, lexicon, categories or {})]
     return sentence.parse(text, today, lexicon, habits or {}, categories or {})
+
+
+def arguments(draft: Draft, uncertain_below: float) -> dict[str, Any]:
+    """A draft as the ``expenses_draft`` client tool takes it, with the fields the parser is
+    unsure of marked for the user to check."""
+    return {
+        "kind": draft.kind,
+        "title": draft.title,
+        "amount": float(draft.amount) if draft.amount is not None else None,
+        "category_id": draft.category_id,
+        "date": draft.date.isoformat() if draft.date else None,
+        "merchant": draft.merchant,
+        "quantity": float(draft.quantity) if draft.quantity is not None else None,
+        "unit": draft.unit,
+        "uncertain": [name for name, sure in draft.confidence.items() if sure < uncertain_below],
+    }

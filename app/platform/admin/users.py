@@ -6,13 +6,14 @@ from typing import Annotated
 
 from beanie import PydanticObjectId
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints, model_validator
 
 from app.core.deps import SettingsDep
 from app.core.errors import error_responses
 from app.core.pagination import Page, page_params
 from app.platform.admin.accounts import Accounts
 from app.platform.admin.deps import AdminActionDep
+from app.platform.modules.grants import grants_of
 from app.platform.users.models import Role, User
 
 router = APIRouter(prefix="/users")
@@ -36,9 +37,10 @@ class AdminUserOut(BaseModel):
     two_factor: bool
     locked: bool
     providers: list[str]
+    modules: list[str] = Field(description="Modules only some accounts may use, given to it")
 
     @classmethod
-    def of(cls, user: User, now: dt.datetime) -> AdminUserOut:
+    def of(cls, user: User, now: dt.datetime, modules: list[str] | None = None) -> AdminUserOut:
         locked = user.locked_until is not None and _aware(user.locked_until) > now
         return cls(
             id=str(user.id),
@@ -52,6 +54,7 @@ class AdminUserOut(BaseModel):
             two_factor=user.two_factor,
             locked=locked,
             providers=[provider.provider for provider in user.auth_providers],
+            modules=modules or [],
         )
 
 
@@ -78,6 +81,29 @@ class AdminUserPatch(BaseModel):
         if self.role is None and self.disabled is None:
             raise ValueError("send a role, disabled, or both")
         return self
+
+
+class AdminUserIn(BaseModel):
+    """An account the admin makes: it signs in with a one-time password and changes it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    email: EmailStr
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)]
+    modules: list[str] = Field(
+        default_factory=list, max_length=20, description="Modules only some accounts may use"
+    )
+
+
+class AdminUserCreated(BaseModel):
+    user: AdminUserOut
+    one_time_password: str = Field(description="Shown once, never stored in the clear")
+
+
+class ModuleGrantIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    granted: bool
 
 
 class RevokedOut(BaseModel):
@@ -108,13 +134,28 @@ async def list_users(
     params = page_params(settings, query.page, query.page_size)
     found, total = await service.list(params, query.q, query.role, query.state)
     now = service.ctx.clock.now()
-    return Page[AdminUserOut].build([AdminUserOut.of(user, now) for user in found], params, total)
+    modules = await grants_of([user.id for user in found if user.id is not None])
+    items = [AdminUserOut.of(user, now, modules.get(user.id, [])) for user in found]  # type: ignore[arg-type]
+    return Page[AdminUserOut].build(items, params, total)
+
+
+@router.post(
+    "",
+    status_code=201,
+    summary="Create an account with a one-time password, returned once (audited)",
+    responses=error_responses(401, 403, 404, 409, 422),
+)
+async def create_user(body: AdminUserIn, service: AccountsDep) -> AdminUserCreated:
+    user, password = await service.create(str(body.email), body.name, body.modules)
+    out = AdminUserOut.of(user, service.ctx.clock.now(), sorted(body.modules))
+    return AdminUserCreated(user=out, one_time_password=password)
 
 
 @router.get("/{user_id}", summary="One account", responses=error_responses(401, 403, 404))
 async def read_user(user_id: PydanticObjectId, service: AccountsDep) -> AdminUserDetail:
     user = await service.one(user_id)
-    out = AdminUserOut.of(user, service.ctx.clock.now())
+    modules = (await grants_of([user_id])).get(user_id, [])
+    out = AdminUserOut.of(user, service.ctx.clock.now(), modules)
     return AdminUserDetail(**out.model_dump(), live_sessions=await service.live_sessions(user_id))
 
 
@@ -148,3 +189,16 @@ async def reset_user_password(
     user_id: PydanticObjectId, service: AccountsDep
 ) -> OneTimePasswordOut:
     return OneTimePasswordOut(one_time_password=await service.reset_password(user_id))
+
+
+@router.put(
+    "/{user_id}/modules/{key}",
+    summary="Give an account a module only some accounts may use, or take it back (audited)",
+    responses=error_responses(401, 403, 404, 422),
+)
+async def set_user_module(
+    user_id: PydanticObjectId, key: str, body: ModuleGrantIn, service: AccountsDep
+) -> AdminUserOut:
+    user = await service.set_module(user_id, key, granted=body.granted)
+    modules = (await grants_of([user_id])).get(user_id, [])
+    return AdminUserOut.of(user, service.ctx.clock.now(), modules)

@@ -232,7 +232,7 @@ def write_backend(spec: ModuleSpec, root: Path, package: str = PACKAGE) -> None:
     print("writing the backend module ...", flush=True)
     for path, text in backend_files(spec, root, package).items():
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text, encoding="utf-8")
+        path.write_text(text, encoding="utf-8", newline="\n")  # LF on Windows too
     folders = [str(folder) for folder in backend_places(spec, root, package).values()]
     style = ["--config", str(PROJECT_ROOT / "pyproject.toml")]
     ruff = [sys.executable, "-m", "ruff"]

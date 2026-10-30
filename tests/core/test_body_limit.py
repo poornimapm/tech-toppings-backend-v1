@@ -9,10 +9,10 @@ from collections.abc import AsyncIterator
 import pytest
 from httpx import AsyncClient
 
-from app.core.config import ApiSettings, CorsSettings
+from app.core.config import AgentSettings, ApiSettings, CorsSettings
 from tests.helpers import build_app, build_settings, running_client
 
-LIMIT = 2048
+LIMIT = 10_240  # the least a photo may be (AGENT_MAX_PHOTO_BYTES), which must fit
 LOGIN = "/v1/auth/login"
 
 
@@ -21,6 +21,8 @@ async def small_client(own_mongo_uri: str) -> AsyncIterator[AsyncClient]:
     settings = build_settings(
         own_mongo_uri,
         api=ApiSettings(_env_file=None, max_body_bytes=LIMIT),
+        # A photo must fit in a request (checked at startup), so it is no larger either.
+        agent=AgentSettings(_env_file=None, max_photo_bytes=LIMIT),
         cors=CorsSettings(_env_file=None, allowed_origins=("https://app.example",)),
     )
     async with running_client(build_app(settings)) as client:

@@ -1,0 +1,14 @@
+RAJ ELECTRICALS & HARDWARE
+
+22 Ranganathan St, T.Nagar
+
+GSTIN 33ADKPR5621M1ZQ
+Bill: 3381            Date: 03/10/2026
+Item                 HSN       Qty    Amount
+LED Bulb 9W          85395000   4     396.00
+Ceiling Fan          84145110   1   2,450.00
+Extension Board 4way 85366990   1     549.00
+Taxable Value                       2,877.12
+CGST 9%                                258.94
+SGST 9%                                258.94
+Total                             3,395.00

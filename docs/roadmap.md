@@ -3,7 +3,7 @@
 What exists, what comes next, and how the upcoming modules get built (Phase 13). The phase
 history and every decision are in [`plan.md`](plan.md); this page looks forward.
 
-## Where things stand (2026-10-29)
+## Where things stand (2026-10-30)
 
 - **Platform**:
   - accounts (allowlist, Google, two-step sign-in), the module system, the agents runtime with
@@ -16,6 +16,13 @@ history and every decision are in [`plan.md`](plan.md); this page looks forward.
 - **Deployment** is prepared (`deployment.md`). Going live, and the checks only a live site
   allows, are the owner's step.
 - **New modules** come from one command, `poe new-module` (`modules/new-module.md`).
+- **Receipt scan** (Phase 14, preview): a photo of a receipt becomes draft expenses, read by AI
+  or on the phone (`modules/expenses.md`, *Receipts*).
+- **Receipts & warranty** (Phase 15, beta): receipts with a warranty end and a reminder before
+  it, filled in from a bill's photo (`modules/receipts.md`). The scan is shared now: any module
+  can read paper (`app/platform/slips`, the frontend's `src/core/scan`).
+- **Labor Management** (Phase 16, beta, for the owners the admin makes): projects, workers with
+  photos, attendance, wages, payments, reports and an audit trail (`modules/labor.md`).
 
 ## Next
 
@@ -23,16 +30,16 @@ history and every decision are in [`plan.md`](plan.md); this page looks forward.
    - the smoke check;
    - Lighthouse on the live address;
    - a push on Android from the cron.
-2. **Phase 14, receipt scan preview (U10)**:
-   - a photo of a receipt becomes draft expenses through the same confirm card;
-   - with AI (Gemini, in memory, nothing stored) or a fallback with AI off;
-   - accuracy measured on 20 sample receipts.
-3. **The upcoming modules**, below, in the order the owner chooses. Each *Notify me* press is
+2. **Measure the scan with AI**: once a key is set, `poe eval-receipts --ai` on the 20
+   samples, and then on real receipts (photos with their truth added to the samples).
+3. **Room in the first-load budget** (198.3 KB of 200 after Labor): the next module's
+   manifest needs room found first (its routes and icon load with the first page).
+4. **The upcoming modules**, below, in the order the owner chooses. Each *Notify me* press is
    stored per person, on their preferences for that module (`user_modules`,
    `notify_requested_at`; the plan's separate `module_interest` collection wasn't needed). The
    admin console doesn't count them yet: adding that would help choose.
 
-## The seven upcoming modules
+## The six upcoming modules
 
 Each is already a tile marked *Coming soon*, with *Notify me*. The first slices below are ideas
 to start from, not decisions.
@@ -40,7 +47,6 @@ to start from, not decisions.
 | Module | What its tile promises | A first slice |
 |---|---|---|
 | Medicine | Doses on time, refills before you run out | Medicines with a dose schedule; a reminder per dose (platform reminders) |
-| Receipts & warranty | Every bill, findable in seconds | Receipts with a warranty end date and a reminder before it; scanning comes with Phase 14 |
 | Study helper | Plan, revise, remember | Topics with a next-revision date that moves out with each revision |
 | Government documents | Renewals without the runaround | Documents with an expiry date and reminders before it |
 | Meal planner | What's cooking this week? | A week's menu; a shopping list from it |
@@ -63,7 +69,8 @@ folder, so:
 4. Run the whole backend suite (`poe test`), not only the checks the generator runs. A few
    tests use an upcoming module by name for *Notify me* and its launch notice, and need
    another upcoming module once theirs is built:
-   - `receipts`: `tests/platform/notifications/test_notifications.py`,
+   - `medicine` (`receipts` until Phase 15 built it):
+     `tests/platform/notifications/test_notifications.py`,
      `tests/platform/dashboard/test_activity.py`,
      `tests/platform/agents/test_static_manage_modules.py`;
    - `habits`: `tests/platform/agents/test_runs.py`.

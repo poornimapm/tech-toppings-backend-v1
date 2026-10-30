@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, ClassVar
 
+from beanie import PydanticObjectId
 from pydantic import Field
 from pymongo import ASCENDING, IndexModel
 
@@ -35,6 +36,10 @@ class UserModule(OwnedDocument):
     position: int | None = None  # None = the manifest / admin order
     settings: dict[str, Any] = Field(default_factory=dict)
     notify_requested_at: datetime | None = None
+    # Given by an admin, for a module only some accounts may use (audience "granted");
+    # never written through the user's own preferences.
+    granted_at: datetime | None = None
+    granted_by: PydanticObjectId | None = None
 
     class Settings:
         name = "user_modules"

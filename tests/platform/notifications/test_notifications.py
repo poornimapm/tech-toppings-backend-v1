@@ -36,21 +36,21 @@ async def test_a_module_i_asked_about_notifies_me_once_when_it_launches(
 ) -> None:
     account = await register(client)
     bystander = await register(other_client)
-    await client.post("/v1/modules/receipts/interest", headers=account.headers)
+    await client.post("/v1/modules/medicine/interest", headers=account.headers)
     before = await notifications(client, account)
-    await launch("receipts")
+    await launch("medicine")
 
     await client.get("/v1/modules", headers=account.headers)  # any visit delivers it
     await client.get("/v1/modules", headers=account.headers)
     await other_client.get("/v1/modules", headers=bystander.headers)
     mine = await notifications(client, account, "?unread=true")
-    module = (await client.get("/v1/modules/receipts", headers=account.headers)).json()
+    module = (await client.get("/v1/modules/medicine", headers=account.headers)).json()
 
     assert before["total"] == 0
     assert mine["total"] == 1  # once, however often modules are loaded
     assert (mine["items"][0]["type"], mine["items"][0]["params"]) == (
         "module.launched",
-        {"module": "receipts"},
+        {"module": "medicine"},
     )
     assert mine["items"][0]["read"] is False
     assert module["notify_requested"] is False  # the promise is kept, so the request is done

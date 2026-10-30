@@ -11,7 +11,7 @@ from decimal import Decimal
 from app.modules.expenses.parsing import numbers, when
 from app.modules.expenses.parsing.lexicon import Lexicon, known, lookup
 from app.modules.expenses.parsing.numbers import Item, Number, Word
-from app.platform import normalise
+from app.platform import normalise, western_digits
 
 EXPENSE, INCOME = "expense", "income"
 SEPARATOR = ","
@@ -51,7 +51,7 @@ class Draft:
 
 
 def tokenise(text: str, lexicon: Lexicon) -> list[Word]:
-    raw = ORDINAL.sub("", numbers.western_digits(text))
+    raw = ORDINAL.sub("", western_digits(text))
     for pattern, replacement in SPACING:
         raw = pattern.sub(replacement, raw)
     for phrase in lexicon.phrases:  # "day before yesterday" becomes one token
@@ -119,18 +119,26 @@ def _quantity(items: list[Item], lexicon: Lexicon) -> tuple[set[int], Decimal | 
     return set(), None, None
 
 
-def _category(
-    text: str, kind: str, lexicon: Lexicon, habits: Mapping[str, str], usable: Set[str]
+def category(
+    text: str,
+    kind: str,
+    lexicon: Lexicon,
+    habits: Mapping[str, str],
+    usable: Set[str],
+    otherwise: tuple[str, float] | None = None,
 ) -> tuple[str | None, float]:
-    """The user's own habit for this title first, then a keyword, then the kind's "other"."""
+    """The user's own habit for this title first, then a keyword, then ``otherwise`` (a guess
+    from elsewhere, with how sure it is: a receipt's kind of shop), then the kind's "other"."""
     sure = lexicon.confidence
     if (usual := habits.get(text)) in usable:
         return usual, sure["category_history"]
     words = text.split()
-    for category, keywords in lexicon.keywords.items():
+    for found, keywords in lexicon.keywords.items():
         phrase = any(" " in keyword and keyword in text for keyword in keywords)
-        if category in usable and (phrase or any(known(word, keywords) for word in words)):
-            return category, sure["category_keyword"]
+        if found in usable and (phrase or any(known(word, keywords) for word in words)):
+            return found, sure["category_keyword"]
+    if otherwise and otherwise[0] in usable:
+        return otherwise
     fallback = lexicon.defaults.get(kind)
     return (fallback if fallback in usable else None), sure["category_default"]
 
@@ -165,7 +173,7 @@ def _draft(
             ):
                 title.append(item.raw)
     name = " ".join(title).strip(" -") or None
-    category, category_sure = _category(
+    filed, category_sure = category(
         normalise(" ".join([*title, *merchant])), kind, lexicon, habits, usable
     )
     amount = items[amount_at].value if amount_at is not None else None  # type: ignore[union-attr]
@@ -173,7 +181,7 @@ def _draft(
         kind=kind,
         title=name[:1].upper() + name[1:] if name else None,
         amount=amount,
-        category_id=category,
+        category_id=filed,
         date=day,
         merchant=" ".join(merchant) or None,
         quantity=quantity,
@@ -181,7 +189,7 @@ def _draft(
         confidence={
             "amount": amount_sure,
             "title": sure["title"] if name else 0.0,
-            "category_id": category_sure if category else 0.0,
+            "category_id": category_sure if filed else 0.0,
             "date": sure["date_said"] if day else sure["date_assumed"],
         },
         said=" ".join(item.text if isinstance(item, Word) else item.raw for item in items),

@@ -1,0 +1,33 @@
+"""How the route matrix (tests/isolation) makes one of this module's items for a user, and checks
+afterwards that nobody else changed it: for every route under ``PREFIX`` that takes an id."""
+
+from __future__ import annotations
+
+from collections.abc import Awaitable, Callable
+
+from httpx import AsyncClient
+
+from tests.helpers import Account
+
+PREFIX = "/v1/receipts/"
+
+
+async def create_item(client: AsyncClient, owner: Account) -> str:
+    response = await client.post(f"{PREFIX}items", headers=owner.headers, json={"text": "mine"})
+    assert response.status_code == 201, response.text
+    return str(response.json()["id"])
+
+
+async def check_item(client: AsyncClient, owner: Account, item_id: str) -> None:
+    response = await client.get(f"{PREFIX}items/{item_id}", headers=owner.headers)
+    assert response.status_code == 200
+    assert response.json()["text"] == "mine"
+
+
+RESOURCES: dict[
+    str,
+    tuple[
+        Callable[[AsyncClient, Account], Awaitable[str]],
+        Callable[[AsyncClient, Account, str], Awaitable[None]],
+    ],
+] = {"item_id": (create_item, check_item)}

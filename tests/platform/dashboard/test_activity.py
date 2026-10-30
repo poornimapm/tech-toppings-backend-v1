@@ -11,7 +11,7 @@ async def act(client: AsyncClient, account: Account) -> None:
     headers = account.headers
     await client.patch("/v1/modules/journal/preferences", headers=headers, json={"pinned": True})
     await client.patch("/v1/modules/meals/preferences", headers=headers, json={"enabled": False})
-    await client.post("/v1/modules/receipts/interest", headers=headers)
+    await client.post("/v1/modules/medicine/interest", headers=headers)
     await client.put("/v1/modules/order", headers=headers, json={"keys": ["journal"]})
 
 
@@ -23,7 +23,7 @@ async def test_records_what_i_did_newest_first(client: AsyncClient) -> None:
 
     assert [(item["type"], item["params"]) for item in page["items"]] == [
         ("module.arranged", {}),
-        ("module.notify_on", {"module": "receipts"}),
+        ("module.notify_on", {"module": "medicine"}),
         ("module.hidden", {"module": "meals"}),
         ("module.pinned", {"module": "journal"}),
     ]

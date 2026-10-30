@@ -23,7 +23,7 @@ The spec is checked before anything is written, every problem at once.
     - a Python keyword, such as `class` or `import`;
     - a path the platform has under `/v1` (`admin`, `auth`, `me`, `modules`, `search` ...:
       `RESERVED` in `scripts/new_module.py`);
-    - a module already there on either side, the seven *coming soon* ones included (see
+    - a module already there on either side, the *coming soon* ones included (see
       [`roadmap.md`](../roadmap.md) for building one of them), or the test module (`notes`).
 - **The icon** is a lucide-react icon's name, by any of its names (`Sprout`, `SproutIcon`).
   Three icons share a name with JavaScript's own (`Map`, `File`, `Infinity`): use `MapIcon` and
@@ -124,13 +124,16 @@ person's export and account deletion include them with no extra code (ADR-0017).
 - `test_<key>.py`: the routes round trip; text checks; the tile figure; one user never sees
   another's items.
 - `isolation.py`: how the route matrix (`tests/isolation`) makes and checks an item, for
-  every route that takes an `item_id` under `/v1/<slug>/`.
+  every route that takes an `item_id` under `/v1/<slug>/`. It may add `ROUTE_BODIES` and
+  `ROUTE_QUERIES` for routes whose generic body, or missing query, would fail validation
+  before the lookup (Labor's do).
 
 **Frontend**, in `src/modules/<slug>/`:
 
 | File | What it holds |
 |---|---|
-| `manifest.ts` | The tile: icon, colour, keywords, the spec's strings (with the tile figure's label), and the page route |
+| `manifest.ts` | The tile: icon, colour, keywords, the spec's English strings (with the tile figure's label), and the page route |
+| `strings/{ta,hi}.json` | The same strings in Tamil and Hindi, loaded with the language rather than with the first page (the performance budget) |
 | `api.ts` | TanStack Query hooks over the typed client: the list (a page at a time), add, change, delete |
 | `items-page.tsx` | The page at `/m/<slug>`: the list with *Show more*, an add form, edit and delete for each item (delete asks first, Cancel focused), an empty state. The focus follows each change for keyboard users |
 | `i18n/{en,ta,hi}.json`, `i18n/index.ts` | The page's text: the spec's, plus the generic words (save, edit, delete ...), already translated |

@@ -17,6 +17,8 @@ _INITIAL_VALUES: dict[str, Any] = {
     "position": None,
     "settings": {},
     "notify_requested_at": None,
+    "granted_at": None,
+    "granted_by": None,
 }
 
 

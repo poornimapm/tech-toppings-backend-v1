@@ -19,6 +19,21 @@ class InvalidRangeError(AppError):
     default_message = "That date range isn't valid."
 
 
+CENTURY = 2000  # a two-digit year is this century's
+
+
+def on_or_before(today: date, day: int, month: int, year: int | None = None) -> date | None:
+    """That day and month, in the year given or else the latest one that isn't in the future;
+    None for a day no calendar has (31 February)."""
+    try:
+        if year is not None:
+            return date(year + CENTURY if year < 100 else year, month, day)  # noqa: PLR2004
+        found = date(today.year, month, day)
+        return found if found <= today else date(today.year - 1, month, day)
+    except ValueError:
+        return None
+
+
 def at_local(day: date, timezone: str, hour: int = 0) -> datetime:
     """``hour`` o'clock on ``day`` in ``timezone``, as a UTC instant (DST included)."""
     return datetime.combine(day, time(hour), ZoneInfo(timezone)).astimezone(UTC)

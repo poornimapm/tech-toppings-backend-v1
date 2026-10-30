@@ -1,4 +1,5 @@
-"""Managing accounts as an admin: role, disable, sign out everywhere, reset a password. Each
+"""Managing accounts as an admin: create one (with a one-time password), role, disable, sign
+out everywhere, reset a password, and the modules only some accounts are given. Each
 change is audited. An admin never changes their own account here, so the one acting always
 stays an admin; and a change that would leave no active admin (two admins demoting each other
 at once) is undone (``poe seed`` promotes BOOTSTRAP_ADMIN_EMAIL back, should none be left)."""
@@ -6,7 +7,8 @@ at once) is undone (``poe seed`` promotes BOOTSTRAP_ADMIN_EMAIL back, should non
 from __future__ import annotations
 
 import re
-from typing import Any, ClassVar
+from collections.abc import Sequence
+from typing import Any, ClassVar, cast
 
 from beanie import PydanticObjectId
 
@@ -16,8 +18,9 @@ from app.core.security import generate_one_time_password
 from app.platform.admin.deps import AdminAction
 from app.platform.auth.models import AuthSession
 from app.platform.auth.sessions import SessionService
+from app.platform.modules.grants import ensure_grantable, set_grant
 from app.platform.users.models import TWO_FACTOR_OFF, Role, User
-from app.platform.users.repository import UserRepository
+from app.platform.users.repository import EmailTakenError, UserRepository, normalise_email
 
 
 class SelfChangeError(ConflictError):
@@ -135,6 +138,58 @@ class Accounts:
         await self.sessions.revoke_all(user_id, "admin_reset")
         await self._record("user.password_reset", user_id, {"two_factor_cleared": user.two_factor})
         return password
+
+    async def create(self, email: str, name: str, modules: Sequence[str]) -> tuple[User, str]:
+        """A new account with a one-time password, returned once: the user must change it at
+        their first sign-in. ``modules``: the ones only some accounts may use, given to it."""
+        address = normalise_email(email)
+        if await self.users.by_email(address) is not None:
+            raise EmailTakenError
+        ensure_grantable(self.ctx.state.modules, modules)
+        password = generate_one_time_password()
+        defaults, now = self.ctx.settings.defaults, self.ctx.clock.now()
+        user = await self.users.create(
+            User(
+                email=address,
+                name=name.strip(),
+                password_hash=await self.ctx.state.password_hasher.hash(password),
+                locale=defaults.locale,
+                base_currency=defaults.currency,
+                timezone=defaults.timezone,
+                must_change_password=True,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        made = cast("PydanticObjectId", user.id)  # set by the insert
+        for key in modules:
+            await set_grant(
+                self.ctx.state.modules,
+                self.ctx.clock,
+                user_id=made,
+                key=key,
+                granted=True,
+                admin_id=self.ctx.user.id,
+            )
+        await self._record("user.created", made, {"modules": list(modules)})
+        return user, password
+
+    async def set_module(self, user_id: PydanticObjectId, key: str, *, granted: bool) -> User:
+        """Give an account a module only some may use, or take it back (their records in it
+        stay; the module is simply not there for them until it is given again)."""
+        user = await self.one(user_id)
+        await set_grant(
+            self.ctx.state.modules,
+            self.ctx.clock,
+            user_id=user_id,
+            key=key,
+            granted=granted,
+            admin_id=self.ctx.user.id,
+        )
+        await self._record(
+            "module.granted" if granted else "module.revoked", user_id, {"module": key}
+        )
+        return user
 
     # ------------------------------------------------------------------ helpers
 

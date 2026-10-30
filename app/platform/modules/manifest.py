@@ -52,6 +52,9 @@ class ModuleManifest(BaseModel):
     status: ModuleStatus
     order: int = Field(ge=0, description="Default position on the Welcome page")
     default_enabled: bool = True
+    # Who may use it: everyone, or only the accounts an admin gives it to (and admins).
+    # Hidden from everyone else, and its routes refuse them (Labor Management).
+    audience: Literal["everyone", "granted"] = "everyone"
     settings_model: type[BaseModel] | None = None
     router: str | None = Field(default=None, pattern=IMPORT_PATH)
     admin_router: str | None = Field(default=None, pattern=IMPORT_PATH)

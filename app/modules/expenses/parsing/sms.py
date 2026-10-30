@@ -8,8 +8,7 @@ from decimal import Decimal
 
 from app.modules.expenses.parsing.lexicon import Lexicon, known, lookup
 from app.modules.expenses.parsing.sentence import EXPENSE, INCOME, Draft
-from app.modules.expenses.parsing.when import on_or_before
-from app.platform import normalise
+from app.platform import normalise, on_or_before
 
 
 def _first(patterns: tuple, text: str) -> tuple[str, ...] | None:  # type: ignore[type-arg]

@@ -20,6 +20,14 @@ def normalise(text: str) -> str:
     return " ".join(unicodedata.normalize("NFKC", text).casefold().split())
 
 
+def western_digits(text: str) -> str:
+    """Tamil and Devanagari digits written as 0-9."""
+    return "".join(
+        str(unicodedata.digit(letter)) if letter.isdigit() and not letter.isascii() else letter
+        for letter in text
+    )
+
+
 def mentions(text: str, word: str) -> bool:
     """Is ``word`` in normalised ``text``? English matches whole words; Tamil and Hindi words
     take suffixes, so their stems match."""

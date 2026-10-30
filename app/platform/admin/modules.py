@@ -4,7 +4,7 @@ again, so a new release's manifest changes reach it."""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict, Field
@@ -27,6 +27,9 @@ class AdminModuleOut(BaseModel):
     global_enabled: bool
     order: int
     overridden: list[str] = Field(description="The fields an admin set")
+    audience: Literal["everyone", "granted"] = Field(
+        description="granted: only the accounts an admin gives it to (and admins) see it"
+    )
 
 
 class AdminModulePatch(BaseModel):
@@ -46,6 +49,7 @@ def _out(registry: ModuleRegistry, key: str, override: ModuleOverride | None) ->
         key=key,
         manifest_status=manifest.status,
         manifest_order=manifest.order,
+        audience=manifest.audience,
         status=override.status if override and override.status else manifest.status,
         global_enabled=override.global_enabled
         if override and override.global_enabled is not None

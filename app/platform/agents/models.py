@@ -37,6 +37,7 @@ class AgentRun(OwnedDocument):
     mode: AgentMode | None = None
     reason: Blocker | None = None
     input: str  # already redacted
+    photos: int = 0  # how many photos the run read; the photos themselves are never kept
     locale: str
     message: str | None = None  # agent mode: the agent's reply
     message_code: str | None = None  # static mode: translated on the client

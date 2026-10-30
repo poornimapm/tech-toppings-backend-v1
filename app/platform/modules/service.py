@@ -37,8 +37,10 @@ from app.platform.modules.models import ModuleOverride, UserModule
 from app.platform.modules.repository import UserModuleRepository
 from app.platform.modules.schemas import ModuleView, PreferencesIn
 from app.platform.notifications.inbox import Inbox
+from app.platform.users.models import Role
 
 if TYPE_CHECKING:
+    from app.platform.context import ActorContext
     from app.platform.modules.discovery import LoadedModule
     from app.platform.modules.registry import ModuleRegistry
 
@@ -55,6 +57,7 @@ class EffectiveModule:
     notify_requested: bool
     default_rank: int
     custom_position: int | None
+    granted: bool = True  # everyone's module, or one given to this account (or an admin)
 
     @property
     def key(self) -> str:
@@ -62,11 +65,20 @@ class EffectiveModule:
 
     @property
     def available(self) -> bool:
-        return self.global_enabled and self.enabled and self.status is not ModuleStatus.COMING_SOON
+        return (
+            self.granted
+            and self.global_enabled
+            and self.enabled
+            and self.status is not ModuleStatus.COMING_SOON
+        )
 
 
 def _effective(
-    module: LoadedModule, override: ModuleOverride | None, preference: UserModule | None
+    module: LoadedModule,
+    override: ModuleOverride | None,
+    preference: UserModule | None,
+    *,
+    admin: bool = False,
 ) -> EffectiveModule:
     manifest = module.manifest
     status = override.status if override and override.status else manifest.status
@@ -84,6 +96,9 @@ def _effective(
         notify_requested=bool(preference and preference.notify_requested_at),
         default_rank=order,
         custom_position=preference.position if preference else None,
+        granted=(
+            manifest.audience == "everyone" or admin or bool(preference and preference.granted_at)
+        ),
     )
 
 
@@ -133,15 +148,33 @@ _ACTIVITY = {
 
 class ModuleService:
     def __init__(
-        self, registry: ModuleRegistry, scope: Scope, clock: Clock, settings: Settings
+        self,
+        registry: ModuleRegistry,
+        scope: Scope,
+        clock: Clock,
+        settings: Settings,
+        *,
+        admin: bool = False,
     ) -> None:
         self.registry = registry
+        self.admin = admin  # sees every module, given to them or not
         self.scope = scope
         self.clock = clock
         self.settings = settings.modules
         self.preferences = UserModuleRepository(scope, clock)
         self.activity = ActivityLog(scope, clock, settings)
         self.inbox = Inbox(scope, clock, settings)
+
+    @classmethod
+    def of(cls, ctx: ActorContext) -> ModuleService:
+        """The service for a caller: an admin sees every module, given to them or not."""
+        return cls(
+            ctx.state.modules,
+            ctx.scope,
+            ctx.clock,
+            ctx.settings,
+            admin=ctx.user.role is Role.ADMIN,
+        )
 
     # ------------------------------------------------------------------ reading
 
@@ -150,16 +183,25 @@ class ModuleService:
         preferences = await self.preferences.by_module()
         modules = [
             _effective(
-                module, overrides.get(module.manifest.key), preferences.get(module.manifest.key)
+                module,
+                overrides.get(module.manifest.key),
+                preferences.get(module.manifest.key),
+                admin=self.admin,
             )
             for module in self.registry
         ]
-        return _arrange(modules)
+        # A module only some accounts are given is not there at all for the others.
+        return _arrange([item for item in modules if item.granted])
 
     async def one(self, key: str) -> EffectiveModule:
         module = self.registry.get(key)
         override = await ModuleOverride.find_one({"key": key})
-        return _effective(module, override, await self.preferences.for_module(key))
+        found = _effective(
+            module, override, await self.preferences.for_module(key), admin=self.admin
+        )
+        if not found.granted:
+            raise UnknownModuleError(details={"module": key})
+        return found
 
     async def ensure_available(self, key: str) -> None:
         if not (await self.one(key)).available:

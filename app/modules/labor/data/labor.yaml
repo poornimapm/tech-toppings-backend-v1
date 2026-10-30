@@ -1,0 +1,51 @@
+# How Labor Management behaves. Change a value here, not in code.
+
+projects:
+  # Kinds of project the form suggests (an owner may type their own). Words for each are in the
+  # frontend's translations, by key; a kind typed by the owner is shown as typed.
+  kinds: [farm, household, office, construction, shop, other]
+  # A busy owner's projects, open and closed: past this, closing or deleting old ones makes room.
+  max_per_owner: 200
+
+workers:
+  # Workers in one project, active and inactive.
+  max_per_project: 500
+  # The worker number given by default: the prefix, then the next number, zero-padded.
+  code_prefix: W
+  code_digits: 3
+  # Genders a worker may be recorded with (optional); only `female` and `male` have default
+  # rates of their own, when a project uses rates by gender.
+  genders: [female, male, other]
+
+files:
+  # A worker's photo and a picture of their ID, shrunk on the phone first. Their type is read
+  # from their bytes; these are the most kept (the phone sends far less).
+  types: [image/jpeg, image/png, image/webp]
+  photo_max_bytes: 200000
+  id_max_bytes: 600000
+  # How large the phone draws each before sending (its long side, in pixels): a face needs
+  # little, an ID card's print needs more.
+  photo_side_px: 480
+  id_side_px: 1400
+
+wages:
+  # The most a day's wage may be, in the currency's main unit (a slip of a finger guard).
+  max_daily: 100000
+  # Attendance: how much of a day's wage each status earns. A half day of a wage with odd paise
+  # rounds half up to whole paise (₹301.01 a day: ₹150.51 for a half day).
+  units: {full: 1, half: 0.5, absent: 0}
+
+payments:
+  methods: [cash, upi, bank, other]
+  # The largest single payment, in the currency's main unit.
+  max_amount: 10000000
+
+reports:
+  # The longest period a report spans, in days (a year and a bit).
+  max_days: 400
+  # The most days marked and payments one report file lists (beyond: a shorter period).
+  export_max_rows: 20000
+
+reading:
+  # The most characters of marks said or typed that are read at once (mark-attendance).
+  max_chars: 1000

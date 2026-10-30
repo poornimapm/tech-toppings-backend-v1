@@ -4,18 +4,15 @@ the browser prints to PDF, and the same figures as a CSV file."""
 from __future__ import annotations
 
 import asyncio
-import csv
 import datetime as dt
-import io
 
 from app.modules.expenses.domain import EntryKind
 from app.modules.expenses.features.analytics.service import Analytics, change_pct, tuning
 from app.modules.expenses.features.categories.service import Categories
 from app.modules.expenses.features.entries.models import EntryRepository
 from app.modules.expenses.features.entries.schemas import EntryFilters, EntryOut
-from app.modules.expenses.features.exports.service import safe_text
 from app.modules.expenses.features.reports.schemas import MonthlyReportOut, ReportCategory
-from app.platform import ActorContext, PageParams, major_text
+from app.platform import ActorContext, PageParams, csv_text, major_text, safe_text
 
 CSV_COLUMNS = ("section", "name", "amount", "share_pct", "previous", "change_pct")
 
@@ -128,9 +125,4 @@ class Reports:
             ["person", safe_text(item.name), money(item.amount_minor), pct(item.share_pct), "", ""]
             for item in report.people
         ]  # fmt: skip
-        buffer = io.StringIO()
-        buffer.write("﻿")
-        writer = csv.writer(buffer, lineterminator="\r\n")
-        writer.writerow(CSV_COLUMNS)
-        writer.writerows(rows)
-        return buffer.getvalue()
+        return csv_text(CSV_COLUMNS, rows)

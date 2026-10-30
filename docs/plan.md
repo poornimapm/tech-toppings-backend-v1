@@ -957,6 +957,9 @@ Then I stop until you reply `proceed`.
 
 ### Phase 14 — Receipt scan preview (U10)
 
+> As built (D26, ADR-0021): `POST /v1/agents/{name}/photo-runs?skill=scan-receipt`, and a
+> self-hosted Tesseract.js reader whose text goes to the runs endpoint (`input_type: "ocr"`).
+
 - `POST /receipts/scan` (Gemini multimodal, in memory).
 - Camera/upload UI.
 - Tesseract.js fallback evaluated.
@@ -965,6 +968,39 @@ Then I stop until you reply `proceed`.
   - Extraction accuracy is reported on 20 sample receipts.
   - No image is persisted anywhere (tested).
   - The fallback path works with AI consent off.
+
+### Phase 15 — Receipts & warranty (owner's choice, 2026-10-29; D27, ADR-0022)
+
+- The first upcoming module, made with `poe new-module` and grown: receipts with a warranty end
+  date, a reminder before it, filters by where the warranty stands, search, a dashboard widget.
+- The scan is shared: `app/platform/slips` (the slip reader) and `src/core/scan` (the
+  on-device reader, the scan's flow and button); a `scan-bill` skill fills a receipt from a bill.
+- Receipts are text records: no photo is kept (§7, *Receipts*).
+- Labor Management follows as Phase 16 (owner's spec of 2026-10-29).
+
+### Phase 16 — Labor Management (owner's spec of 2026-10-29; D28, ADR-0023)
+
+- Owners made by the admin (a one-time password, Labor given to them); modules only some
+  accounts are given (`audience="granted"`).
+- Projects, workers with a photo and an ID picture (private, small, in MongoDB), wages with
+  history (each takes effect from its day), attendance by day, payments, reports by day, week
+  or month, each worker's days and payments, an append-only audit.
+- The admin oversees every owner, read only. English, Tamil and Hindi; ready for Kannada.
+
+### Phase 17 — Labor's extras (owner's choice, 2026-10-30; ADR-0024)
+
+- **Offline attendance**, the app's own way (ADR-0010; no new offline architecture): a day
+  opened online stays usable when the network drops; each tap waits in the outbox and is sent
+  when back. A queued mark says what it saw; one changed elsewhere meanwhile is refused
+  (`LABOR_MARK_CHANGED`), never overwritten.
+- **Report export**, the app's own way (D5): a CSV from the server (the expenses CSV's rules,
+  now shared by the platform) and the page printed or saved as PDF by the browser.
+- **Marking by voice**: a `mark-attendance` skill (static rules in en/ta/hi, or the AI with
+  consent) reads "Ravi full day, Meena half day, the rest absent" into a draft the owner checks
+  and saves; it never saves on its own.
+- Fixes from the Phase 16 live check: Payments' figures add up (to date), every worker listed
+  past the first page, the audit names workers, the admin opens a project, the header never
+  scrolls sideways (Tamil).
 
 ---
 
@@ -1026,6 +1062,9 @@ Then I stop until you reply `proceed`.
 | D14 | **Agentic architecture (ADR-0013), from the owner's Phase 4 instructions.** AI features are skills run by a shared agent runtime, with no prompts in code. `AGENT_MODE`, `AGENT_SKILL_MODES` and `AGENT_FALLBACK` replace ADR-0005's fixed rule fallback. Writes are confirmed by the user, and skills are folders. Phase 4 becomes the agent platform and command palette; the dashboard and notifications move to **Phase 4b**. New libraries: `pyyaml` (frontmatter) and `cmdk` (palette, already listed in D8). | Owner's decisions, 2026-10-09 |
 | D15 | Phase 4b details (ADR-0014): the admin "All users" view shows aggregates only (no list widgets); launch notices are delivered when the user next loads their modules, not by a job; the activity feed records module changes for now, and each later module adds its own; a "new device signed in" notification is left to Phase 10 (security events); `ToolContext` became `ActorContext`; phones get a bottom navigation bar. | Privacy by construction; no scheduler on the free tier (ADR-0007); one context for tools and widgets. Reported 2026-10-13. |
 | D16 | Phase 5 details: the revision engine is generic (`core/revisions.py`), so the conflict code is `VERSION_CONFLICT`; idempotency is a unique key on the record itself, not an `idempotency_keys` collection with a TTL; an edit is `PUT` with the whole entry and its revision, not `PATCH`; restore is `POST /entries/{id}/restore` with the revision in the body; system categories are a data file, not seeded records; entries are in the base currency only until FX; no pending-revision repair job is needed (reads and writes finish them); the module is `beta`; it already has agent tools and a skill. | Smaller and race-free; one id per route for the isolation matrix; nothing to seed or migrate. Reported 2026-10-13. |
+| D28 | Phase 16 details (ADR-0023), from the owner's spec and choices of 2026-10-29: the plan had no Phase 16. Pictures are one document each in `stored_files`, not GridFS (MongoDB's advice for files under 16 MB; scoped, erased and exported like any record); a module may be given only to some accounts (`audience`), by the admin; the module's audit trail is its own collection, append-only and without the platform trail's retention; module manifests keep English and load Tamil and Hindi with the language (the first-load budget). | The owner's choices; MongoDB's own guidance; the 200 KB budget |
+| D27 | Phase 15 details (ADR-0022), from the owner's choice of 2026-10-29 (Receipts & warranty next, built on the scan): the plan had no Phase 15. The receipt reader's slip reading moved to the platform (`app/platform/slips`) and the on-device reader to `src/core/scan`, so a second module reads paper without importing expenses; receipts are text records with a warranty end and its reminder (no photo kept, as §7 says); a `scan-bill` skill fills one from a bill. | Modules can't import each other; the plan keeps receipt images unstored |
+| D26 | Phase 14 details (ADR-0021), with the owner's choices of 2026-10-29: a receipt photo goes to `POST /v1/agents/{name}/photo-runs?skill=scan-receipt` (not `POST /receipts/scan`: photos are an input of the agent runtime any skill can use, sent only to providers marked `vision`, held in memory, counted but never stored); without AI the photo is read on the device by Tesseract.js, **self-hosted** in `ocr/<hash>/` (not its CDN), after the photo is made ready (cropped, whitened round the paper, straightened, evenly lit), and the text goes to the runs endpoint with `input_type: "ocr"` (`AGENT_MAX_OCR_CHARS`), not `capture/interpret`; the `scan-receipt` skill's static script is a receipt reader whose drafts add up to the amount paid; one draft per item, with *Combine into one* on the card; a per-device *Read photos on this device only* switch; `expenses_draft` takes up to 40 drafts; accuracy on 20 synthetic photo-like receipts (`poe eval-receipts`, gated in CI on the committed OCR text; AI not measured where this was built). | Each choice is the owner's or follows from the platform: no new AI path, no third party for the on-device reader, and a measurement that runs the app's own code |
 | D25 | Phase 13 details (ADR-0020), with the owner's choices of 2026-10-29: `poe new-module --spec <file>` makes a module in both repositories from one YAML spec (key, icon, accent, status, order, keywords, and its texts in en/ta/hi, checked on both sides before anything is written, Tamil and Hindi really translated): the backend's flat layout with one record type (an item with a short text, CRUD under `/v1/<slug>/items`, the tile counting them, schema names carrying the module) and its tests, then the frontend's manifest, page (list a page at a time, add, change, delete in place), i18n and test through `scripts/new-module.ts` (Node runs TypeScript), the API types regenerated, and the new module's tests with the shared checks run on both sides; it never writes over a folder and undoes a run that fails or is stopped while writing (files that fail the final checks are kept); the route matrix takes each module's own factories (`tests/modules/<key>/isolation.py`), and the catalog, discovery and registry tests take the module list from discovery, checking only that the shipped modules are there; the seven coming-soon manifests stay, and building one means moving its texts into a spec and generating it (`roadmap.md`); `docs/mobile.md` gives the Play Store path (a Trusted Web Activity with Bubblewrap and Digital Asset Links, a registration fee) and keeps iPhone a Home Screen web app. | No new dependencies; acceptance shown with the example spec: one command, every check green on both sides. Reported 2026-10-29. |
 | D24 | Phase 12 details (ADR-0019): the API answers only through the app's `/api` proxy (a Cloudflare Pages Function sends `SECURITY_PROXY_SECRET`; only `/healthz`, Render's health check, is exempt), so the proxy's `X-Forwarded-For` (Cloudflare's client address) can be trusted and the rate limits see real clients; a production server refuses to start on a weakening setting (no HSTS, no proxy secret, insecure cookie, docs on, console logs, rate limits off, non-https CORS); `render.yaml` is the Render Blueprint (free Docker service in Singapore, deploys `main` after CI passes, no secret in git), checked by a test that starts it in production; `public/_headers` holds the app's CSP (own files plus Google's sign-in button), HSTS, framing, permission and caching rules, served by `vite preview` too so e2e runs under it; answers over `API_GZIP_MIN_BYTES` are gzipped, sign-in answers never (BREACH), because Render's free plan now allows 5 GB out a month; backups are `poe backup`/`poe restore` from the owner's machine (PyMongo only, canonical Extended JSON, Fernet-encrypted, never GitHub artifacts, which anyone signed in can download); `poe smoke-live` and a daily `smoke-live` workflow check the live app from outside, the workflow's failure email being the monitoring; no keep-alive pings (Render treats them as abuse); `docs/free-tier-limits.md` re-checked. | No new dependencies; free tier only; nothing secret in git; the owner creates the accounts and deploys (`docs/deployment.md`). Prepared 2026-10-28. |
 | D23 | Phase 11 details (ADR-0018): **a hand-written service worker instead of `vite-plugin-pwa`** (owner's choice, 2026-10-23), built by a small Vite plugin that also writes the manifest; the offline outbox sends from the page, not the worker (the access token lives only in the page), so there is no Background Sync, only the `online` event, app start and a retry interval; Web Push implements RFC 8291/8292 on `cryptography` and PyJWT (no `pywebpush`), sends only to `PUSH_ALLOWED_HOSTS`, ties a subscription to the signed-in device's session and the current VAPID key, and pushes reminders from their own job (`reminders_push`, a deadline per browser, at most `PUSH_MAX_TRIES` tries), so the inbox never waits on a push service; the worker words pushes from a text pack the page writes and always shows them (Safari drops subscriptions whose pushes show nothing); Simple mode is the existing `ui_mode`; the tour opens for an account made in the last 10 minutes and is remembered per device; Tamil and Hindi load on demand; the vendor chunk holds only what every page needs; env validation and the sign-in form no longer use zod; the shell's small animations are CSS; the budget counts each first page (the entry plus the route's own chunk, from Vite's build manifest); a `tt-session` hint lets a browser known to be signed out skip the session check; Lighthouse is measured over HTTP/2 (as the hosts serve) and over the local HTTP/1.1 preview, both reported. | No new dependencies; each first page stays under 200 KB (home 195.4, sign-in 189.2); push can't be turned against arbitrary hosts. Reported 2026-10-23. |

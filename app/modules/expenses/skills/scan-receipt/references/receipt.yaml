@@ -1,0 +1,50 @@
+# Static mode for the scan-receipt skill: how a shop receipt's text (read from a photo on the
+# device) becomes draft expenses, with no AI. The platform reads the slip itself (its lines,
+# totals, shop and day: app/platform/slips/words.yaml); the shared expenses words (categories,
+# units, confidence) come from the track-expenses skill's references; these are a receipt's own.
+# English words match whole; Tamil and Hindi ones at the start of a word, as stems (with an
+# ending attached), except words of three letters or fewer, which match whole. Case doesn't matter.
+#
+# Message codes (worded by the module's frontend manifest, strings.replies):
+#   scan-receipt.ready        drafts were prepared ({count}, and {total} when the receipt has one)
+#   scan-receipt.unreadable   no items and no total could be read
+#   scan-receipt.on_device    a photo came without AI to read it: the app reads it on the device
+
+tool: expenses_draft
+
+# A kind of shop, by words in its name: its items' category when an item's own words don't say.
+shops:
+  fuel: [petroleum, petrol, fuels, fuel station, filling station, indian oil, bharat, hp centre,
+         பெட்ரோல், पेट्रोल]
+  health: [pharmacy, pharma, medical, medicals, chemist, chemists, drug, clinic, hospital,
+           மருந்தகம், மெடிக்கல், फार्मेसी, मेडिकल, दवाखाना]
+  food: [restaurant, hotel, cafe, café, bhavan, bhawan, dhaba, mess, canteen, kitchen, bakery,
+         sweets, biryani, foods, உணவகம், ஹோட்டல், பேக்கரி, ஸ்வீட்ஸ், भोजनालय, होटल, ढाबा,
+         रेस्टोरेंट, मिष्ठान, स्वीट्स]
+  groceries: [mart, supermarket, super market, stores, store, kirana, provisions, provision,
+              departmental, fresh, vegetables, மளிகை, ஸ்டோர்ஸ், சூப்பர் மார்க்கெட், காய்கறி, किराना,
+              स्टोर, सुपर मार्केट, जनरल स्टोर, सब्ज़ी, सब्जी]
+  shopping: [textiles, silks, garments, fashion, footwear, ஜவுளி, कपड़ा]
+
+# A receipt older than this many days is more likely a misread date: today is used instead.
+max_age_days: 400
+# Figures above this aren't prices (phone numbers, bill numbers).
+max_amount: 200000
+# A difference this small between the items and the total is rounding: nothing is added.
+round_off: 1
+
+# Titles for drafts the receipt doesn't name, by language. More item lines than the drafts tool
+# takes: the last of them become one `rest` draft.
+titles:
+  extras: {en: Taxes and charges, ta: வரிகள் மற்றும் கட்டணங்கள், hi: कर और शुल्क}
+  rest: {en: Rest of the receipt, ta: ரசீதின் மீதி, hi: रसीद का बाकी हिस्सा}
+  receipt: {en: Receipt, ta: ரசீது, hi: रसीद}
+
+# How sure the reader is of what it read (0 to 1); below the shared `uncertain_below`, the
+# field is marked for the user to check.
+confidence:
+  item: 0.8 # an item line's title and amount
+  shop_category: 0.65 # the category the shop's kind gave
+  adjusted: 0.4 # an amount changed to make the total come out (a discount), or a draft added
+  date_read: 0.9
+  date_missing: 0.5 # no date could be read: today, for the user to check

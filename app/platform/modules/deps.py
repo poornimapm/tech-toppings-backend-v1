@@ -6,8 +6,9 @@ from typing import TYPE_CHECKING, Annotated, cast
 from fastapi import Depends, Request
 
 from app.core.deps import ClockDep, SettingsDep
-from app.platform.auth.deps import UserScope
+from app.platform.auth.deps import CurrentUser, UserScope
 from app.platform.modules.service import ModuleService
+from app.platform.users.models import Role
 
 if TYPE_CHECKING:
     from app.platform.modules.registry import ModuleRegistry
@@ -18,9 +19,11 @@ def get_registry(request: Request) -> ModuleRegistry:
 
 
 def get_module_service(
-    request: Request, scope: UserScope, clock: ClockDep, settings: SettingsDep
+    request: Request, user: CurrentUser, scope: UserScope, clock: ClockDep, settings: SettingsDep
 ) -> ModuleService:
-    return ModuleService(get_registry(request), scope, clock, settings)
+    return ModuleService(
+        get_registry(request), scope, clock, settings, admin=user.role is Role.ADMIN
+    )
 
 
 ModuleServiceDep = Annotated[ModuleService, Depends(get_module_service)]

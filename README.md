@@ -566,6 +566,7 @@ while in-app reminders keep working.
 | `poe smoke-live --app https://… [--api https://…]` | Check the live app end to end from outside (`SMOKE_EMAIL`/`SMOKE_PASSWORD` also sign in) |
 | `poe openapi` | Write `openapi.json` for the frontend type generator |
 | `poe eval-parser` | Accuracy of the expenses rule parser by language and field (`--misses` lists errors) |
+| `poe eval-receipts` | Receipt scanning on the 20 samples: the rules on the phone's OCR text (`--paper`: as printed; `--ai`: a vision provider on the photos) |
 | `poe docker-build` | Build the production image locally |
 
 Prefix each command with `.venv\Scripts\` if the venv is not activated.
@@ -656,13 +657,19 @@ app/
     admin/           /v1/admin/*: the only place an unrestricted Scope is allowed
     context.py       ActorContext: what tools and widgets receive
     plugins.py       folder discovery shared by modules, agents, skills, tools, widgets and jobs
+    slips/           reading printed slips (receipts, bills) as OCR gives them: read_slip
+    files/           small private files a module keeps for its owner (worker photos)
   modules/           feature modules, auto-discovered
     expenses/        entries with history, categories, products and prices, analytics and
                      insights, budgets, goals, repeating entries and bills, loans, tile,
                      widgets, tools, jobs, skills track-expenses, tidy-products
                      and explain-spending (beta);
                      parsing/: the rule parser (vocabulary in skills/track-expenses/references)
-    medicine/ ...    the other seven: manifest only, coming soon
+    receipts/        receipts with a warranty end, its reminder, search, a dashboard widget,
+                     skill scan-bill (beta)
+    labor/           Labor Management for the owners the admin makes: projects, workers,
+                     attendance, wages, payments, reports, audit (beta)
+    medicine/ ...    the other six: manifest only, coming soon
 tests/               pytest suite (real MongoDB)
 scripts/             seed.py, reset_password.py, export_openapi.py, hooks/venv-run.sh
 docs/                plan, ADRs, architecture, reference analysis, free-tier limits

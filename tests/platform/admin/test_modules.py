@@ -28,6 +28,7 @@ async def test_lists_every_module_as_its_manifest_says(client: AsyncClient) -> N
         "global_enabled": True,
         "order": 5,
         "overridden": [],
+        "audience": "everyone",
     }
 
 

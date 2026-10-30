@@ -276,6 +276,11 @@ should pass.
 - Gemini: `gemini-3.5-flash-lite` or `gemini-3.8-flash`, with a key from AI Studio;
 - Groq: `openai/gpt-oss-20b`.
 
+Receipt photos go only to providers marked `"vision": true` (Gemini's models read images).
+With none, a scan is read on the phone instead (ADR-0021). The on-device reader's files ship
+with the frontend in `ocr/<version>/` (about 12 MB on Pages, fetched only by a scan without
+AI); `public/_headers` allows the WebAssembly they need (`'wasm-unsafe-eval'`).
+
 Free-tier prompts may be used by Google to improve its products. Users choose whether to
 allow AI.
 

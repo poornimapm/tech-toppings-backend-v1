@@ -1,0 +1,163 @@
+# Words for reading a day's attendance from what the owner says or types (mark-attendance's
+# static mode). One list per meaning, English, Tamil, Hindi and the romanised forms mixed.
+# English words match whole; Tamil and Hindi ones as stems at a word's start, except short
+# words (3 letters or fewer), which match whole. Where two words overlap ("नहीं आया" and
+# "आया"), the longer one counts.
+#
+# Message codes (worded on the app): mark-attendance.ready {count}, .unsure {count} (some
+# names or marks to choose), .nothing (no marks read), .which_project (several open
+# projects: say it on the project's attendance page), .no_project.
+
+tool: labor_attendance_draft
+
+statuses:
+  full:
+    - full day
+    - full
+    - present
+    - came
+    - poora din
+    - pura din
+    - hazir
+    - haazir
+    - muzhu naal
+    - முழு நாள்
+    - முழுநாள்
+    - வந்தார்
+    - வந்தாள்
+    - வந்தான்
+    - வந்தாங்க
+    - வந்தது
+    - पूरा दिन
+    - पूरे दिन
+    - हाज़िर
+    - हाजिर
+    - आया
+    - आई
+    - आए
+  half:
+    - half day
+    - half
+    - halfday
+    - aadha din
+    - adha din
+    - arai naal
+    - அரை நாள்
+    - அரைநாள்
+    - அரை
+    - आधा दिन
+    - आधे दिन
+    - आधा
+    - हाफ डे
+    - हाफ़ डे
+  absent:
+    - absent
+    - leave
+    - on leave
+    - did not come
+    - didn't come
+    - not come
+    - not present
+    - nahi aaya
+    - nahin aaya
+    - chhutti
+    - varala
+    - varavillai
+    - வரவில்லை
+    - வரலை
+    - வரல
+    - லீவு
+    - விடுப்பு
+    - गैरहाज़िर
+    - गैरहाजिर
+    - ग़ैरहाज़िर
+    - अनुपस्थित
+    - छुट्टी
+    - नहीं आया
+    - नहीं आई
+    - नहीं आए
+
+# Everyone not named ("Ravi half day, the rest full day").
+rest:
+  - the rest
+  - rest
+  - everyone else
+  - all others
+  - others
+  - remaining
+  - baaki
+  - baki
+  - மற்றவர்கள்
+  - மற்றவங்க
+  - மற்ற எல்லோரும்
+  - மீதி
+  - மீதமுள்ளவர்கள்
+  - बाकी
+  - बाक़ी
+  - बाकी सब
+  - बाकी लोग
+  - बचे हुए
+
+# Everyone, when no one is named ("everyone full day").
+everyone:
+  - everyone
+  - everybody
+  - all
+  - all workers
+  - sab
+  - sabhi
+  - எல்லோரும்
+  - எல்லாரும்
+  - அனைவரும்
+  - सब
+  - सभी
+  - सब लोग
+
+# Which day, as days back from today ("कल" is read as yesterday: attendance is of the past).
+days:
+  0: [today, aaj, indru, இன்று, இன்னைக்கு, आज]
+  1: [yesterday, kal, netru, நேற்று, நேத்து, कल]
+  2: [day before yesterday, parson, முந்தாநேற்று, முந்தா நேத்து, परसों]
+
+# A worker by number: "number 3", "W003", "எண் 3", "नंबर 3".
+number: [number, num, "no", worker, w, எண், நம்பர், नंबर, नम्बर, क्रमांक]
+
+# Words around the names and marks that are neither: what is left is taken as a name to check.
+fillers:
+  - and
+  - also
+  - then
+  - mark
+  - marked
+  - is
+  - was
+  - were
+  - are
+  - for
+  - of
+  - the
+  - a
+  - day
+  - days
+  - work
+  - today's
+  - attendance
+  - மற்றும்
+  - இன்றைய
+  - வருகை
+  - நாள்
+  - और
+  - भी
+  - का
+  - की
+  - के
+  - ने
+  - है
+  - था
+  - थी
+  - हाज़िरी
+  - दिन
+
+# A name heard a little differently from how it was saved ("Laxmi" for "Lakshmi") still
+# matches at this likeness (0 to 1), and is marked for the owner to check.
+similar_at: 0.65

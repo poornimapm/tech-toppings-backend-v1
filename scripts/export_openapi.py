@@ -20,7 +20,8 @@ DEFAULT_OUTPUT = Path(__file__).resolve().parents[1] / "openapi.json"
 def main(argv: Sequence[str]) -> int:
     output = Path(argv[1]) if len(argv) > 1 else DEFAULT_OUTPUT
     schema = create_app().openapi()
-    output.write_text(json.dumps(schema, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    text = json.dumps(schema, indent=2, ensure_ascii=False) + "\n"
+    output.write_text(text, encoding="utf-8", newline="\n")  # LF on Windows too
     print(f"OpenAPI schema written to {output}")
     return 0
 

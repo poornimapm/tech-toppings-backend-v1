@@ -1,0 +1,18 @@
+HOTEL ANNAPOORNA
+Restaurant & Sweets
+45 Mount Road, Chennai
+GSTIN 33AAACH7409R1ZX
+Table: 7        Waiter: Ravi
+Bill No: R-2231      Dt: 11-10-2026
+Item                Qty Price   Amount
+Masala Dosa           2 90.00   180.00
+Filter Coffee         2 35.00    70.00
+Paneer Butter Masala 1 220.00   220.00
+Butter Naan           3-45.00   135.00
+Sub Total                         605.00
+Service Charge 5%                 30.25
+CGST 2.5%                          i 1
+SGST 2.5%                          1513   :
+Grand Total                       665.51
+Round Off                          =0.51
+Net Payable                       665.00

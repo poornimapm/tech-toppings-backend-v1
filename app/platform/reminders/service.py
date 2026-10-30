@@ -314,8 +314,6 @@ class Reminders(ScopedRepository[Reminder]):
         """A filter leaving out modules switched off for the user, by the rule that also
         guards their routes, widgets and tools."""
         modules = self.ctx.state.modules
-        usable = await ModuleService(
-            modules, self.scope, self.clock, self.ctx.settings
-        ).usable_owners()
+        usable = await ModuleService.of(self.ctx).usable_owners()
         blocked = [m.manifest.key for m in modules if not usable(m.manifest.key)]
         return {"module_key": {"$nin": blocked}}

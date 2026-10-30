@@ -6,6 +6,132 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added — Phase 17: Labor's extras
+
+- **Marks kept offline never overwrite newer ones** (ADR-0024): `MarkIn.expected`, the mark the
+  sender saw; a mark whose day was marked otherwise since is refused before anything is written
+  (409 `LABOR_MARK_CHANGED`, with the mark it has now).
+- **Report files**: `GET /v1/labor/projects/{id}/report.csv` and the admin's copy: the report's
+  figures, then each day marked and each payment not voided; too many rows are refused before
+  the file is made (`LABOR_EXPORT_TOO_LARGE`, `reports.export_max_rows`).
+- **Marks by voice**: the `mark-attendance` skill (static rules in English, Tamil and Hindi in
+  `references/attendance.yaml`, or the AI with consent) reads "Ravi full day, Meena half day,
+  the rest absent" into a draft: tools `labor_day` (read) and `labor_attendance_draft` (client);
+  `POST /v1/labor/projects/{id}/attendance/read?day=` runs it for the attendance page. It never
+  saves.
+- Reports name each worker (`code`, `name`) with what they earned and were paid to date
+  (`earned_to_date_minor`, `paid_to_date_minor`); audit entries carry `labels` naming the workers
+  a change holds by id.
+- The CSV rules (byte-order mark, CRLF, formula guard) are the platform's (`csv_text`,
+  `csv_writer`, `safe_text`, `attachment`, `CSV_RESPONSE`, `CSV_MEDIA_TYPE`), shared by expenses
+  and Labor; `AgentRun` is in the platform API.
+
+### Fixed — Phase 17
+
+- What a worker is owed counted days recorded before the project's start date, but what they
+  earned didn't: both now count every day up to the report's end.
+
+### Added — Phase 16: Labor Management
+
+- **Labor Management** (beta, ADR-0023), made by `poe new-module` and grown, for the owners the
+  admin makes: projects (open until closed), workers (a number of their own, a photo, an ID
+  picture if kept, made inactive never deleted), each project's usual daily wage (one for all or
+  by gender) and each worker's own with its history, attendance by day (full 1, half 0.5, absent
+  0, one mark per worker and day, each at the wage it was recorded with), payments (partial,
+  kept once per `Idempotency-Key`, voided with a reason), reports by day, week or month with
+  what is owed, each worker's days and payments between two days, an overview of today, and
+  an append-only audit trail with each field from and to. `data/labor.yaml` holds its rules.
+- Admin oversight, read only, under `/v1/admin/labor`: owners, projects, workers, reports, audit.
+- **Modules only some accounts are given**: a manifest's `audience="granted"`; such a module
+  isn't there for anyone not given it (404 `MODULE_NOT_FOUND`); admins see every module.
+- **The admin makes accounts**: `POST /v1/admin/users` (a one-time password, shown once, and the
+  modules to give); `PUT /v1/admin/users/{id}/modules/{key}` gives or takes one back; accounts
+  list their given modules. Audited.
+- **Private files** (`app/platform/files`): a small file kept for its owner (type from its
+  bytes, size checked), served only through a module's own checks (`private, no-store`).
+- `ScopedRepository.first(filters)`; `parse_object_id`, `current_request_id` and `granted_users`
+  in the platform API; the admin's module list says each module's `audience`.
+
+### Changed — Phase 16
+
+- The route matrix gives its accounts every module only some accounts may use, and a module's
+  `isolation.py` may add the bodies and queries its routes need.
+
+### Added — Phase 15: Receipts & warranty
+
+- **The receipts module** (beta, ADR-0022), made by `poe new-module` and grown: receipts with
+  what was bought, the shop, the day (never after today), the amount, the bill's and the thing's
+  numbers, a note, and the warranty's last day (`/v1/receipts/items`, `/v1/receipts/options`).
+  Where each warranty stands today (none, active, ending, ended) is worked out per request and
+  filters lists (`?warranty=`); `?q=` finds words in a receipt.
+- A reminder before each warranty ends (`receipts.warranty_ends`), moved or cancelled with the
+  receipt; none for a warranty already over.
+- Search (the command palette), a dashboard widget (warranties ending soon), the Welcome tile's
+  count, and the activity feed.
+- **`scan-bill`** skill: a bill's photo (AI) or its text (rules) fills in a receipt through the
+  `receipts_draft` client tool; its static reader takes the dearest item, the total, the bill's
+  and serial numbers and a printed warranty (`references/bill.yaml`, en/ta/hi).
+- `data/warranty.yaml`: the reminder's default and most days, the longest warranty, the lengths
+  the form offers.
+
+### Changed — Phase 15
+
+- **The slip reader is the platform's** (`app/platform/slips`: `read_slip`, `word_pattern`,
+  `words.yaml`), so any module reads printed paper; the caller says how old a date and how large
+  a figure may be. Expenses' receipt reader keeps only what expenses makes of a slip, and reads
+  the 20 samples exactly as before. `western_digits` and `on_or_before` moved to the platform.
+- Tests that used `receipts` as their upcoming module use `medicine`.
+
+### Fixed — Phase 15
+
+- A shop's name read with a stray opening bracket at its end ("Sri Murugan Stores (") loses it.
+- The body-limit tests set a photo limit that fits their small body limit (the startup check
+  added in Phase 14 refused their settings).
+
+### Added — Phase 14: receipt scan preview
+
+- **Photo runs** (ADR-0021): `POST /v1/agents/{name}/photo-runs?skill=...` takes a photo as the
+  request body (`AGENT_MAX_PHOTO_BYTES`, `AGENT_PHOTO_TYPES`, its type checked against its
+  bytes). It is held in memory for the run and sent only to providers marked `"vision": true`;
+  the run keeps a count (`photos`), never the photo. Without a vision provider, or AI, the
+  switches decide as for any run.
+- **`scan-receipt` skill** (expenses): one draft per item line, the shop and day on each, adding
+  up to the amount paid. Its static script is a **receipt reader** (`parsing/receipt.py`, words
+  in `references/receipt.yaml`) for text read on the phone (`input_type: "ocr"`, up to
+  `AGENT_MAX_OCR_CHARS`). `expenses_draft` takes up to 40 drafts.
+- **`poe eval-receipts`**: accuracy on 20 labelled sample receipts in English, Tamil and Hindi
+  (`tests/modules/expenses/receipts`), on the phone's OCR text, the printed text (`--paper`),
+  or by a vision provider on the photos (`--ai`). CI gates the rules at the measured floors.
+  Results in `docs/modules/expenses.md`.
+- Tests that no photo is kept anywhere: every collection and the logs are searched after a run.
+
+### Fixed (Phase 14 review: 37 findings, all fixed)
+
+- A scan whose AI run stopped before drafting anything (quota, a 429 mid-run) now falls to
+  the switches, so the photo is read on the device; a run's answer cut off inside a tool call
+  moves on to the next provider; a resting vision provider costs no quota.
+- A switched-off module's skill never runs (403), photo or text; only a skill that reads
+  photos takes one (422); the longer OCR input limit is for a skill that reads `ocr` only.
+- `GET /v1/agents` says per skill where a photo would be read (`photo_mode`).
+- `AGENT_MAX_PHOTO_BYTES` must fit in `API_MAX_BODY_BYTES` (checked at startup).
+- The receipt reader: no more than the drafts tool takes (a long receipt crashed the scan),
+  no phantom drafts from postal codes, bill numbers or date lines, payment lines never the
+  total, "amt" totals, "Subtotal" as one word, January by name, counts never taken from a
+  price (and weights read as kg), Tamil and Hindi words matched at a word's start (कर is not
+  करी), short Indic words counted as words (घी, டீ), column labels cut from item names,
+  tidier shop names, a total-only fuel slip filed as fuel.
+- The scorer no longer credits a subtotal as a balancing draft or a bare "Store" as the shop,
+  and CI gates draft precision too; `--ai` checks tool calls as the app does.
+- Sample r09's tax lines now add up to its total.
+
+### Changed
+
+- `ProviderSettings.vision` (default false); `ProviderChain.configured()` is a method that
+  can ask for a provider that reads images; skills declare `reads` and `max-output-tokens` in
+  their SKILL.md metadata.
+- The rule parser's `category()` is shared (a receipt's kind of shop is its last guess before
+  "other"), as is the draft-to-arguments helper.
+
 ### Added — Phase 13: generator + future scaffolds
 
 - **`poe new-module --spec <file>`** (`scripts/new_module.py`, ADR-0020) makes a working module in

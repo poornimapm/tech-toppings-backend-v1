@@ -19,20 +19,6 @@ def _unsure(confidence: dict[str, float], uncertain_below: float) -> list[str]:
     return [name for name, sure in confidence.items() if sure < uncertain_below]
 
 
-def _argument(draft: parsing.Draft, uncertain_below: float) -> dict[str, Any]:
-    return {
-        "kind": draft.kind,
-        "title": draft.title,
-        "amount": float(draft.amount) if draft.amount is not None else None,
-        "category_id": draft.category_id,
-        "date": draft.date.isoformat() if draft.date else None,
-        "merchant": draft.merchant,
-        "quantity": float(draft.quantity) if draft.quantity is not None else None,
-        "unit": draft.unit,
-        "uncertain": _unsure(draft.confidence, uncertain_below),
-    }
-
-
 def _loan(loan: parsing.IouDraft, uncertain_below: float) -> dict[str, Any]:
     """A loan as the client tool takes it. The due date is left for the user: the parser never
     reads a day to come."""
@@ -87,6 +73,6 @@ async def run(request: StaticRequest, tools: ToolBox) -> StaticOutcome | None:
     )
     if not drafts or not (asked_here or any(draft.amount for draft in drafts)):
         return None  # from the general assistant, "buy milk" is a to-do, not an expense
-    arguments = [_argument(draft, words.uncertain_below) for draft in drafts]
+    arguments = [parsing.arguments(draft, words.uncertain_below) for draft in drafts]
     await tools.client(lexicon["capture"]["tool"], {"drafts": arguments})
     return StaticOutcome("track-expenses.ready.draft")

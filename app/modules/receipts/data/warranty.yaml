@@ -1,0 +1,16 @@
+# How receipts and their warranties behave. Change a number here, not in code.
+
+warranty:
+  # A new receipt reminds the user this many days before its warranty ends (at
+  # REMINDERS_SEND_HOUR, their time); each receipt can set its own, from 0 (on the last day) up
+  # to max_remind_days. Within that time the warranty is "ending soon".
+  remind_days_before: 30
+  max_remind_days: 365
+  # The longest warranty a receipt takes, in months (a longer one is more likely a slip).
+  max_months: 120
+  # The lengths the form offers with one tap, in months.
+  quick_months: [6, 12, 24, 36, 60]
+
+dashboard:
+  # The "warranties ending soon" widget lists at most this many, the soonest first.
+  max_items: 5

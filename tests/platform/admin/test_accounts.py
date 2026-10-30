@@ -36,6 +36,7 @@ async def test_lists_finds_and_reads_accounts(client: AsyncClient) -> None:
         "two_factor": False,
         "locked": False,
         "providers": [],
+        "modules": [],
     }
     one = (await client.get(f"{USERS}/{priya.user_id}", headers=admin.headers)).json()
     assert one["live_sessions"] == 1
