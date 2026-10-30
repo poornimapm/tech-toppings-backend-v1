@@ -187,7 +187,7 @@ async def test_the_module_it_makes_works_through_the_app(
     assert [item["text"] for item in listed.json()["items"]] == ["Tulsi"]
     assert (view.json()["status"], view.json()["stat"]["value"]) == ("beta", 1)
     made = [tmp_path / package / spec.key, tmp_path / "tests" / "modules" / spec.key]
-    assert sorted(path.name for path in made[0].iterdir()) == [
+    assert written(made[0]) == [
         "__init__.py",
         "manifest.py",
         "models.py",
@@ -196,11 +196,16 @@ async def test_the_module_it_makes_works_through_the_app(
         "service.py",
         "stats.py",
     ]
-    assert sorted(path.name for path in made[1].iterdir()) == [
+    assert written(made[1]) == [
         "__init__.py",
         "isolation.py",
         f"test_{spec.key}.py",
     ]
+
+
+def written(folder: Path) -> list[str]:
+    """What the command wrote there: Python adds `__pycache__` once the app has imported it."""
+    return sorted(path.name for path in folder.iterdir() if path.name != "__pycache__")
 
 
 def ruff(*args: str, source: str) -> subprocess.CompletedProcess[str]:
