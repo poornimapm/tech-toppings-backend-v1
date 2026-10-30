@@ -17,13 +17,15 @@ concurrency:
 jobs:
   quality:
     name: lint · typecheck · test · audit
-    # Not ubuntu-latest: on Ubuntu 26.04's kernel (6.19+) the mongo:8.0 service won't start
-    # (SERVER-121912). Move back once a mongo image runs there.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
       mongo:
         image: mongo:8.0
+        # The runners' kernels (6.19 up to 7.0.13) and MongoDB 8's tcmalloc disagree about rseq,
+        # and mongod refuses to start (SERVER-121912). With glibc owning rseq it starts.
+        env:
+          GLIBC_TUNABLES: glibc.pthread.rseq=1
         ports:
           - 27017:27017
         options: >-
@@ -34,6 +36,9 @@ jobs:
     env:
       TEST_MONGO_URI: mongodb://localhost:27017
     steps:
+      - name: Runner kernel (MongoDB 8 depends on it, see the service above)
+        run: uname -r
+
       - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v7
