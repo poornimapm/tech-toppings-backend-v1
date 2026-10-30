@@ -7,7 +7,7 @@ import datetime as dt
 from collections.abc import Mapping
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, Field
 
 from app.modules.labor.models import (
     AttendanceStatus,
@@ -206,6 +206,15 @@ class MarksIn(_In):
 # ---------------------------------------------------------------------- marks said or typed
 
 DAY_TEXT = r"^\d{4}-\d{2}-\d{2}$"  # a day as the model writes it; checked again when saved
+
+
+def _real_day(value: str) -> str:
+    """A day that exists ("2026-09-31" doesn't): a ValidationError the model is told about."""
+    dt.date.fromisoformat(value)
+    return value
+
+
+DayText = Annotated[str, Field(pattern=DAY_TEXT), AfterValidator(_real_day)]
 DraftStatus = Literal["full", "half", "absent"]
 
 
@@ -233,9 +242,7 @@ class AttendanceDraftIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     project_id: Annotated[str | None, Field(description="The project's id from labor_day")] = None
-    day: Annotated[
-        str | None, Field(pattern=DAY_TEXT, description="YYYY-MM-DD; never later than today")
-    ] = None
+    day: Annotated[DayText | None, Field(description="YYYY-MM-DD; never later than today")] = None
     marks: Annotated[list[DraftMarkIn], Field(max_length=500)] = []
     rest: Annotated[
         DraftStatus | None, Field(description="The mark for every worker not named, if said")
@@ -382,19 +389,29 @@ class LaborAuditOut(BaseModel):
     note: str | None
     labels: dict[str, str] = Field(
         default_factory=dict,
-        description="Words for the record ids a change holds (a worker's name and number)",
+        description=(
+            "Words for the record ids the entry holds: the worker a change names, the worker "
+            "an entry is about, a payment's worker (by the payment's id)"
+        ),
     )
+    currency: str | None = Field(default=None, description="The project's: its amounts are in it")
 
     @classmethod
-    def of(cls, entry: LaborAuditEntry, names: Mapping[str, str] | None = None) -> LaborAuditOut:
+    def of(
+        cls,
+        entry: LaborAuditEntry,
+        names: Mapping[str, str] | None = None,
+        currency: str | None = None,
+    ) -> LaborAuditOut:
         held = {
             value
             for change in entry.changes
             for value in (change.before, change.after)
             if isinstance(value, str)
-        }
+        } | {entry.entity_id}
         return cls(
             labels={key: label for key, label in (names or {}).items() if key in held},
+            currency=currency,
             id=str(entry.id),
             at=entry.at,
             actor_name=entry.actor_name,

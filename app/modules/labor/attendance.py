@@ -169,6 +169,14 @@ class Attendance:
                 )
                 if again is None:
                     raise
+                # ...unless this mark was kept offline and saw it unmarked: the new one stays.
+                if given.expected is not None and again.status.value not in {
+                    given.expected,
+                    given.status.value,
+                }:
+                    raise MarkChangedError(
+                        details={"worker_id": str(worker.id), "now": again.status.value}
+                    ) from None
                 sheet.marks[str(worker.id)] = again
                 await self._one(project_id, day, worker, given, sheet, rate)
                 return

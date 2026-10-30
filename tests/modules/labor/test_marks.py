@@ -5,15 +5,18 @@ the AI. Nothing is ever saved by it: the owner saves the draft."""
 from __future__ import annotations
 
 import json
+import time
 from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
 import respx
+import yaml
 from httpx import AsyncClient
+from pydantic import ValidationError
 
 from app.modules.labor.marks_reader import RosterWorker, load_words, read_marks
-from app.modules.labor.tools import labor_attendance_draft
+from app.modules.labor.tools import labor_attendance_draft, labor_day
 from app.platform.agents.tools import TOOL_ATTRIBUTE, ToolSpec
 from tests.helpers import Account, register
 from tests.modules.labor.conftest import LABOR, Owner, day_of, owner_account
@@ -32,6 +35,7 @@ from tests.platform.agents.conftest import (
 REFERENCES = Path(__file__).parents[3] / "app/modules/labor/skills/mark-attendance/references"
 WORDS = load_words(REFERENCES)
 DRAFT_TOOL: ToolSpec = getattr(labor_attendance_draft, TOOL_ATTRIBUTE)
+DAY_TOOL: ToolSpec = getattr(labor_day, TOOL_ATTRIBUTE)
 ROSTER = [
     RosterWorker("w1", "Ravi Kumar", "W001"),
     RosterWorker("w2", "Meena", "W002"),
@@ -41,6 +45,7 @@ ROSTER = [
     RosterWorker("w6", "Ravi Shankar", "W006"),
 ]
 Read = tuple[list[tuple[str, str | None, list[str]]], str | None]
+CURLY = chr(0x2019)  # the apostrophe phones type
 
 
 def read(text: str) -> Read:
@@ -92,6 +97,70 @@ def test_what_is_not_sure_is_handed_over_to_settle() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        # "came" is a full day, unless a mark is said straight after it.
+        ("Lakshmi came half day", ([("w3", "half", ["status"])], None)),
+        ("Lakshmi came, half day", ([("w3", "half", ["status"])], None)),
+        # Starting with a mark, a comma part with a mark of its own keeps it.
+        (
+            "Full day: Meena, Lakshmi, number 1 absent",
+            ([("w2", "full", []), ("w3", "full", []), ("w1", "absent", [])], None),
+        ),
+        ("Everyone full day, Lakshmi half day", ([("w3", "half", [])], "full")),
+        # हाजिरी (attendance) is no हाजिर (present).
+        ("आज की हाजिरी: सुनीता आधा दिन, बाकी सब पूरा दिन", ([("w5", "half", [])], "full")),
+        # A phone's curly apostrophe, and the common spellings of "didn't come".
+        (
+            f"Lakshmi didn{CURLY}t come, Meena full day",
+            ([("w3", "absent", []), ("w2", "full", [])], None),
+        ),
+        ("Lakshmi didn't came", ([("w3", "absent", [])], None)),
+        ("सुनीता नही आई", ([("w5", "absent", [])], None)),
+        # A long run of unknown words is talk, not a name.
+        ("Meena full day, " + "x" * 90 + " absent", ([("w2", "full", [])], None)),
+    ],
+)
+def test_common_ways_of_saying_it(text: str, expected: Read) -> None:
+    assert read(text) == expected
+
+
+def test_two_workers_with_one_name_or_number_are_left_to_choose() -> None:
+    roster = [
+        RosterWorker("a", "Ravi", "W001"),
+        RosterWorker("b", "Ravi", "W002"),
+        RosterWorker("c", "Meena", "M3"),
+        RosterWorker("d", "Kumar", "F3"),
+        RosterWorker("e", "K. Murugan", "W010"),
+        RosterWorker("f", "S. Murugan", "W011"),
+    ]
+
+    draft = read_marks("Ravi absent, number 3 full day. K. Murugan half day", roster, WORDS)
+
+    assert [(m.worker_id, m.status, m.uncertain) for m in draft.marks] == [
+        ("a", "absent", ["worker"]),
+        ("c", "full", ["worker"]),
+        ("e", "half", []),  # an initial is part of a name, not the end of a sentence
+    ]
+
+
+def test_a_long_text_for_a_large_crew_is_read_quickly() -> None:
+    crew = [RosterWorker(f"w{i}", f"Name{i} Surname{i}", f"W{i:03}") for i in range(500)]
+    for text in ("full " + "a." * 497, "full " + "q." * 497, "full " + "Name3 " * 160):
+        started = time.perf_counter()
+        read_marks(text[:999], crew, WORDS)
+        assert time.perf_counter() - started < 3  # was over 30 s: one pattern per name, per part
+
+
+def test_every_word_is_text() -> None:
+    # Bare YAML reads "on", "no" and "yes" as booleans: each word must stay a word.
+    data = yaml.safe_load((REFERENCES / "attendance.yaml").read_text(encoding="utf-8"))
+    lists = [data[key] for key in ("present", "rest", "everyone", "fillers", "number")]
+    lists += [*data["statuses"].values(), *data["days"].values()]
+    assert all(isinstance(word, str) for words in lists for word in words)
+
+
 def test_a_worker_named_twice_keeps_the_last_mark() -> None:
     assert read("Meena full day. Meena half day") == ([("w2", "half", [])], None)
 
@@ -117,6 +186,11 @@ def test_what_it_hands_over_is_what_the_tool_takes() -> None:
         ("w2", "Meena"),
         (None, "suresh"),
     ]
+    # A day that doesn't exist is refused as the model's mistake (told back to it), not a crash.
+    with pytest.raises(ValidationError):
+        DRAFT_TOOL.parse({"draft": arguments | {"day": "2026-09-31"}})
+    with pytest.raises(ValidationError):
+        DAY_TOOL.parse({"day": "2026-09-31"})
 
 
 # ---------------------------------------------------------------------- through the API
@@ -156,13 +230,18 @@ async def test_the_page_gets_a_draft_to_check_and_nothing_is_saved(
         f"{LABOR}/projects/{farm}/attendance", headers=headers, params={"day": yesterday}
     )
 
+    tomorrow = (day_of(owner) + timedelta(days=1)).isoformat()
+    later = await client.post(url, headers=headers, params={"day": tomorrow}, json={"text": "x"})
+
     assert read_.status_code == 200, read_.text
     body = read_.json()
+    # Meena, and Ravi by "the rest".
     assert (body["mode"], body["message_code"], body["message_params"]) == (
         "static",
         "mark-attendance.ready",
-        {"count": 1},
+        {"count": 2},
     )
+    assert (later.status_code, later.json()["code"]) == (422, "LABOR_DAY_IN_FUTURE")
     assert body["draft"] == {
         "project_id": farm,
         "day": yesterday,
@@ -184,6 +263,8 @@ async def test_from_the_assistant_it_reads_marks_for_the_one_open_project(
 
     run = await ask(client, owner.account, "Meena half day")
     paid = await ask(client, owner.account, "Meena paid 500 for seeds")
+    # A mark word but no worker for certain: the other skills' to answer.
+    talk = await ask(client, owner.account, "show notifications that came today")
     await farm_with(client, owner.account)  # a second open project: which one?
     unsure = await ask(client, owner.account, "Meena half day")
 
@@ -192,6 +273,7 @@ async def test_from_the_assistant_it_reads_marks_for_the_one_open_project(
     assert action["arguments"]["draft"]["project_id"] == farm
     assert action["arguments"]["draft"]["marks"][0]["worker_id"] == meena
     assert "labor_attendance_draft" not in {item["tool"] for item in paid["client_actions"]}
+    assert "labor_attendance_draft" not in {item["tool"] for item in talk["client_actions"]}
     assert (unsure["message_code"], unsure["client_actions"]) == (
         "mark-attendance.which_project",
         [],

@@ -9,7 +9,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request, Response, status
 
-from app.modules.labor.attendance import Attendance
+from app.modules.labor.attendance import Attendance, DayInFutureError
 from app.modules.labor.audit_log import AuditFiltersDep, audit_page
 from app.modules.labor.models import ProjectStatus
 from app.modules.labor.overview import Overview, OverviewOut
@@ -252,6 +252,8 @@ async def read_marks_said(
     day: Annotated[dt.date | None, Query(description="The page's day; today if left out")] = None,
 ) -> MarksReadOut:
     await Projects(ctx).get(project_id)  # theirs, or not found
+    if day and day > ctx.today():
+        raise DayInFutureError(details={"day": day.isoformat()})
     context = {"input_type": body.input_type, "project_id": project_id}
     if day:
         context["day"] = day.isoformat()

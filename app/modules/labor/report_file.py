@@ -49,7 +49,13 @@ class _Rows:
 
     def who(self, worker_id: object) -> list[str]:
         worker: LaborWorker | None = self.report.names.get(str(worker_id))
-        return [worker.code, safe_text(worker.name)] if worker else ["", ""]
+        # Both typed by the owner: neither may run as a formula (in the admin's copy too).
+        return [safe_text(worker.code), safe_text(worker.name)] if worker else ["", ""]
+
+    def order(self, worker_id: object) -> tuple[str, str]:
+        """Workers in the order of their numbers, as written (not as guarded)."""
+        worker: LaborWorker | None = self.report.names.get(str(worker_id))
+        return (worker.code, worker.name) if worker else ("", "")
 
     def sums(self, section: str, start: str, who: list[str], totals: Totals) -> list[str]:
         return [
@@ -75,7 +81,7 @@ class _Rows:
             [*self.sums("period", start.isoformat(), ["", ""], totals), ""]
             for start, totals in report.periods
         ]
-        workers = sorted(set(report.workers) | set(report.to_date), key=self.who)
+        workers = sorted(set(report.workers) | set(report.to_date), key=self.order)
         rows += [
             [
                 *self.sums("worker", "", self.who(worker), report.workers.get(worker, Totals())),
@@ -87,7 +93,7 @@ class _Rows:
         rows += [
             ["mark", mark.day, *self.who(mark.worker_id), mark.status.value, *blank,
              _days(mark.units), self.money(mark.amount_minor), "", "", ""]
-            for mark in sorted(marks, key=lambda mark: (mark.day, self.who(mark.worker_id)))
+            for mark in sorted(marks, key=lambda mark: (mark.day, self.order(mark.worker_id)))
         ]  # fmt: skip
         rows += [
             ["payment", payment.day, *self.who(payment.worker_id), "", *blank, "", "",

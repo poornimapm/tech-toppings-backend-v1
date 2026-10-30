@@ -10,10 +10,10 @@ from typing import Annotated, Any
 from beanie import SortDirection
 from pydantic import Field
 
-from app.modules.labor.attendance import Attendance
+from app.modules.labor.attendance import Attendance, DayInFutureError
 from app.modules.labor.models import LaborProject, ProjectRepository, ProjectStatus
 from app.modules.labor.projects import Projects
-from app.modules.labor.schemas import DAY_TEXT, AttendanceDraftIn
+from app.modules.labor.schemas import AttendanceDraftIn, DayText
 from app.platform import ActorContext, tool
 
 LISTED = 20  # open projects named when the owner must choose one
@@ -31,9 +31,7 @@ async def labor_day(
     project_id: Annotated[
         str | None, Field(description="The project; left out: the only open one")
     ] = None,
-    day: Annotated[
-        str | None, Field(pattern=DAY_TEXT, description="YYYY-MM-DD; today if left out")
-    ] = None,
+    day: Annotated[DayText | None, Field(description="YYYY-MM-DD; today if left out")] = None,
 ) -> dict[str, Any]:
     """A project's workers for a day (id, name, number, and their mark if they have one).
     Without a project and with more than one open, the open projects to choose from instead."""
@@ -67,3 +65,5 @@ async def labor_attendance_draft(ctx: ActorContext, draft: AttendanceDraftIn) ->
     saved until they save it."""
     if draft.project_id is not None:
         await Projects(ctx).get(draft.project_id)  # theirs, or not found
+    if draft.day is not None and dt.date.fromisoformat(draft.day) > ctx.today():
+        raise DayInFutureError(details={"day": draft.day})

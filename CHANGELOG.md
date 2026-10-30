@@ -21,7 +21,12 @@ All notable changes to this project are documented here. The format follows
   saves.
 - Reports name each worker (`code`, `name`) with what they earned and were paid to date
   (`earned_to_date_minor`, `paid_to_date_minor`); audit entries carry `labels` naming the workers
-  a change holds by id.
+  they concern (a change's worker, the worker an entry is about, a payment's worker) and their
+  project's `currency`.
+- `mark-attendance`'s rules reader: one pattern for every name (a long text for 500 workers reads
+  in well under a second), a worker sharing a name or number with another left to choose, names
+  with initials, "came, half day", comma parts after a leading mark, and the common spellings
+  of "didn't come"; from the assistant it answers only for a worker matched for certain.
 - The CSV rules (byte-order mark, CRLF, formula guard) are the platform's (`csv_text`,
   `csv_writer`, `safe_text`, `attachment`, `CSV_RESPONSE`, `CSV_MEDIA_TYPE`), shared by expenses
   and Labor; `AgentRun` is in the platform API.

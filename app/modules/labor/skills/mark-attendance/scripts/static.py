@@ -31,9 +31,15 @@ async def run(request: StaticRequest, tools: ToolBox) -> StaticOutcome | None:
     draft = read_marks(request.input, roster_of(sheet["workers"]), words)
     if draft.empty:
         return StaticOutcome("mark-attendance.nothing") if request.chosen else None
+    if not request.chosen and not draft.sure:
+        return None  # "notifications that came today": no worker for certain, no "the rest"
     day = day_said(draft, request.today, date.fromisoformat(given) if given else None)
     await tools.client(words.tool, {"draft": draft.arguments(sheet["project_id"], day)})
     unsure = sum(1 for mark in draft.marks if mark.uncertain)
     if unsure:
         return StaticOutcome("mark-attendance.unsure", {"count": unsure})
-    return StaticOutcome("mark-attendance.ready", {"count": len(draft.marks)})
+    # "The rest" counts the workers it covers: those not named and not marked yet.
+    named = {mark.worker_id for mark in draft.marks}
+    rest = [row for row in sheet["workers"] if row["status"] is None and row["id"] not in named]
+    count = len(draft.marks) + (len(rest) if draft.rest else 0)
+    return StaticOutcome("mark-attendance.ready", {"count": count})

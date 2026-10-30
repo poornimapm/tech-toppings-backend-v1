@@ -491,8 +491,34 @@ async def test_a_report_names_its_workers_and_adds_up_to_date(
     to_date = (row["earned_to_date_minor"], row["paid_to_date_minor"], row["owed_to_date_minor"])
     assert to_date == (60000, 10000, 50000)
     assert ravi["id"] not in {item["worker_id"] for item in report["workers"]}
-    # The payment's entry says whom it paid in words, not by an id.
-    assert paid["labels"] == {lakshmi["id"]: f"Lakshmi ({lakshmi['code']})"}
+    # The payment's entry says whom it paid in words, not by an id, and in which currency.
+    named = f"Lakshmi ({lakshmi['code']})"
+    assert paid["labels"] == {lakshmi["id"]: named, paid["entity_id"]: named}
+    assert paid["currency"] == farm["currency"]
+
+
+async def test_the_audit_names_the_worker_of_every_entry_about_them(
+    client: AsyncClient, owner: Owner
+) -> None:
+    farm = await project(client, owner.account)
+    ravi = await worker(client, owner.account, farm["id"], name="Ravi")
+    headers = owner.account.headers
+    await client.put(f"{WORKERS}/{ravi['id']}/active", headers=headers, json={"active": False})
+    made = await client.post(
+        f"{PROJECTS}/{farm['id']}/payments",
+        headers=headers,
+        json={"worker_id": ravi["id"], "amount_minor": 500},
+    )
+    await client.post(
+        f"{LABOR}/payments/{made.json()['id']}/void", headers=headers, json={"reason": "Typo"}
+    )
+
+    stopped = await audit(client, owner.account, entity="worker", action="deactivated")
+    voided = await audit(client, owner.account, entity="payment", action="voided")
+
+    named = f"Ravi ({ravi['code']})"
+    assert [entry["labels"] for entry in stopped] == [{ravi["id"]: named}]
+    assert [entry["labels"] for entry in voided] == [{made.json()["id"]: named}]
 
 
 async def test_a_report_downloads_as_a_file_with_each_day_and_payment(
@@ -501,7 +527,7 @@ async def test_a_report_downloads_as_a_file_with_each_day_and_payment(
     farm = await project(client, owner.account)
     tamil = await worker(client, owner.account, farm["id"], name="லட்சுமி", daily_wage_minor=40000)
     tricky = await worker(
-        client, owner.account, farm["id"], name="=HYPERLINK(1)", daily_wage_minor=30101
+        client, owner.account, farm["id"], name="=HYPERLINK(1)", code="+1", daily_wage_minor=30101
     )
     today = day_of(owner)
     yesterday = today - dt.timedelta(days=1)
@@ -538,11 +564,13 @@ async def test_a_report_downloads_as_a_file_with_each_day_and_payment(
     assert total[1:] == [yesterday.isoformat(), "", "", "", "1", "1", "1", "1.5",
                          "550.51", "100.00", "450.51", ""]  # fmt: skip
     assert [row[1] for row in by_section["period"]] == [yesterday.isoformat(), today.isoformat()]
-    # The guard on a name a spreadsheet would run; Tamil kept as it is.
+    # The guard on a name or number a spreadsheet would run; Tamil kept as it is.
     assert {row[3] for row in by_section["worker"]} == {"லட்சுமி", "'=HYPERLINK(1)"}
+    assert "'+1" in {row[2] for row in by_section["worker"]}
+    # By day, then by worker number as written ("+1" before "W001").
     assert [(row[1], row[4], row[8], row[9]) for row in by_section["mark"]] == [
-        (yesterday.isoformat(), "full", "1", "400.00"),
         (yesterday.isoformat(), "half", "0.5", "150.51"),
+        (yesterday.isoformat(), "full", "1", "400.00"),
         (today.isoformat(), "absent", "0", "0.00"),
     ]
     [paid] = by_section["payment"]  # the voided one is left out, as in the sums

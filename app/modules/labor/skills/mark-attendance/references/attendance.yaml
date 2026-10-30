@@ -14,27 +14,13 @@ statuses:
   full:
     - full day
     - full
-    - present
-    - came
     - poora din
     - pura din
-    - hazir
-    - haazir
     - muzhu naal
     - முழு நாள்
     - முழுநாள்
-    - வந்தார்
-    - வந்தாள்
-    - வந்தான்
-    - வந்தாங்க
-    - வந்தது
     - पूरा दिन
     - पूरे दिन
-    - हाज़िर
-    - हाजिर
-    - आया
-    - आई
-    - आए
   half:
     - half day
     - half
@@ -57,8 +43,13 @@ statuses:
     - did not come
     - didn't come
     - not come
+    - did not came
+    - didn't came
+    - not came
     - not present
+    - no show
     - nahi aaya
+    - nahi aya
     - nahin aaya
     - chhutti
     - varala
@@ -75,7 +66,32 @@ statuses:
     - छुट्टी
     - नहीं आया
     - नहीं आई
+    - नहीं आयी
     - नहीं आए
+    - नही आया
+    - नही आई
+    - नही आयी
+    - नही आए
+
+# Words that say someone came: a full day, unless a mark is said straight after ("Ravi came,
+# half day" is a half day).
+present:
+  - present
+  - came
+  - come
+  - hazir
+  - haazir
+  - வந்தார்
+  - வந்தாள்
+  - வந்தான்
+  - வந்தாங்க
+  - வந்தது
+  - हाज़िर
+  - हाजिर
+  - आया
+  - आई
+  - आयी
+  - आए
 
 # Everyone not named ("Ravi half day, the rest full day").
 rest:
@@ -98,7 +114,7 @@ rest:
   - बाकी लोग
   - बचे हुए
 
-# Everyone, when no one is named ("everyone full day").
+# Everyone: the workers not named ("everyone full day, Meena half day").
 everyone:
   - everyone
   - everybody
@@ -123,10 +139,18 @@ days:
 number: [number, num, "no", worker, w, எண், நம்பர், नंबर, नम्बर, क्रमांक]
 
 # Words around the names and marks that are neither: what is left is taken as a name to check.
+# A filler also keeps a word it holds from being taken for a mark ("हाजिरी", attendance, is no
+# "हाजिर", present).
 fillers:
   - and
   - also
   - then
+  - "on"  # quoted: bare, YAML reads it as true
+  - time
+  - late
+  - early
+  - today
+  - by
   - mark
   - marked
   - is
@@ -156,8 +180,12 @@ fillers:
   - था
   - थी
   - हाज़िरी
+  - हाजिरी
   - दिन
 
 # A name heard a little differently from how it was saved ("Laxmi" for "Lakshmi") still
 # matches at this likeness (0 to 1), and is marked for the owner to check.
 similar_at: 0.65
+
+# The most words that match no one handed over to check: past them it is talk, not names.
+most_unknown: 20

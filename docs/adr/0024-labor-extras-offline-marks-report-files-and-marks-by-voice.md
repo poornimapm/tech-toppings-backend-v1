@@ -17,8 +17,9 @@ few gaps; they are fixed here too.
 
 ### Offline marks: the outbox, with the mark seen (ADR-0010)
 
-- A tap that fails for want of a network waits in the outbox (`labor.marks`), one item per
-  worker, so one refused mark never holds back the others. The shell sends it when back online,
+- A tap that fails for want of a network, or of the server (a gateway's 502-504: the mark is
+  safe to send again), waits in the outbox (`labor.marks`), one item per worker, so one refused
+  mark never holds back the others. The shell sends it when back online,
   as it sends expenses. Its sender loads only when such an item waits (first load: one line).
 - Each waiting mark carries the mark the owner saw when tapping (`MarkIn.expected`: `full`,
   `half`, `absent` or `unmarked`). The server refuses one whose day was marked otherwise in the
