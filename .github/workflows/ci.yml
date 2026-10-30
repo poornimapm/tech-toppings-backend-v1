@@ -18,7 +18,8 @@ jobs:
   quality:
     name: lint · typecheck · test · audit
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # The suite (1,200+ tests, most against MongoDB) takes about half an hour here.
+    timeout-minutes: 45
     services:
       mongo:
         image: mongo:8.0
