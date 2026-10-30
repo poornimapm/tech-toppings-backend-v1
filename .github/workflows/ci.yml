@@ -17,7 +17,9 @@ concurrency:
 jobs:
   quality:
     name: lint · typecheck · test · audit
-    runs-on: ubuntu-latest
+    # Not ubuntu-latest: on Ubuntu 26.04's kernel (6.19+) the mongo:8.0 service won't start
+    # (SERVER-121912). Move back once a mongo image runs there.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
       mongo:
