@@ -85,7 +85,7 @@ def filled(fresh: Fresh) -> Database[dict[str, Any]]:
     return db
 
 
-@pytest.mark.parametrize("key", [None, KEY])
+@pytest.mark.parametrize("key", [None, KEY], ids=["plain", "encrypted"])  # KEY is random
 def test_a_backup_comes_back_exactly_with_its_indexes(
     fresh: Fresh, tmp_path: Path, key: str | None
 ) -> None:

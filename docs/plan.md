@@ -704,7 +704,7 @@ insight precompute.
 | | Backend | Frontend |
 |---|---|---|
 | Unit | pytest + pytest-asyncio, `Clock` injection, fake providers, `respx` for HTTP calls | Vitest + React Testing Library + MSW |
-| Integration | ASGI `httpx.AsyncClient` against a real MongoDB test DB (unique per run, dropped afterwards) | Page-level tests with MSW |
+| Integration | ASGI `httpx.AsyncClient` against a real MongoDB test DB (unique per run and test process, dropped afterwards) | Page-level tests with MSW |
 | Isolation | Route-matrix suite: user B gets 404 on read, update and delete of user A's resources for every `/v1` route with an ID. The suite **fails if a route is not covered**. | Route guards (user vs admin) |
 | E2E | — | Playwright smoke: login → welcome → add expense (MSW mock mode in CI) |
 | Static | ruff (lint + format), mypy `--strict`, import-linter | ESLint (typescript-eslint strict, jsx-a11y, import boundaries), Prettier, `tsc --noEmit`, knip |
@@ -1054,7 +1054,7 @@ Then I stop until you reply `proceed`.
 | D5 | Monthly PDF comes from the browser's "Save as PDF" on a print page. The server produces CSV. | Correct Tamil/Devanagari shaping without fonts on the server |
 | D6 | Phase rebalancing: notification centre and command palette move to **Phase 4**; tags, notes and links move to **Phase 5**; Phase 9 is split into **9a/9b**; new **Phase 14** for receipts. | Price and budget alerts need notifications early; reviewable diffs |
 | D7 | Task runners are `poethepoet` and npm scripts instead of a Makefile. | No `make` on Windows |
-| D8 | Extra free/OSS libraries:<br>• Backend: structlog, limits, rapidfuzz, httpx, respx, argon2-cffi, PyJWT, pyotp, cryptography, pywebpush, import-linter, poethepoet, pip-tools, pre-commit<br>• Frontend: Radix UI, cmdk, dnd-kit, MSW, openapi-typescript/openapi-fetch, idb-keyval, @fontsource, knip, vitest-axe, tesseract.js (Phase 14, if chosen) | Each one is tied to a requirement above |
+| D8 | Extra free/OSS libraries:<br>• Backend: structlog, limits, rapidfuzz, httpx, respx, argon2-cffi, PyJWT, pyotp, cryptography, pywebpush, import-linter, poethepoet, pip-tools, pre-commit, pytest-xdist (tests in parallel)<br>• Frontend: Radix UI, cmdk, dnd-kit, MSW, openapi-typescript/openapi-fetch, idb-keyval, @fontsource, knip, vitest-axe, tesseract.js (Phase 14, if chosen) | Each one is tied to a requirement above |
 | D9 | **All backend packages are installed in a project-level venv** at `tech-toppings-backend-v1\.venv` (Python 3.11). Dependencies are locked with pip-tools. Nothing is installed into your global or user Python. Frontend packages and Playwright browsers stay inside `node_modules`. (`uv` was dropped.) | Your instruction (2026-10-08) |
 | D10 | No email in v1: forgot/reset/verify flows are replaced by admin reset plus a forced password change. | Your decision (Q4) |
 | D11 | **PyMongo Async + Beanie 2** instead of Motor. | Motor has been deprecated since 2026-05-14. Approved 2026-10-08. |

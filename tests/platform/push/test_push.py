@@ -48,6 +48,8 @@ def test_keys_come_as_a_pair() -> None:
         (PUBLIC, b64encode(b"\xff" * 32)),  # not below the curve's order
         (PUBLIC + "A", PRIVATE),
     ],
+    # The keys are made at import: named ids keep the test ids the same in every process.
+    ids=["other-pair", "swapped", "pem", "out-of-range", "too-long"],
 )
 def test_a_key_pair_that_does_not_fit_stops_startup(public: str, private: str) -> None:
     with pytest.raises(ValidationError, match="public key of") as caught:

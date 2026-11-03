@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 from pymongo import AsyncMongoClient
 from pymongo.errors import PyMongoError
 
@@ -16,11 +16,13 @@ from app.platform.modules.models import ModuleOverride
 from tests.helpers import (
     TEST_MONGO_BASE_URI,
     FrozenClock,
+    asgi_client,
     build_app,
     build_settings,
     running_client,
     with_database,
 )
+from tests.shared_app import SharedApp
 
 # Every settings group's prefix, so a group added later is covered too.
 SETTINGS_ENV_PREFIXES = tuple(
@@ -87,15 +89,29 @@ def clock() -> FrozenClock:
     return FrozenClock()
 
 
+@pytest.fixture(scope="session")
+async def shared_app(mongo_uri: str) -> AsyncIterator[SharedApp]:
+    async with SharedApp(build_settings(mongo_uri)).running() as shared:
+        yield shared
+
+
 @pytest.fixture
-def app(settings: Settings, clock: FrozenClock) -> FastAPI:
+async def app(settings: Settings, clock: FrozenClock, shared_app: SharedApp) -> FastAPI:
+    """The shared app (tests/shared_app.py) with the default settings, else one of the test's
+    own."""
+    if settings == shared_app.settings:
+        return await shared_app.lend(clock)
     return build_app(settings, clock)
 
 
 @pytest.fixture
-async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
-    async with running_client(app) as http:
-        yield http
+async def client(app: FastAPI, shared_app: SharedApp) -> AsyncIterator[AsyncClient]:
+    if app is shared_app.app:
+        async with shared_app.client() as http:
+            yield http
+    else:
+        async with running_client(app) as http:
+            yield http
 
 
 @pytest.fixture
@@ -104,8 +120,7 @@ async def other_client(
     app: FastAPI,
 ) -> AsyncIterator[AsyncClient]:
     """A second browser (own cookie jar) against the same running app."""
-    transport = ASGITransport(app=app, raise_app_exceptions=False)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as http:
+    async with asgi_client(app) as http:
         yield http
 
 

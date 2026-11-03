@@ -2,7 +2,8 @@
 small auth shortcuts.
 
 Tests use a real MongoDB (default ``mongodb://localhost:27017``; override with
-``TEST_MONGO_URI``) and a throwaway database per test session, dropped at the end.
+``TEST_MONGO_URI``) and a throwaway database per test session (per pytest-xdist worker),
+dropped at the end.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from beanie import PydanticObjectId
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient, Response
 from pydantic import SecretStr
+from starlette.types import ASGIApp
 
 from app.core.clock import Clock
 from app.core.config import (
@@ -68,6 +70,7 @@ CSRF = {"X-TT-CSRF": "1"}
 TEST_MODULE_PACKAGES = ("app.modules", "tests.fixtures.modules")
 PASSWORD = "Correct-Horse-42"
 REFRESH_COOKIE = "tt_refresh"
+LIFESPAN_TIMEOUT = 60  # seconds
 
 
 def with_database(base_uri: str, name: str) -> str:
@@ -144,14 +147,24 @@ def build_app(settings: Settings, clock: Clock | None = None) -> FastAPI:
     return create_app(settings, clock=clock or FrozenClock())
 
 
+def asgi_client(app: ASGIApp) -> AsyncClient:
+    """An HTTP client (own cookie jar) calling ``app`` in process."""
+    # raise_app_exceptions=False: assert on the 500 envelope instead of the raw exception.
+    transport = ASGITransport(app=app, raise_app_exceptions=False)
+    return AsyncClient(transport=transport, base_url="http://testserver")
+
+
+def lifespan_of(app: FastAPI) -> LifespanManager:
+    """Runs the app's startup and shutdown. A start on a new database builds every index, which
+    takes longer than asgi-lifespan's 5 seconds while every CPU runs tests (pytest-xdist)."""
+    return LifespanManager(app, startup_timeout=LIFESPAN_TIMEOUT, shutdown_timeout=LIFESPAN_TIMEOUT)
+
+
 @asynccontextmanager
 async def running_client(app: FastAPI) -> AsyncIterator[AsyncClient]:
     """Run the app's lifespan and yield an HTTP client bound to it."""
-    async with LifespanManager(app) as manager:
-        # raise_app_exceptions=False: assert on the 500 envelope instead of the raw exception.
-        transport = ASGITransport(app=manager.app, raise_app_exceptions=False)
-        async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-            yield client
+    async with lifespan_of(app) as manager, asgi_client(manager.app) as client:
+        yield client
 
 
 def json_log_lines(output: str) -> list[dict[str, Any]]:

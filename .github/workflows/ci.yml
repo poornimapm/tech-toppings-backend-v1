@@ -18,8 +18,9 @@ jobs:
   quality:
     name: lint · typecheck · test · audit
     runs-on: ubuntu-latest
-    # The suite (1,200+ tests, most against MongoDB) takes about half an hour here.
-    timeout-minutes: 45
+    # The suite (1,200+ tests, most against MongoDB) took half an hour here one test at a time;
+    # now four processes each share one app across their tests (`poe test`, tests/shared_app.py).
+    timeout-minutes: 20
     services:
       mongo:
         image: mongo:8.0

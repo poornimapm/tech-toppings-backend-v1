@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed — faster tests
+
+- `poe test` runs in four processes (pytest-xdist), each with its own throwaway database, and
+  the tests that keep the default settings share one running app per process
+  (`tests/shared_app.py`) instead of building one each: the suite takes about 17 minutes on the
+  dev laptop instead of 51. CI's quality job times out after 20 minutes (was 45).
+- `test_backup` and `test_push` name their parametrized cases: their random keys made the test
+  ids differ between processes.
+
 ### Added — Phase 17: Labor's extras
 
 - **Marks kept offline never overwrite newer ones** (ADR-0024): `MarkIn.expected`, the mark the

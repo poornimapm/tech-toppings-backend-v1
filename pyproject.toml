@@ -38,6 +38,7 @@ dev = [
   "pytest>=9.1",
   "pytest-asyncio>=1.4",
   "pytest-cov>=7.1",
+  "pytest-xdist>=3.8",
   "respx>=0.23",
   "ruff>=0.16",
   "types-pyyaml>=6.0.12.20260906",
@@ -68,9 +69,11 @@ fmt.sequence = ["ruff format .", "ruff check --fix ."]
 fmt.default_item_type = "cmd"
 fmt.help = "Auto-format and auto-fix"
 
-test.cmd = "pytest --cov --cov-report=term-missing"
+# Four processes, each with its own database (CI's runner has 4 CPUs; more starve a laptop's
+# slow cores and its timing tests: `poe test -n 8` overrides). worksteal evens out the long tests.
+test.cmd = "pytest --numprocesses 4 --dist worksteal --cov --cov-report=term-missing"
 test.envfile = { optional = [".env"] }
-test.help = "Run the test suite with coverage (needs MongoDB, see README)"
+test.help = "Run the test suite in parallel with coverage (needs MongoDB, see README)"
 audit.cmd = "pip-audit --requirement requirements/base.lock --no-deps --disable-pip --progress-spinner off"
 audit.help = "Check pinned runtime dependencies for known vulnerabilities"
 actionlint.cmd = "actionlint"

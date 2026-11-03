@@ -482,7 +482,8 @@ there, so each test gets an isolated app.
 ## Testing
 
 Tests run against a **real MongoDB**: `TEST_MONGO_URI` (default `localhost:27017`), using a
-throwaway database `tt-test-<random>` that is dropped after the session.
+throwaway database `tt-test-<random>` that is dropped after the session. `poe test` runs four
+sessions at once (pytest-xdist), each with its own database.
 
 They are hermetic: settings variables from the shell or `.env` are stripped. A test-only
 module, `tests/fixtures/modules/notes`, goes through the same discovery as real modules and
@@ -493,3 +494,10 @@ backs the isolation, RBAC and gate tests.
 same process would inherit `"_id"` as its default id. Apps are built
 with explicit `Settings` through `tests/helpers.build_settings` and exercised in-process
 (`asgi-lifespan` + `httpx.ASGITransport`).
+
+Building an app costs about a second (FastAPI prepares every route again for each app), more
+than most tests. So the tests that keep the default settings share one running app per session
+(`tests/shared_app.py`): each test lends it its own clock and gets its own client, and the
+documents are bound to its database again when another app's start bound them elsewhere. With
+the default settings the app keeps nothing in memory a test could leave behind. Tests with
+other settings build an app of their own.

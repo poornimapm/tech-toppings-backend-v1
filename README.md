@@ -549,7 +549,7 @@ while in-app reminders keep working.
 | Command | What it does |
 |---|---|
 | `poe dev` | Run the API with reload |
-| `poe test` | pytest with coverage (gate: 80%). Needs MongoDB; uses a throwaway database |
+| `poe test` | pytest in four processes (pytest-xdist) with coverage (gate: 80%). Needs MongoDB; each process uses a throwaway database |
 | `poe lint` | ruff check, format check, mypy `--strict` (app, tests and each skill's scripts), import-linter |
 | `poe fmt` | Auto-format and auto-fix |
 | `poe audit` | pip-audit on the pinned runtime dependencies |

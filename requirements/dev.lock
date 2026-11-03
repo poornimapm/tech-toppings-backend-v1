@@ -73,6 +73,8 @@ dnspython==2.9.1
     #   pymongo
 email-validator==2.3.0
     # via tech-toppings-backend (pyproject.toml)
+execnet==2.1.2
+    # via pytest-xdist
 fastapi==0.142.4
     # via tech-toppings-backend (pyproject.toml)
 filelock==4.0.12
@@ -196,10 +198,13 @@ pytest==9.1.1
     # via
     #   pytest-asyncio
     #   pytest-cov
+    #   pytest-xdist
     #   tech-toppings-backend (pyproject.toml)
 pytest-asyncio==1.4.0
     # via tech-toppings-backend (pyproject.toml)
 pytest-cov==7.1.0
+    # via tech-toppings-backend (pyproject.toml)
+pytest-xdist==3.8.0
     # via tech-toppings-backend (pyproject.toml)
 python-discovery==1.6.1
     # via virtualenv
