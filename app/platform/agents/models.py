@@ -17,7 +17,19 @@ from app.platform.agents.tools import ClientAction, Proposal
 class RunStatus(StrEnum):
     COMPLETED = "completed"
     UNAVAILABLE = "unavailable"  # nothing ran; ``reason`` says why (honest answer)
-    INCOMPLETE = "incomplete"  # stopped early: step limit or quota reached mid-run
+    INCOMPLETE = "incomplete"  # stopped early: step limit, quota or time reached mid-run
+    RUNNING = "running"  # a background run still working (start_skill): see its stages
+
+
+class RunStage(StrEnum):
+    """How far a run has got, for a page to show while it works: codes, never the model's text."""
+
+    UNDERSTANDING = "understanding"  # reading the request and loading its skill
+    READING = "reading"  # a read tool: the person's own records
+    DRAFTING = "drafting"  # a client tool: a draft for the person
+    PROPOSING = "proposing"  # a write tool: a change for the person to confirm
+    CHECKING = "checking"  # the model again, with what the tools answered
+    DONE = "done"
 
 
 class RunStep(BaseModel):
@@ -45,6 +57,7 @@ class AgentRun(OwnedDocument):
     proposals: list[Proposal] = Field(default_factory=list)
     client_actions: list[ClientAction] = Field(default_factory=list)
     steps: list[RunStep] = Field(default_factory=list)
+    stages: list[RunStage] = Field(default_factory=list)
     provider: str | None = None
     calls: int = 0
     prompt_tokens: int = 0

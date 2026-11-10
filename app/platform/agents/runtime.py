@@ -1,19 +1,22 @@
-"""Runs agents (ADR-0013).
+"""Runs agents (ADR-0013; the agent loop itself: ADR-0026).
 
 1. ``policy.plan`` picks the mode from the switches and from what blocks AI right now.
 2. Agent mode: the model sees the agent's instructions and its skills' one-line descriptions,
    loads a skill with ``load_skill`` (progressive disclosure, as in Agent Skills), then calls
-   that skill's tools. Static mode: each skill's ``scripts/static.py`` gets a turn, in order.
+   that skill's tools; Strands runs these turns (``engine.py``, loaded with the first AI run).
+   Static mode: each skill's ``scripts/static.py`` gets a turn, in order.
 3. Writes are never executed during a run: they become proposals the user confirms.
 
-No prompt text lives here: agent and skill markdown carry it.
+A run answers when done (``run``), or starts in the background and records its stages for a
+page to follow (``start``). No prompt text lives here: agent and skill markdown carry it.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any, ClassVar
@@ -32,10 +35,10 @@ from app.platform.agents.catalog import (
     StaticRequest,
     UnknownSkillError,
 )
-from app.platform.agents.models import AgentRun, RunStatus, RunStep
+from app.platform.agents.models import AgentRun, RunStage, RunStatus, RunStep
 from app.platform.agents.photos import Photo
 from app.platform.agents.policy import Blocker, Plan, plan
-from app.platform.agents.providers import ProviderChain, ProvidersUnavailableError, ToolCall
+from app.platform.agents.providers import ProviderChain
 from app.platform.agents.quota import Quota
 from app.platform.agents.tools import Proposal, ProposalStatus, ToolBox
 from app.platform.context import ActorContext
@@ -45,7 +48,6 @@ from app.platform.users.models import User
 
 logger = get_logger(__name__)
 
-LOAD_SKILL = "load_skill"
 PLACEHOLDER = re.compile(r"{{\s*(\w+)\s*}}")
 NO_MATCH = "static.no_match"
 
@@ -71,7 +73,9 @@ class RunRequest:
 
 
 @dataclass
-class _Outcome:
+class Outcome:
+    """What a run has made so far (the agent loop in engine.py writes to it too)."""
+
     status: RunStatus = RunStatus.COMPLETED
     skill: str | None = None
     message: str | None = None
@@ -83,10 +87,40 @@ class _Outcome:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     reason: Blocker | None = None
+    plan: Plan = field(default_factory=lambda: Plan(None, None))  # the mode it runs in
+    stages: list[RunStage] = field(default_factory=lambda: [RunStage.UNDERSTANDING])
+    # A background run's record follows its stages as they come.
+    report: Callable[[list[RunStage]], Awaitable[None]] | None = None
+
+    async def stage(self, stage: RunStage) -> None:
+        if self.stages[-1] is not stage:
+            self.stages.append(stage)
+            if self.report is not None:
+                await self.report(self.stages)
 
 
 class AgentRunRepository(ScopedRepository[AgentRun]):
     model: ClassVar[type[OwnedDocument]] = AgentRun
+
+    async def write(self, run: AgentRun, changes: Mapping[str, Any]) -> None:
+        """Set fields of a run still being worked on (a background run's stages)."""
+        await AgentRun.get_pymongo_collection().update_one(
+            self.query({"_id": run.id}),
+            {
+                "$set": {
+                    **changes,
+                    "updated_at": self.clock.now(),
+                    "updated_by": self.scope.actor_id,
+                }
+            },
+        )
+
+    async def finish(self, run: AgentRun, fields: Mapping[str, Any]) -> AgentRun:
+        """A background run's outcome, checked as a new run is, over its running record."""
+        built = self.build(fields)
+        await self.write(run, built.model_dump(include=set(fields)))
+        done: AgentRun = built.model_copy(update={"id": run.id, "created_at": run.created_at})
+        return done
 
     async def with_proposal(self, proposal_id: str) -> AgentRun:
         run = await AgentRun.find_one(self.query({"proposals.id": proposal_id}))
@@ -123,6 +157,7 @@ class AgentRuntime:
         self.clock = clock
         self.quota = Quota(settings, clock)
         self._redactions = [re.compile(pattern) for pattern in settings.redact_patterns]
+        self._background: set[asyncio.Task[None]] = set()  # held, so none is collected mid-run
 
     # ------------------------------------------------------------------ policy
 
@@ -164,6 +199,62 @@ class AgentRuntime:
         return ModuleService.of(ctx)
 
     async def run(self, request: RunRequest, ctx: ActorContext) -> AgentRun:
+        agent, skills = await self._skills(request, ctx)
+        out, box = Outcome(skill=request.skill), self._box(skills, ctx)
+        await self._work(agent, skills, request, ctx, out, box)
+        return await self._save(agent, request, ctx, out, box)
+
+    async def start(self, request: RunRequest, ctx: ActorContext) -> AgentRun:
+        """``run`` in the background: answers at once with the run saved as running. Its record
+        follows the run's stages, gets the outcome at the end, and ends as incomplete (reason
+        timeout) after AGENT_RUN_TIMEOUT_SECONDS."""
+        agent, skills = await self._skills(request, ctx)  # a refusal answers at once
+        out, box = Outcome(skill=request.skill), self._box(skills, ctx)
+        repository = AgentRunRepository(ctx.scope, self.clock)
+        running = await repository.create(
+            self._fields(agent, request, out, box) | {"status": RunStatus.RUNNING}
+        )
+
+        async def report(stages: list[RunStage]) -> None:
+            await repository.write(running, {"stages": stages})
+
+        async def work() -> None:
+            try:
+                async with asyncio.timeout(self.settings.run_timeout_seconds):
+                    await self._work(agent, skills, request, ctx, out, box)
+            except TimeoutError:
+                out.status, out.reason = RunStatus.INCOMPLETE, Blocker.TIMEOUT
+            except Exception:  # a fault (the database ...) must not leave it running
+                logger.exception("agent_run_failed", run_id=str(running.id))
+                out.status = RunStatus.INCOMPLETE
+            await self._save(agent, request, ctx, out, box, running)
+
+        out.report = report
+        task = asyncio.create_task(work())
+        self._background.add(task)
+        task.add_done_callback(self._background.discard)
+        return running
+
+    def current(self, run: AgentRun) -> AgentRun:
+        """A run as it stands: one still running past AGENT_RUN_TIMEOUT_SECONDS (the server
+        stopped during it) has timed out."""
+        timeout = timedelta(seconds=self.settings.run_timeout_seconds)
+        if run.status is RunStatus.RUNNING and run.created_at + timeout <= self.clock.now():
+            ended: AgentRun = run.model_copy(
+                update={"status": RunStatus.INCOMPLETE, "reason": Blocker.TIMEOUT}
+            )
+            return ended
+        return run
+
+    async def close(self) -> None:
+        """At shutdown: stop the background runs (each then reads as timed out)."""
+        for task in self._background:
+            task.cancel()
+        await asyncio.gather(*self._background, return_exceptions=True)
+
+    async def _skills(
+        self, request: RunRequest, ctx: ActorContext
+    ) -> tuple[AgentSpec, list[SkillSpec]]:
         agent = self.catalog.agent(request.agent)
         # A module's skills serve the user only while that module is available to them.
         usable = await self._modules(ctx).usable_owners()
@@ -172,25 +263,33 @@ class AgentRuntime:
         ]
         if request.skill and not skills:  # asked for by name, but its module is switched off
             raise ModuleDisabledError(details={"module": self.catalog.skills[request.skill].owner})
-        box = ToolBox(
-            self.catalog.tools_of(skills),
-            ctx,
-            timedelta(minutes=self.settings.proposal_ttl_minutes),
-        )
-        decision = self._plan(
-            skills, request.skill, await self.blocker(ctx.user, vision=bool(request.photos))
-        )
-        outcome = _Outcome(skill=request.skill)
-        if decision.mode is AgentMode.AGENT:
+        return agent, skills
+
+    def _box(self, skills: Sequence[SkillSpec], ctx: ActorContext) -> ToolBox:
+        ttl = timedelta(minutes=self.settings.proposal_ttl_minutes)
+        return ToolBox(self.catalog.tools_of(skills), ctx, ttl)
+
+    async def _work(
+        self,
+        agent: AgentSpec,
+        skills: list[SkillSpec],
+        request: RunRequest,
+        ctx: ActorContext,
+        out: Outcome,
+        box: ToolBox,
+    ) -> None:
+        """Plan the mode and run in it: all a run does before it is saved."""
+        blocker = await self.blocker(ctx.user, vision=bool(request.photos))
+        out.plan = self._plan(skills, request.skill, blocker)
+        if out.plan.mode is AgentMode.AGENT:
             try:
-                await self._agent(agent, skills, request, box, ctx, outcome)
+                await self._agent(agent, skills, request, box, ctx, out)
             except _Blocked as blocked:  # nothing was produced yet: the switches decide again
-                decision = self._plan(skills, request.skill, blocked.blocker)
-        if decision.mode is AgentMode.STATIC:
-            await self._static(skills, request, ctx, outcome, box)
-        if decision.mode is None:
-            outcome.status = RunStatus.UNAVAILABLE
-        return await self._save(agent, request, ctx, decision, outcome, box)
+                out.plan = self._plan(skills, request.skill, blocked.blocker)
+        if out.plan.mode is AgentMode.STATIC:
+            await self._static(skills, request, ctx, out, box)
+        if out.plan.mode is None:
+            out.status = RunStatus.UNAVAILABLE
 
     def _system_prompt(
         self, agent: AgentSpec, skills: Sequence[SkillSpec], request: RunRequest, ctx: ActorContext
@@ -204,59 +303,6 @@ class AgentRuntime:
         }
         return PLACEHOLDER.sub(lambda m: values.get(m.group(1), m.group(0)), agent.instructions)
 
-    def _definitions(
-        self, loaded: Mapping[str, SkillSpec], available: Sequence[str]
-    ) -> list[dict[str, Any]]:
-        tools = [
-            self.catalog.tools[name].definition() for name in self.catalog.tools_of(loaded.values())
-        ]
-        unloaded = [name for name in available if name not in loaded]
-        if unloaded:
-            parameters = {
-                "type": "object",
-                "properties": {"name": {"type": "string", "enum": unloaded}},
-                "required": ["name"],
-                "additionalProperties": False,
-            }
-            tools.append(
-                {
-                    "type": "function",
-                    "function": {
-                        "name": LOAD_SKILL,
-                        "description": "Load a skill's instructions and tools.",
-                        "parameters": parameters,
-                    },
-                }
-            )
-        return tools
-
-    async def _dispatch(
-        self,
-        call: ToolCall,
-        loaded: dict[str, SkillSpec],
-        skills: Mapping[str, SkillSpec],
-        box: ToolBox,
-    ) -> dict[str, Any]:
-        if call.arguments is None:
-            return {"error": "arguments_not_json"}
-        if call.name == LOAD_SKILL:
-            skill = skills.get(str(call.arguments.get("name")))
-            if skill is None:
-                return {"error": "unknown_skill"}
-            loaded[skill.name] = skill
-            return {"instructions": skill.instructions}
-        if call.name not in self.catalog.tools_of(loaded.values()):
-            return {"error": "tool_not_loaded"}
-        return await box.call(call.name, call.arguments)
-
-    def _user_content(self, request: RunRequest) -> str | list[dict[str, Any]]:
-        """The user's words, masked; with photos, the words (if any) and then each photo."""
-        text = self.redact(request.input)
-        if not request.photos:
-            return text
-        words = [{"type": "text", "text": text}] if text.strip() else []
-        return [*words, *(photo.part() for photo in request.photos)]
-
     async def _agent(
         self,
         agent: AgentSpec,
@@ -264,58 +310,19 @@ class AgentRuntime:
         request: RunRequest,
         box: ToolBox,
         ctx: ActorContext,
-        out: _Outcome,
+        out: Outcome,
     ) -> None:
-        by_name = {skill.name: skill for skill in skills}
-        loaded = {
-            skill.name: skill for skill in skills if request.skill
-        }  # a named skill is preloaded
-        messages: list[dict[str, Any]] = [
-            {"role": "system", "content": self._system_prompt(agent, skills, request, ctx)}
-        ]
-        messages += [{"role": "system", "content": skill.instructions} for skill in loaded.values()]
-        messages.append({"role": "user", "content": self._user_content(request)})
-        for _ in range(self.settings.max_steps):
-            if ctx.user.id is None or not await self.quota.take(ctx.user.id):
-                self._stop(out, box, Blocker.QUOTA)
-                return
-            budgets = [skill.max_tokens for skill in loaded.values() if skill.max_tokens]
-            try:
-                completion = await self.chain.complete(
-                    messages,
-                    self._definitions(loaded, list(by_name)),
-                    vision=bool(request.photos),
-                    max_tokens=max(budgets, default=None),
-                )
-            except ProvidersUnavailableError:
-                self._stop(out, box, Blocker.PROVIDERS_FAILED)
-                return
-            out.calls += 1
-            out.provider = completion.provider
-            out.prompt_tokens += completion.prompt_tokens
-            out.completion_tokens += completion.completion_tokens
-            messages.append(completion.message)
-            if not completion.tool_calls:
-                out.message = completion.content
-                return
-            for call in completion.tool_calls:
-                result = await self._dispatch(call, loaded, by_name, box)
-                out.steps.append(
-                    RunStep(tool=call.name, ok="error" not in result, error=result.get("error"))
-                )
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": call.id,
-                        "content": json.dumps(result, ensure_ascii=False, default=str),
-                    }
-                )
-            if len(loaded) == 1 and out.skill is None:
-                out.skill = next(iter(loaded))
-        out.status = RunStatus.INCOMPLETE
+        # Strands loads here, with the first AI run: importing it at startup costs ~2.4 s.
+        from app.platform.agents.engine import AgentLoop, Stopped  # noqa: PLC0415
+
+        loop = AgentLoop(self, skills, request, box, ctx, out)
+        try:
+            await loop.run(self._system_prompt(agent, skills, request, ctx))
+        except Stopped as stopped:
+            self._stop(out, box, stopped.blocker)
 
     @staticmethod
-    def _stop(out: _Outcome, box: ToolBox, blocker: Blocker) -> None:
+    def _stop(out: Outcome, box: ToolBox, blocker: Blocker) -> None:
         """Blocked before anything was produced (only reads so far, as when a scan's first
         call fetched the categories): let the switches decide, so a photo is read on the device.
         After something was: keep what we have."""
@@ -328,7 +335,7 @@ class AgentRuntime:
         skills: list[SkillSpec],
         request: RunRequest,
         ctx: ActorContext,
-        out: _Outcome,
+        out: Outcome,
         box: ToolBox,
     ) -> None:
         """Each skill's script gets a turn. The first confident answer wins; a tentative one is
@@ -365,37 +372,47 @@ class AgentRuntime:
         box.proposals += scoped.proposals
         box.client_actions += scoped.client_actions
 
+    def _fields(
+        self, agent: AgentSpec, request: RunRequest, out: Outcome, box: ToolBox
+    ) -> dict[str, Any]:
+        return {
+            "agent": agent.name,
+            "skill": out.skill,
+            "status": out.status,
+            "mode": out.plan.mode,
+            "reason": out.reason or out.plan.reason,
+            "input": self.redact(request.input),
+            "photos": len(request.photos),  # how many, never what
+            "locale": request.locale,
+            "message": out.message,
+            "message_code": out.code,
+            "message_params": out.params,
+            "proposals": box.proposals,
+            "client_actions": box.client_actions,
+            "steps": out.steps,
+            "stages": out.stages,
+            "provider": out.provider,
+            "calls": out.calls,
+            "prompt_tokens": out.prompt_tokens,
+            "completion_tokens": out.completion_tokens,
+            "purge_at": self.clock.now() + timedelta(days=self.settings.run_retention_days),
+        }
+
     async def _save(
         self,
         agent: AgentSpec,
         request: RunRequest,
         ctx: ActorContext,
-        decision: Plan,
-        out: _Outcome,
+        out: Outcome,
         box: ToolBox,
+        running: AgentRun | None = None,
     ) -> AgentRun:
-        run = await AgentRunRepository(ctx.scope, self.clock).create(
-            {
-                "agent": agent.name,
-                "skill": out.skill,
-                "status": out.status,
-                "mode": decision.mode,
-                "reason": out.reason or decision.reason,
-                "input": self.redact(request.input),
-                "photos": len(request.photos),  # how many, never what
-                "locale": request.locale,
-                "message": out.message,
-                "message_code": out.code,
-                "message_params": out.params,
-                "proposals": box.proposals,
-                "client_actions": box.client_actions,
-                "steps": out.steps,
-                "provider": out.provider,
-                "calls": out.calls,
-                "prompt_tokens": out.prompt_tokens,
-                "completion_tokens": out.completion_tokens,
-                "purge_at": self.clock.now() + timedelta(days=self.settings.run_retention_days),
-            }
+        """The finished run: a new record, or over a background run's running one."""
+        out.stages.append(RunStage.DONE)
+        repository = AgentRunRepository(ctx.scope, self.clock)
+        fields = self._fields(agent, request, out, box)
+        run = await (
+            repository.create(fields) if running is None else repository.finish(running, fields)
         )
         logger.info(
             "agent_run",
@@ -439,6 +456,16 @@ class AgentRuntime:
         return proposal.model_copy(update=changes)
 
 
+def _named(
+    runtime: AgentRuntime, skill: str, text: str, locale: str, context: Mapping[str, Any] | None
+) -> RunRequest:
+    """A run of one skill, through the first agent that lists it."""
+    agent = next((spec for spec in runtime.catalog.agents.values() if skill in spec.skills), None)
+    if agent is None:
+        raise UnknownSkillError(details={"skill": skill})
+    return RunRequest(agent.name, text, skill, locale, dict(context or {}))
+
+
 async def run_skill(
     ctx: ActorContext,
     skill: str,
@@ -451,8 +478,19 @@ async def run_skill(
     quota and consent as any run, and recorded the same way. For module code that keeps its
     own cache in front (insights), so an unchanged answer costs no AI call."""
     runtime: AgentRuntime = ctx.state.agents
-    agent = next((spec for spec in runtime.catalog.agents.values() if skill in spec.skills), None)
-    if agent is None:
-        raise UnknownSkillError(details={"skill": skill})
-    request = RunRequest(agent.name, text, skill, locale, dict(context or {}))
-    return await runtime.run(request, ctx)
+    return await runtime.run(_named(runtime, skill, text, locale, context), ctx)
+
+
+async def start_skill(
+    ctx: ActorContext,
+    skill: str,
+    text: str,
+    *,
+    locale: str,
+    context: Mapping[str, Any] | None = None,
+) -> AgentRun:
+    """``run_skill`` in the background, for a page that shows the run's progress: answers at
+    once with the run saved as ``running``. ``GET /v1/agents/runs/{id}`` then gives its stages
+    and, when it is done, its outcome (a draft as a client action)."""
+    runtime: AgentRuntime = ctx.state.agents
+    return await runtime.start(_named(runtime, skill, text, locale, context), ctx)

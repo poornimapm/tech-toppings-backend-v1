@@ -6,7 +6,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.config import AgentMode, Locale
-from app.platform.agents.models import AgentRun, RunStatus
+from app.platform.agents.models import AgentRun, RunStage, RunStatus
 from app.platform.agents.policy import Blocker
 from app.platform.agents.tools import ClientAction, Proposal
 
@@ -52,6 +52,9 @@ class RunOut(BaseModel):
     message_params: dict[str, Any]
     proposals: list[Proposal]
     client_actions: list[ClientAction]
+    stages: list[RunStage] = Field(
+        description="How far the run has got, in order: codes, never the model's words"
+    )
     created_at: datetime
 
     @classmethod

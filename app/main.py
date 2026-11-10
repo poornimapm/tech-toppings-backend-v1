@@ -95,6 +95,7 @@ def create_app(settings: Settings | None = None, *, clock: Clock | None = None) 
         try:
             yield
         finally:
+            await agents.close()  # background runs, before the clients they use close
             await tally.close()  # the error counts not yet written
             await http_client.aclose()
             await database.close()

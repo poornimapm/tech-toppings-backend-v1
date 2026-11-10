@@ -15,6 +15,8 @@ class Blocker(StrEnum):
     NO_PROVIDER = "no_provider"  # no provider configured
     PROVIDERS_FAILED = "providers_failed"  # every provider failed or is resting
     NO_STATIC = "no_static"  # static mode requested but the skill has no static script
+    # Not a blocker: why a background run ended early (AGENT_RUN_TIMEOUT_SECONDS).
+    TIMEOUT = "timeout"
 
 
 @dataclass(frozen=True)

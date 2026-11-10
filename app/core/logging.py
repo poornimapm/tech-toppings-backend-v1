@@ -20,7 +20,8 @@ from structlog.types import EventDict, Processor, WrappedLogger
 from app.core.config import LogFormat, LogSettings
 
 REDACTED = "***"
-_QUIET_LOGGERS = ("pymongo", "uvicorn.access", "httpx", "httpcore")
+# strands: its debug lines carry tool arguments, and agent runs log ids and counts only.
+_QUIET_LOGGERS = ("pymongo", "uvicorn.access", "httpx", "httpcore", "strands")
 
 
 class Redactor:

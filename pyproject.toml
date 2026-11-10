@@ -20,6 +20,12 @@ dependencies = [
   "pyjwt[crypto]>=2.15",
   "pymongo>=4.18",
   "pyyaml>=6.0.3",
+  # Exact: the agent engine (ADR-0026), weekly releases. Core only: providers go through the
+  # app's own chain, not Strands' model extras.
+  "strands-agents==1.64.0",
+  # Not used by the app: Strands' mcp needs it on Windows only. Named with its marker so the
+  # lock (compiled on Windows) keeps the marker and Linux (CI, the image) skips it.
+  "pywin32>=310; sys_platform == 'win32'",
   "structlog>=26.1",
   "tzdata>=2026.5",
   "uvicorn>=0.54",

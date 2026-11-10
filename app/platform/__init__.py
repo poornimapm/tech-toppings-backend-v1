@@ -55,7 +55,7 @@ from app.platform.agents.lexicon import (
     western_digits,
 )
 from app.platform.agents.models import AgentRun, AgentUsage, RunStatus
-from app.platform.agents.runtime import run_skill
+from app.platform.agents.runtime import run_skill, start_skill
 from app.platform.agents.tools import ToolBox, tool
 from app.platform.audit.models import AuditEntry
 from app.platform.audit.service import AuditLog
@@ -222,6 +222,7 @@ __all__ = [
     "run_skill",
     "safe_text",
     "search",
+    "start_skill",
     "to_major",
     "to_minor",
     "tool",

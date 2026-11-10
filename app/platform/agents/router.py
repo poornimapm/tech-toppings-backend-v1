@@ -165,9 +165,15 @@ async def run_agent_on_photo(
     return RunOut.of(await runtime.run(request, ctx))
 
 
-@router.get("/runs/{run_id}", summary="One of my runs", responses=error_responses(401, 404))
+@router.get(
+    "/runs/{run_id}",
+    summary="One of my runs",
+    description="A page polls a background run here: `stages` while its status is `running`, "
+    "then its outcome.",
+    responses=error_responses(401, 404),
+)
 async def read_run(run_id: str, runtime: RuntimeDep, scope: UserScope) -> RunOut:
-    return RunOut.of(await AgentRunRepository(scope, runtime.clock).get(run_id))
+    return RunOut.of(runtime.current(await AgentRunRepository(scope, runtime.clock).get(run_id)))
 
 
 @router.post(

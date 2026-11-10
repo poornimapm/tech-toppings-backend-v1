@@ -13,6 +13,9 @@ annotated-types==0.8.0
 anyio==4.15.1
     # via
     #   httpx
+    #   httpx2
+    #   mcp
+    #   sse-starlette
     #   starlette
 argon2-cffi==25.1.0
     # via tech-toppings-backend (pyproject.toml)
@@ -22,10 +25,21 @@ asgi-lifespan==2.1.0
     # via tech-toppings-backend (pyproject.toml)
 ast-serialize==0.12.1
     # via mypy
+attrs==26.1.0
+    # via
+    #   jsonschema
+    #   referencing
 beanie==2.2.0
     # via tech-toppings-backend (pyproject.toml)
 boolean-py==5.0
     # via license-expression
+boto3==1.43.127
+    # via strands-agents
+botocore==1.43.127
+    # via
+    #   boto3
+    #   s3transfer
+    #   strands-agents
 build==1.6.1
     # via pip-tools
 cachecontrol==0.14.4
@@ -71,6 +85,8 @@ dnspython==2.9.1
     # via
     #   email-validator
     #   pymongo
+docstring-parser==0.18.0
+    # via strands-agents
 email-validator==2.3.0
     # via tech-toppings-backend (pyproject.toml)
 execnet==2.1.2
@@ -87,13 +103,19 @@ grimp==3.17
 h11==0.16.0
     # via
     #   httpcore
+    #   httpcore2
     #   uvicorn
 httpcore==1.0.9
     # via httpx
+httpcore2==2.16.0
+    # via httpx2
 httpx==0.28.1
     # via
     #   respx
+    #   strands-agents
     #   tech-toppings-backend (pyproject.toml)
+httpx2==2.16.0
+    # via mcp
 identify==2.6.20
     # via pre-commit
 idna==3.20
@@ -101,11 +123,22 @@ idna==3.20
     #   anyio
     #   email-validator
     #   httpx
+    #   httpx2
     #   requests
 import-linter==2.15
     # via tech-toppings-backend (pyproject.toml)
 iniconfig==2.3.1
     # via pytest
+jmespath==1.1.0
+    # via
+    #   boto3
+    #   botocore
+jsonschema==4.26.0
+    # via
+    #   mcp
+    #   strands-agents
+jsonschema-specifications==2025.9.1
+    # via jsonschema
 lazy-model==0.4.0
     # via beanie
 librt==0.16.0
@@ -116,6 +149,10 @@ limits==5.8.0
     # via tech-toppings-backend (pyproject.toml)
 markdown-it-py==4.2.0
     # via rich
+mcp==2.3.0
+    # via strands-agents
+mcp-types==2.3.0
+    # via mcp
 mdurl==0.1.2
     # via markdown-it-py
 msgpack==1.2.3
@@ -127,13 +164,31 @@ mypy-extensions==1.1.0
 nodeenv==1.11.0
     # via pre-commit
 opentelemetry-api==1.45.1
-    # via fastapi
+    # via
+    #   fastapi
+    #   mcp
+    #   opentelemetry-instrumentation
+    #   opentelemetry-instrumentation-threading
+    #   opentelemetry-sdk
+    #   opentelemetry-semantic-conventions
+    #   strands-agents
+opentelemetry-instrumentation==0.66b1
+    # via opentelemetry-instrumentation-threading
+opentelemetry-instrumentation-threading==0.66b1
+    # via strands-agents
+opentelemetry-sdk==1.45.1
+    # via strands-agents
+opentelemetry-semantic-conventions==0.66b1
+    # via
+    #   opentelemetry-instrumentation
+    #   opentelemetry-sdk
 packageurl-python==0.17.6
     # via cyclonedx-python-lib
 packaging==26.3
     # via
     #   build
     #   limits
+    #   opentelemetry-instrumentation
     #   pip-audit
     #   pip-requirements-parser
     #   pytest
@@ -172,7 +227,10 @@ pydantic==2.13.5
     #   beanie
     #   fastapi
     #   lazy-model
+    #   mcp
+    #   mcp-types
     #   pydantic-settings
+    #   strands-agents
     #   tech-toppings-backend (pyproject.toml)
 pydantic-core==2.46.5
     # via pydantic
@@ -183,7 +241,9 @@ pygments==2.21.0
     #   pytest
     #   rich
 pyjwt==2.15.1
-    # via tech-toppings-backend (pyproject.toml)
+    # via
+    #   mcp
+    #   tech-toppings-backend (pyproject.toml)
 pymongo==4.18.3
     # via
     #   beanie
@@ -206,15 +266,28 @@ pytest-cov==7.1.0
     # via tech-toppings-backend (pyproject.toml)
 pytest-xdist==3.8.0
     # via tech-toppings-backend (pyproject.toml)
+python-dateutil==2.9.0.post0
+    # via botocore
 python-discovery==1.6.1
     # via virtualenv
 python-dotenv==1.2.4
     # via pydantic-settings
+python-multipart==0.0.33
+    # via mcp
+pywin32==312 ; sys_platform == "win32"
+    # via
+    #   mcp
+    #   tech-toppings-backend (pyproject.toml)
 pyyaml==6.0.3
     # via
     #   poethepoet
     #   pre-commit
+    #   strands-agents
     #   tech-toppings-backend (pyproject.toml)
+referencing==0.37.0
+    # via
+    #   jsonschema
+    #   jsonschema-specifications
 requests==2.34.2
     # via
     #   cachecontrol
@@ -225,20 +298,39 @@ rich==15.0.0
     # via
     #   import-linter
     #   pip-audit
+rpds-py==2026.9.1
+    # via
+    #   jsonschema
+    #   referencing
 ruff==0.16.10
     # via tech-toppings-backend (pyproject.toml)
+s3transfer==0.19.3
+    # via boto3
+six==1.17.0
+    # via python-dateutil
 sniffio==1.3.1
     # via asgi-lifespan
 sortedcontainers==2.4.0
     # via cyclonedx-python-lib
+sse-starlette==3.7.0
+    # via mcp
 starlette==1.7.0
-    # via fastapi
+    # via
+    #   fastapi
+    #   mcp
+    #   sse-starlette
+strands-agents==1.64.0
+    # via tech-toppings-backend (pyproject.toml)
 structlog==26.1.0
     # via tech-toppings-backend (pyproject.toml)
 tomli==2.5.0
     # via pip-audit
 tomli-w==1.2.0
     # via pip-audit
+truststore==0.10.5
+    # via
+    #   httpcore2
+    #   httpx2
 types-pyyaml==6.0.12.20260906
     # via tech-toppings-backend (pyproject.toml)
 typing-extensions==4.16.0
@@ -247,32 +339,49 @@ typing-extensions==4.16.0
     #   beanie
     #   cyclonedx-python-lib
     #   fastapi
+    #   httpx2
     #   import-linter
     #   limits
+    #   mcp
+    #   mcp-types
     #   mypy
     #   opentelemetry-api
+    #   opentelemetry-sdk
+    #   opentelemetry-semantic-conventions
     #   pydantic
     #   pydantic-core
     #   pytest-asyncio
+    #   referencing
     #   starlette
+    #   strands-agents
     #   typing-inspection
 typing-inspection==0.4.4
     # via
     #   fastapi
+    #   mcp
     #   pydantic
     #   pydantic-settings
 tzdata==2026.5
     # via tech-toppings-backend (pyproject.toml)
 urllib3==2.8.0
-    # via requests
+    # via
+    #   botocore
+    #   requests
 uvicorn==0.54.0
-    # via tech-toppings-backend (pyproject.toml)
+    # via
+    #   mcp
+    #   tech-toppings-backend (pyproject.toml)
 virtualenv==21.14.5
     # via pre-commit
+watchdog==6.0.0
+    # via strands-agents
 wheel==0.48.0
     # via pip-tools
 wrapt==2.5.0
-    # via deprecated
+    # via
+    #   deprecated
+    #   opentelemetry-instrumentation
+    #   opentelemetry-instrumentation-threading
 
 # The following packages are considered to be unsafe in a requirements file:
 # pip

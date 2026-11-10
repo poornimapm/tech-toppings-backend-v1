@@ -69,6 +69,9 @@ class SkillSpec:
     # The answer it needs room for (metadata `max-output-tokens`): one call drafting a long
     # receipt is far longer than a sentence's answer. None: the provider's own max_tokens.
     max_tokens: int | None = None
+    # The one agent that runs it (metadata `agent`), which must list it: agents that take every
+    # skill leave it out, so the general assistant never runs a page's own skill.
+    agent: str | None = None
 
 
 @dataclass(frozen=True)
@@ -127,20 +130,23 @@ def _names(value: Any) -> tuple[str, ...]:
     return tuple(str(item) for item in items)
 
 
-def _metadata(meta: Any, source: Path) -> tuple[frozenset[str], int | None]:
-    """The skill's `reads` and `max-output-tokens` (Agent Skills metadata: strings)."""
+def _metadata(meta: Any, source: Path) -> tuple[frozenset[str], int | None, str | None]:
+    """The skill's `reads`, `max-output-tokens` and `agent` (Agent Skills metadata: strings)."""
     metadata = meta if isinstance(meta, dict) else {}
     reads = frozenset(str(metadata.get("reads", "")).split())
     _check(reads <= INPUT_KINDS, f"{source}: metadata reads {sorted(reads - INPUT_KINDS)}")
+    agent = metadata.get("agent")
+    _check(agent is None or bool(str(agent).strip()), f"{source}: metadata agent is empty")
+    agent = None if agent is None else str(agent).strip()
     budget = metadata.get("max-output-tokens")
     if budget is None:
-        return reads, None
+        return reads, None, agent
     _check(str(budget).isdigit(), f"{source}: metadata max-output-tokens must be a number")
     _check(
         MIN_OUTPUT_TOKENS <= int(budget) <= MAX_OUTPUT_TOKENS,
         f"{source}: max-output-tokens out of range",
     )
-    return reads, int(budget)
+    return reads, int(budget), agent
 
 
 def _load_skill(folder: Path, owner: str) -> SkillSpec:
@@ -158,9 +164,11 @@ def _load_skill(folder: Path, owner: str) -> SkillSpec:
         module = load_script(script, f"tt_skill_{owner}_{name.replace('-', '_')}_static")
         static = getattr(module, "run", None)
         _check(callable(static), f"{script}: must define async def run(request, tools)")
-    reads, budget = _metadata(doc.meta.get("metadata"), source)
+    reads, budget, agent = _metadata(doc.meta.get("metadata"), source)
     tools = _names(doc.meta.get("allowed-tools"))
-    return SkillSpec(name, owner, description, doc.body, tools, folder, static, reads, budget)
+    return SkillSpec(
+        name, owner, description, doc.body, tools, folder, static, reads, budget, agent
+    )
 
 
 def _load_agent(path: Path) -> AgentSpec:
@@ -202,8 +210,16 @@ def discover_agents(packages: Iterable[str]) -> AgentCatalog:
         _check(not missing, f"skill {skill.name!r} allows unknown tools {missing}")
     agent_map: dict[str, AgentSpec] = {}
     for agent in _unique(agents, "agent").values():
-        names = agent.skills or tuple(skill_map)  # no list = every skill
+        # No list = every skill not kept for one agent.
+        names = agent.skills or tuple(n for n, skill in skill_map.items() if skill.agent is None)
         missing = [name for name in names if name not in skill_map]
         _check(not missing, f"agent {agent.name!r} uses unknown skills {missing}")
         agent_map[agent.name] = AgentSpec(agent.name, agent.description, agent.instructions, names)
+    for skill in skill_map.values():
+        listing = [agent.name for agent in agent_map.values() if skill.name in agent.skills]
+        _check(
+            skill.agent is None or listing == [skill.agent],
+            f"skill {skill.name!r} is kept for agent {skill.agent!r}, so that agent must list it "
+            f"and no other may (listed by {listing})",
+        )
     return AgentCatalog(agents=agent_map, skills=skill_map, tools=tool_map, tool_owners=owners)
