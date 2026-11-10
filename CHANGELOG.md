@@ -6,6 +6,56 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added — Phase 18: Travel trips core
+
+- **Travel** (beta, for everyone, ADR-0025), made by `poe new-module --backend-only` and grown,
+  with no AI: trips (destinations with their time zones, dates, type, pace, budget and currency,
+  interests, notes, a mode, and travellers each with their own passport country), each day's
+  activities in order (planned, done, skipped or replaced; an estimate or confirmed), checklist and
+  packing items in one store (a packing item has a bag), bookings as the person has them, and
+  estimates and actual costs. Routes under `/v1/travel`; `data/travel.yaml` holds its rules
+  (`docs/modules/travel.md`).
+- **Changes with a preview and undo**: `POST /activities/{id}/change` (done, skip, replace,
+  reschedule) and `POST /trips/{id}/checklist/suggest` answer a preview and write nothing until
+  `apply` is true. Applied, each is one event of the trip's history (`GET /trips/{id}/events`), as
+  is each add, edit, removal and reorder. `POST /events/{id}/undo` takes one back while nothing it
+  touched has changed since (409 `TRAVEL_UNDO_STALE`, `TRAVEL_UNDO_DONE`,
+  `TRAVEL_UNDO_UNAVAILABLE`). Skipping or replacing an activity stands down its untouched,
+  unfinished items, keeps the person's own (`kept`), and lists its booking and estimates under
+  `needs_review` without changing them; another day's records never change.
+- **Every write answers the event it recorded** (`event_id`, `null` when it recorded none): a
+  record with it beside its fields, a reorder on each activity of the day. Removing an activity,
+  an item, a booking or an expense answers 200 `{event_id}`. Deleting a trip answers 204;
+  `POST /trips/{id}/undelete` brings it back with everything in it.
+- **Written and taken back step by step** (no transactions, ADR-0002): each step is checked, and
+  what takes it back kept, before it is written; a step that fails, for any reason, has itself and
+  those before it taken back, each on its own; what can't be taken back is recorded as an event;
+  a failed undo can be tried again. A trip's reminder follows only once its change is recorded.
+- **Suggestions by rule**: by kind of activity, tied to it, and a packing list by bag and the
+  trip's length; asking again adds only what isn't there, and a removed one isn't suggested again
+  (`TRAVEL_SUGGESTION_TAKEN` when two requests add the same at once).
+- **A trip at a glance**: `GET /trips/{id}/overview` (countdown, next activities, what is open,
+  `readiness` as completed over applicable items or `null`, and `next_action`, the first of
+  `overview.next_actions` that applies, with its reason and, for the checklist, the day to open);
+  `GET /trips/{id}/prepare?when=` (today, tomorrow or a date: its activities, checklist, bookings
+  and transport, and `open_days`).
+- **Budget**: `GET /trips/{id}/budget`, estimated against actual by category in the trip's
+  currency. Each cost is converted at its own day's rate (`Fx`), else listed under `unconverted`
+  (`unavailable`, `unsupported`) and counted nowhere; after a provider failure, only the rates
+  kept are used for `budget.fx_rest_seconds`. Who owes whom is in whole minor units, the same
+  every time.
+- **Premium is locked**: saving it answers 403 `TRAVEL_PREMIUM_LOCKED` (`premium_allowed`, false
+  for everyone; `GET /options` says `premium_available`). Basic AI can be saved and works as
+  Static. A switch of mode alone writes nothing else, not even an event.
+- Caps on trips, activities, items, bookings and expenses (`TRAVEL_*_FULL`) hold on an undo and an
+  undelete too; a create sent again with its `Idempotency-Key` answers the first one's record and
+  event before any check. Ids in a body must be of the same trip.
+- The `travel.prepare_due` reminder (`remind_prepare`: the day before the trip), the tile (trips
+  ahead), the `travel_next_trip` widget, trips in search, and feed entries (a trip planned, edited,
+  deleted or brought back; a booking or a cost added). Every id route is in the route matrix
+  (`tests/modules/travel/isolation.py`); export and erasure cover its 11 collections. `FxRate` is
+  in the platform API.
+
 ### Changed — faster tests
 
 - `poe test` runs in four processes (pytest-xdist), each with its own throwaway database, and

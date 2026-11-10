@@ -153,6 +153,7 @@ __all__ = [
     "Files",
     "ForbiddenError",
     "Fx",
+    "FxRate",
     "FxUnavailableError",
     "FxUnsupportedError",
     "IdempotencyKey",

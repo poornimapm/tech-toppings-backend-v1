@@ -29,3 +29,4 @@ New ADRs take the next number. Never edit an accepted ADR's decision; supersede 
 | [0022](0022-receipts-and-warranty-on-a-shared-scan.md) | Receipts & warranty, on a shared scan | Accepted |
 | [0023](0023-labor-management-owners-granted-modules-and-private-pictures.md) | Labor Management: owners, granted modules and private pictures | Accepted |
 | [0024](0024-labor-extras-offline-marks-report-files-and-marks-by-voice.md) | Labor's extras: offline marks, report files and marks by voice | Accepted |
+| [0025](0025-travel-trips-core-changes-with-undo-and-the-days-own-rates.md) | Travel's trips core: changes with undo, the day's own rates and room on the first page | Accepted |

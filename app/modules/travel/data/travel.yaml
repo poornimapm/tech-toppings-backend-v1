@@ -1,0 +1,139 @@
+# How Travel behaves. Change a value here, not in code.
+
+trips:
+  # The longest trip, in days, its first and last both counted.
+  max_days: 120
+  # A person's trips, past ones too: past this, deleting old ones makes room.
+  max_per_user: 200
+  max_destinations: 20
+  # Everyone on one trip, each with their own passport country.
+  max_travellers: 20
+  max_interests: 20
+
+activities:
+  # Kinds of activity the form offers, and the only ones saved. Words for each are in the
+  # frontend's translations, by key.
+  kinds:
+    - sightseeing
+    - tour
+    - food
+    - transport
+    - flight
+    - stay
+    - beach
+    - hike
+    - shopping
+    - meeting
+    - rest
+    - other
+  # Kinds that are themselves a way of getting somewhere: a day's plan lists them as its transport,
+  # along with any activity that says how it gets there.
+  transport_kinds:
+    - transport
+    - flight
+  # One trip's activities, over all its days.
+  max_per_trip: 500
+  # The longest one activity may be, in minutes (a week: a slip of a finger guard).
+  max_duration_minutes: 10080
+
+checklist:
+  # One trip's checklist and packing items together, the ones no longer applicable too.
+  max_per_trip: 1000
+  # The most of one thing a single item can say.
+  max_quantity: 99
+
+bookings:
+  # One trip's bookings, as the person entered them.
+  max_per_trip: 200
+
+budget:
+  # What an expense is filed under. Words for each are in the frontend's translations, by key.
+  categories:
+    - transport
+    - stay
+    - food
+    - activities
+    - shopping
+    - fees
+    - other
+  # One trip's estimates and actual costs together.
+  max_expenses_per_trip: 1000
+  # Once the exchange-rate provider fails, how long budgets use only the rates already kept
+  # before asking it again: a budget with many days to convert then waits on it once, not daily.
+  fx_rest_seconds: 300
+
+overview:
+  # How many of the activities still to come a trip's overview shows.
+  next_activities: 3
+  # A trip's next action: the first of these that applies, in this order. Each is worked out from
+  # the trip's own records (overview.py says when each applies). `add_tasks` keeps a trip with no
+  # tasks at all from being called ready; `all_set` always applies, so it is last.
+  next_actions:
+    - trip_ended
+    - add_activities
+    - prepare_today
+    - prepare_tomorrow
+    - confirm_bookings
+    - finish_packing
+    - start_packing
+    - finish_checklist
+    - add_tasks
+    - all_set
+
+# Suggestions, shown as suggestions. They are common sense about a kind of activity and a length of
+# trip, for the person to keep or drop: nothing here says what a country, airline or operator
+# requires, and nothing should. An item's `key` names it for good (a key the person removed stays
+# removed); its `title` is what is stored, and the app shows its own words for a key it knows.
+suggestions:
+  # What one request adds at most, so a long trip can't turn into thousands of writes at once.
+  # Asking again adds the next ones.
+  max_per_run: 100
+
+  # By kind of activity, for each activity of that kind: tied to it, on its day. Those with a bag
+  # also make up a packing list. A kind not here has nothing to suggest.
+  activities:
+    sightseeing:
+      - { key: walking_shoes, title: Comfortable walking shoes }
+      - { key: water_bottle, title: Water bottle, bag: day_bag }
+    tour:
+      - { key: booking_details, title: "Booking details, if you have them" }
+      - { key: pickup_details, title: "Meeting point or pickup details, if any" }
+      - { key: water_bottle, title: Water bottle, bag: day_bag }
+    transport:
+      - { key: ticket_details, title: "Ticket or booking details, if you have them" }
+    flight:
+      - { key: ticket_details, title: "Ticket or booking details, if you have them" }
+      - { key: travel_documents, title: ID and travel documents, bag: handbag }
+    stay:
+      - { key: stay_details, title: Address and booking details }
+    beach:
+      - { key: swimwear, title: Swimwear, bag: day_bag }
+      - { key: towel, title: Towel, bag: day_bag }
+      - { key: sunscreen, title: Sunscreen, bag: day_bag }
+      - { key: water_bottle, title: Water bottle, bag: day_bag }
+    hike:
+      - { key: walking_shoes, title: Comfortable walking shoes }
+      - { key: rain_layer, title: A light rain layer, bag: day_bag }
+      - { key: water_bottle, title: Water bottle, bag: day_bag }
+      - { key: snack, title: A snack, bag: day_bag }
+    shopping:
+      - { key: shopping_bag, title: A bag for what you buy, bag: day_bag }
+    meeting:
+      - { key: meeting_papers, title: Papers and notes for the meeting, bag: handbag }
+
+  # For the whole trip, by bag, for one person (share it out as you like). A clothes item takes one
+  # for every `per_days` days of the trip, up to `up_to`, because a long trip means washing on the
+  # way rather than a bigger case.
+  packing:
+    - { key: tops, title: Tops, bag: check_in, per_days: 1, up_to: 7 }
+    - { key: bottoms, title: Bottoms, bag: check_in, per_days: 2, up_to: 4 }
+    - { key: innerwear, title: Innerwear, bag: check_in, per_days: 1, up_to: 7 }
+    - { key: socks, title: Socks, bag: check_in, per_days: 1, up_to: 5 }
+    - { key: sleepwear, title: Sleepwear, bag: check_in, per_days: 4, up_to: 2 }
+    - { key: spare_clothes, title: A change of clothes, bag: cabin }
+    - { key: wallet, title: Wallet and cards, bag: handbag }
+    - { key: medicines, title: Your regular medicines, bag: handbag }
+    - { key: toothbrush, title: Toothbrush and toothpaste, bag: toiletry }
+    - { key: toiletries, title: Soap and shampoo, bag: toiletry }
+    - { key: phone_charger, title: Phone charger, bag: electronics }
+    - { key: power_adapter, title: "A power adapter, if you need one", bag: electronics }

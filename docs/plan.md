@@ -1002,6 +1002,37 @@ Then I stop until you reply `proceed`.
   past the first page, the audit names workers, the admin opens a project, the header never
   scrolls sideways (Tamil).
 
+### Phase 18 — Travel trips core (owner's choice, 2026-11-05; ADR-0025; built, waiting for the owner's review and commit)
+
+- **Travel** (beta, for everyone), with no AI: trips with their travellers (each with their own
+  passport country), a day-by-day plan of activities, checklist and packing items, bookings as
+  the person entered them, and estimates and costs with a budget (`docs/modules/travel.md`). The
+  owner's plan and its contract: `modules-usecases/Travel_Companion_Plan.md` (§6, §6a).
+- **Changes in scope, with undo**: done, skip, replace, reschedule and suggestions are previewed
+  and write nothing; applied, each is one event of the trip's history, undone while nothing it
+  touched has changed since. Every write answers the event it recorded. No transactions
+  (ADR-0002): a step that fails has itself and those before it taken back, each on its own.
+- **Rules are data** (`data/travel.yaml`): caps, kinds, categories, suggestions by kind of activity
+  and length of trip (they never overwrite the person's own), the order of the next actions.
+  Readiness counts the trip's own items, or is none.
+- **Budget**: each cost at its own day's rate, else listed as unconverted, never another day's.
+- **Mode**: Static, Basic AI (works as Static) and Premium (locked in the API, 403
+  `TRAVEL_PREMIUM_LOCKED`).
+- **Screens** (en/ta/hi): Home, My trips, *Plan a trip* in five steps, and each trip's Overview,
+  Itinerary, Prepare, Packing, Budget, Bookings and History. A tick with no network waits in the
+  outbox.
+- **First load**: a build plugin leaves out of the lazy pages' file lists what the first page has
+  loaded already; `/` is at 199.9 KB of 200.
+- **Checks** (2026-11-06; each part, then two reviews and two rounds of fixes, each checked
+  independently): `poe check` passes (1505 tests at 98% coverage, the audit and actionlint).
+  `npm run check`'s steps pass: lint, format, tsc, knip, the build, the budget (199.9 KB), and the
+  789 vitest tests, run at 3 workers (`--maxWorkers=3`, as this laptop needs). On a loaded laptop
+  a few slow tests overran 15 s and passed alone. `npm run e2e`: all 33 pass with `--workers=1`;
+  the PWA test, whose browser crashed at launch, passed alone. The live check, on the throwaway
+  database in the browser: planning a trip, an activity, packing suggestions, a skip previewed in
+  Tamil, applied and undone, History, a budget with a cost in euros listed apart, Overview and
+  Prepare.
+
 ---
 
 ## 12. Extra use cases — all accepted (2026-10-08)

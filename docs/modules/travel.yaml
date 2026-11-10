@@ -1,0 +1,34 @@
+# The Travel module's spec for `poe new-module` (docs/modules/new-module.md). Phase 18's backend
+# was made from it with --backend-only; the frontend's generator takes it too.
+key: travel
+icon: Plane
+accent: sky
+status: beta
+order: 35
+keywords: [trip, itinerary, holiday, packing, பயணம், சுற்றுலா, यात्रा, सफ़र]
+
+strings:
+  en:
+    name: Travel
+    tagline: Plan your trips, day by day
+    description: Plan each trip day by day, change the plan as things happen, and see exactly what each change touched.
+    items: trips
+    add: Plan a trip
+    field: Trip
+    empty: No trips yet. Plan your first one.
+  ta:
+    name: பயணம்
+    tagline: உங்கள் பயணங்களை நாள்தோறும் திட்டமிடுங்கள்
+    description: ஒவ்வொரு பயணத்தையும் நாள் வாரியாகத் திட்டமிடுங்கள், நடப்பதற்கேற்பத் திட்டத்தை மாற்றுங்கள், ஒவ்வொரு மாற்றமும் எதையெல்லாம் தொட்டது என்று தெளிவாகப் பாருங்கள்.
+    items: பயணங்கள்
+    add: பயணத்தைத் திட்டமிடு
+    field: பயணம்
+    empty: இன்னும் பயணங்கள் இல்லை. முதல் பயணத்தைத் திட்டமிடுங்கள்.
+  hi:
+    name: यात्रा
+    tagline: अपनी यात्राओं की दिन-ब-दिन योजना बनाइए
+    description: हर यात्रा की दिन-ब-दिन योजना बनाइए, हालात के अनुसार योजना बदलिए, और साफ़ देखिए कि हर बदलाव से क्या-क्या बदला।
+    items: यात्राएँ
+    add: यात्रा की योजना बनाएँ
+    field: यात्रा
+    empty: अभी कोई यात्रा नहीं। अपनी पहली यात्रा की योजना बनाइए।
