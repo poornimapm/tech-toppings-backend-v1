@@ -1,6 +1,6 @@
 # ADR-0013: Skill-driven agents with mode and fallback switches
 
-- **Status:** Accepted
+- **Status:** Superseded in part by [ADR-0026](0026-strands-runs-the-agent-loop-background-runs-with-stages.md) (the model loop now runs on Strands); skills, tools, switches, proposals and the provider chain still apply
 - **Date:** 2026-10-09
 - **Deciders:** project owner (decisions given at the start of Phase 4)
 - **Supersedes in part:** ADR-0005 (the per-module rule fallback and hand-written prompts)

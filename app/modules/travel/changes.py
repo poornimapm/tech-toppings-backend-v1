@@ -1,13 +1,15 @@
 """Changing one activity: done, skipped, replaced or rescheduled. Without ``apply`` the answer is
 only the preview, and nothing at all is written; with it, what the effects planned is written and
 recorded as one event, which can be undone. Only what depends on the activity is reassessed, so
-another day's records never change."""
+another day's records never change. A change an AI run drafted is the same change, its event saying
+so (``ai_run_id``)."""
 
 from __future__ import annotations
 
 from typing import ClassVar
 
 from app.modules.travel.activities import Activities
+from app.modules.travel.ai import CHANGE_DRAFT, drafted_by
 from app.modules.travel.events import Events, writing
 from app.modules.travel.impact import (
     Effect,
@@ -52,6 +54,7 @@ class Changes:
 
     async def run(self, activity_id: str, body: TravelChangeIn) -> TravelChangeOut:
         activity, trip = await self.activities.with_trip(activity_id)
+        run_id = await drafted_by(self.ctx, body.ai_run_id, CHANGE_DRAFT, trip)
         if body.revision_no not in (None, activity.revision_no):
             raise VersionConflictError(details={"current": activity.revision_no})
         if activity.status is not ActivityStatus.PLANNED:
@@ -71,6 +74,7 @@ class Changes:
                 "needs_review": len(impact.needs_review),
                 "kept": len(impact.kept),
             },
+            ai_run_id=run_id,
         )
         return TravelChangeOut.of(
             event.changes if event else [],

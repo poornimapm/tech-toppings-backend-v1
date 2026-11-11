@@ -91,6 +91,12 @@ class OverviewRules(_Strict):
         return self
 
 
+class AssistRules(_Strict):
+    max_chars: int = Field(ge=1)
+    max_activities: int = Field(ge=1)
+    max_items: int = Field(ge=1)
+
+
 class SuggestedItem(_Strict):
     """A thing worth suggesting: one of it, or one for every ``per_days`` days of the trip,
     ``up_to`` a limit."""
@@ -144,6 +150,7 @@ class Rules(_Strict):
     bookings: BookingRules
     budget: BudgetRules
     overview: OverviewRules
+    assist: AssistRules
     suggestions: SuggestionRules
 
     @model_validator(mode="after")

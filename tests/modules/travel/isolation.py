@@ -44,7 +44,7 @@ async def check_trip(client: AsyncClient, owner: Account, trip_id: str) -> None:
     assert (response.json()["title"], response.json()["revision_no"]) == ("mine", 1)
     events = await client.get(f"{PREFIX}trips/{trip_id}/events", headers=owner.headers)
     assert events.json()["total"] == 1  # only its own making
-    for kind in ("checklist", "bookings", "expenses"):  # nobody's landed on it
+    for kind in ("activities", "checklist", "bookings", "expenses"):  # nobody's landed on it
         found = await client.get(f"{PREFIX}trips/{trip_id}/{kind}", headers=owner.headers)
         assert found.json() == [], kind
 
@@ -146,6 +146,17 @@ ROUTE_BODIES: dict[tuple[str, str], dict[str, object]] = {
     },
     ("POST", f"{PREFIX}trips/{{trip_id}}/checklist"): ITEM_BODY,
     ("POST", f"{PREFIX}trips/{{trip_id}}/checklist/suggest"): {"packing": True, "apply": True},
+    ("POST", f"{PREFIX}trips/{{trip_id}}/assist"): {"task": "ask", "text": "what is on day one?"},
+    ("POST", f"{PREFIX}trips/{{trip_id}}/activities/draft"): {
+        "day": DAY,
+        "activities": [{"title": "hijacked", "kind": "beach"}],
+        "apply": True,
+    },
+    ("POST", f"{PREFIX}trips/{{trip_id}}/checklist/assist"): {
+        "activity_id": NOBODY,
+        "items": [{"title": "hijacked"}],
+        "apply": True,
+    },
     ("POST", f"{PREFIX}trips/{{trip_id}}/bookings"): BOOKING_BODY,
     ("POST", f"{PREFIX}trips/{{trip_id}}/expenses"): EXPENSE_BODY,
     ("PATCH", f"{PREFIX}activities/{{activity_id}}"): {"title": "hijacked", "revision_no": 1},

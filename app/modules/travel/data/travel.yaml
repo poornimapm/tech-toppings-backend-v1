@@ -80,6 +80,15 @@ overview:
     - add_tasks
     - all_set
 
+# Basic AI (Phase 19): how much one request may carry. What the AI may do is in skills/ and agents/.
+assist:
+  # The longest description, question or note a person may type for it, in characters.
+  max_chars: 1000
+  # The most activities one day's draft may add.
+  max_activities: 12
+  # The most items one activity's draft may add.
+  max_items: 20
+
 # Suggestions, shown as suggestions. They are common sense about a kind of activity and a length of
 # trip, for the person to keep or drop: nothing here says what a country, airline or operator
 # requires, and nothing should. An item's `key` names it for good (a key the person removed stays

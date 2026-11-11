@@ -4,7 +4,9 @@ so sums are exact. This is the one place that converts to and from decimal amoun
 from __future__ import annotations
 
 from decimal import ROUND_HALF_UP, Decimal
+from typing import Any
 
+MINOR_SUFFIX = "_minor"
 # ISO-4217 currencies whose minor unit is not 1/100 of the major one.
 _EXPONENTS: dict[str, int] = {
     **dict.fromkeys(("BIF", "CLP", "DJF", "GNF", "ISK", "JPY", "KMF", "KRW", "PYG"), 0),
@@ -42,3 +44,20 @@ def convert(amount_minor: int, source: str, target: str, rate: Decimal) -> int:
 def to_major(amount_minor: int, currency: str) -> float:
     """``25050`` INR -> ``250.5``, for figures the client formats (tiles, charts)."""
     return float(Decimal(amount_minor).scaleb(-minor_exponent(currency)))
+
+
+def in_major(value: Any, currency: str) -> Any:
+    """``{"spent_minor": 25050}`` -> ``{"spent": 250.5}``, all the way down: money as people say
+    it, so an AI model never has to know a currency's decimals."""
+    if isinstance(value, dict):
+        return {
+            name.removesuffix(MINOR_SUFFIX): (
+                to_major(item, currency)
+                if name.endswith(MINOR_SUFFIX) and isinstance(item, int)
+                else in_major(item, currency)
+            )
+            for name, item in value.items()
+        }
+    if isinstance(value, list):
+        return [in_major(item, currency) for item in value]
+    return value

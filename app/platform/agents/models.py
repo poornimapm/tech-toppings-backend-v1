@@ -48,6 +48,7 @@ class AgentRun(OwnedDocument):
     status: RunStatus
     mode: AgentMode | None = None
     reason: Blocker | None = None
+    cancelled: bool = False  # the person stopped it while it ran: incomplete, reason None
     input: str  # already redacted
     photos: int = 0  # how many photos the run read; the photos themselves are never kept
     locale: str

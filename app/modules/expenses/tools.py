@@ -28,7 +28,7 @@ from app.modules.expenses.features.products.service import MAX_PRODUCTS, Product
 from app.modules.expenses.features.queries.schemas import ExpenseQuery
 from app.modules.expenses.features.queries.service import Queries
 from app.modules.expenses.units import known_unit, units
-from app.platform import ActorContext, PageParams, to_major, tool
+from app.platform import ActorContext, PageParams, in_major, to_major, tool
 
 Day = Annotated[date | None, Field(description="YYYY-MM-DD")]
 DAY_TEXT = r"^\d{4}-\d{2}-\d{2}$"  # a day as the model writes it; checked again when saved
@@ -147,23 +147,6 @@ async def expenses_open(ctx: ActorContext) -> None:
     """Show the user their expenses page."""
 
 
-def _in_major(value: Any, currency: str) -> Any:
-    """``{"spent_minor": 25050}`` -> ``{"spent": 250.5}``, all the way down: money as people
-    say it, so the model never has to convert paise."""
-    if isinstance(value, dict):
-        return {
-            (name[: -len("_minor")] if name.endswith("_minor") else name): (
-                to_major(item, currency)
-                if name.endswith("_minor") and isinstance(item, int)
-                else _in_major(item, currency)
-            )
-            for name, item in value.items()
-        }
-    if isinstance(value, list):
-        return [_in_major(item, currency) for item in value]
-    return value
-
-
 @tool("read")
 async def expenses_insight_facts(
     ctx: ActorContext,
@@ -175,7 +158,7 @@ async def expenses_insight_facts(
     biggest and unusual expenses, a month-end forecast and price changes. Amounts are in the
     currency's main unit; `partial` means the period isn't over."""
     facts = await Insights(ctx).facts(Period(period), date)
-    return dict(_in_major(facts, facts["currency"]))
+    return dict(in_major(facts, facts["currency"]))
 
 
 @tool("read")
@@ -332,6 +315,4 @@ async def expenses_ious(
         "id", "counterparty", "direction", "amount_minor", "settled_minor", "outstanding_minor",
         "currency", "date", "due_on", "settled_on",
     }  # fmt: skip
-    return [
-        _in_major(item.model_dump(mode="json", include=fields), item.currency) for item in found
-    ]
+    return [in_major(item.model_dump(mode="json", include=fields), item.currency) for item in found]

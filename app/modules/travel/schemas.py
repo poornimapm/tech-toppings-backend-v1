@@ -26,6 +26,7 @@ from app.modules.travel.models import (
     ChecklistSource,
     ChecklistState,
     Destination,
+    EventSource,
     ExpenseKind,
     Pace,
     RecordChange,
@@ -38,6 +39,7 @@ from app.modules.travel.models import (
     TripType,
 )
 from app.modules.travel.rules import NextAction, PackingBag, rules
+from app.platform import to_minor
 
 MAX_MINOR = 10**13  # the largest amount taken, as everywhere in the app
 
@@ -55,8 +57,9 @@ def _known_zone(value: str) -> str:
 
 
 def _known_kind(value: str) -> str:
-    if value not in rules().activities.kinds:
-        raise ValueError("not a kind of activity")
+    kinds = rules().activities.kinds
+    if value not in kinds:
+        raise ValueError(f"not a kind of activity: one of {', '.join(kinds)}")
     return value
 
 
@@ -68,6 +71,11 @@ def _known_category(value: str) -> str:
 
 def _real_moment(value: str) -> str:
     dt.datetime.fromisoformat(value)  # a day that doesn't exist (30 February) is refused
+    return value
+
+
+def _real_day(value: str) -> str:
+    dt.date.fromisoformat(value)
     return value
 
 
@@ -91,6 +99,14 @@ LocalTime = Annotated[
 ]
 Zone = Annotated[Annotated[str, AfterValidator(_known_zone)] | None, Blank]
 Kind = Annotated[str, AfterValidator(_known_kind)]
+# The same for the AI's drafts, listing the kinds where the model writes one. Only there: in the
+# API, an enum would change the clients' type of every activity's kind.
+AiKind = Annotated[Kind, Field(json_schema_extra={"enum": list(rules().activities.kinds)})]
+# Money as the AI reads and writes it, as people say it; its tools convert (``to_minor``).
+Major = Annotated[
+    float,
+    Field(ge=0, le=MAX_MINOR, allow_inf_nan=False, description="In the currency's main unit"),
+]
 Minutes = Annotated[int, Field(ge=1, le=rules().activities.max_duration_minutes)]
 BookingId = Annotated[Annotated[str, Field(max_length=24)] | None, Blank]
 # A record of the same trip, by id: checked there, and not to reveal what an unknown one looks like.
@@ -106,6 +122,22 @@ LocalMoment = Annotated[
     AfterValidator(_real_moment),
 ]
 Moment = Annotated[LocalMoment | None, Blank]
+# A day as text, for an AI draft: a run keeps its drafts as JSON, where a date is text.
+DayText = Annotated[
+    str, Field(pattern=r"^\d{4}-\d{2}-\d{2}$", description="YYYY-MM-DD"), AfterValidator(_real_day)
+]
+AiRunRef = Annotated[
+    Annotated[str, Field(max_length=32)] | None,
+    Blank,
+    Field(
+        description="The AI run whose draft this applies (GET /v1/agents/runs/{id}): the caller's "
+        "own finished run that drafted it for this trip. The event then says AI made it"
+    ),
+]
+Locale = Annotated[
+    str | None,
+    Field(max_length=10, pattern=r"^[a-z]{2}(-[A-Za-z]{2})?$", description="en, ta, hi"),
+]
 Link = Annotated[Annotated[str, Field(max_length=500, pattern=r"^https?://\S+$")] | None, Blank]
 # What the person may say of a booking: the app alone says it was extracted or verified.
 PersonStatus = Literal["entered", "confirmed"]
@@ -245,7 +277,9 @@ class TravelOptions(BaseModel):
 # ---------------------------------------------------------------------- activities
 
 
-class ActivityFields(_In):
+class _ActivityBasics(_In):
+    """An activity's own fields but its cost, which a draft gives in minor or main units."""
+
     title: Name
     kind: Kind
     start_time: LocalTime | None = None
@@ -253,7 +287,28 @@ class ActivityFields(_In):
     location: Text200 = None
     transport: Text200 = None
     notes: Text1000 = None
+
+
+class DraftedActivity(_ActivityBasics):
+    """An activity as an AI draft may give it: never confirmed and with no booking, which are the
+    person's alone, so it is an estimate until they say otherwise."""
+
     estimated_cost_minor: Minor | None = None
+
+
+class AiActivity(_ActivityBasics):
+    """An activity as the AI drafts it: an estimate, its cost in the currency's main unit.
+    Checked as a ``DraftedActivity`` (``as_input``)."""
+
+    kind: AiKind
+    estimated_cost: Major | None = None
+
+    def as_input(self, currency: str) -> dict[str, Any]:
+        cost = None if self.estimated_cost is None else to_minor(self.estimated_cost, currency)
+        return self.model_dump(exclude={"estimated_cost"}) | {"estimated_cost_minor": cost}
+
+
+class ActivityFields(DraftedActivity):
     confirmed: bool = Field(default=False, description="False: its details are an estimate")
     booking_id: BookingId = Field(default=None, description="A booking of the same trip")
 
@@ -357,6 +412,7 @@ class TravelChangeIn(_In):
     revision_no: int | None = Field(
         default=None, ge=1, description="The revision previewed: moved on since, the answer is 409"
     )
+    ai_run_id: AiRunRef = None
 
     @model_validator(mode="after")
     def says_what_its_action_needs(self) -> TravelChangeIn:
@@ -366,6 +422,28 @@ class TravelChangeIn(_In):
         if self.action is ChangeAction.RESCHEDULE and not moved:
             raise ValueError("a reschedule needs new_day or new_start_time")
         return self
+
+
+class TravelChangeDraft(_In):
+    """A change to one activity as an AI draft gives it: checked as ``TravelChangeIn``, and opened
+    in the usual change preview."""
+
+    action: ChangeAction
+    actual_note: Text500 = Field(
+        default=None, description="What really happened, or why, in the person's words"
+    )
+    new_activity: AiActivity | None = Field(
+        default=None, description="Replace: what takes its place, on the same day"
+    )
+    new_day: DayText | None = Field(default=None, description="Reschedule: the day it moves to")
+    new_start_time: LocalTime | None = Field(
+        default=None, description="Reschedule: the time it moves to"
+    )
+
+    def as_input(self, currency: str) -> dict[str, Any]:
+        """As ``TravelChangeIn`` takes it: a replacement's cost in minor units of ``currency``."""
+        new = None if self.new_activity is None else self.new_activity.as_input(currency)
+        return self.model_dump() | {"new_activity": new}
 
 
 class TravelFlag(BaseModel):
@@ -426,6 +504,8 @@ class TravelEventOut(BaseModel):
     changes: list[RecordChange]
     undoable: bool = Field(description="It can be tried: nothing it touched may have changed since")
     undone_at: dt.datetime | None
+    source: EventSource = Field(description="ai: the person applied an AI draft (ai_run_id)")
+    ai_run_id: str | None
 
     @classmethod
     def of(cls, event: TripEvent) -> TravelEventOut:
@@ -438,6 +518,8 @@ class TravelEventOut(BaseModel):
             changes=event.changes,
             undoable=bool(event.undo) and event.undone_at is None,
             undone_at=event.undone_at,
+            source=event.source,
+            ai_run_id=event.ai_run_id,
         )
 
 
@@ -510,6 +592,11 @@ class TravelChecklistRecorded(TravelChecklistOut, TravelRecorded):
 
 class TravelSuggestIn(_In):
     day: dt.date | None = Field(default=None, description="Only for that day's activities")
+    activity_id: RecordRef = Field(
+        default=None,
+        description="Only for that activity (of the same trip): what an activity's AI help offers "
+        "when AI is unavailable",
+    )
     packing: bool = Field(
         default=False,
         description="What to pack: what goes in a bag for its activities and, with no day, the "
@@ -520,6 +607,122 @@ class TravelSuggestIn(_In):
 
 class TravelSuggestOut(TravelChangeOut):
     more: bool = Field(description="More are waiting: asking again adds the next ones")
+
+
+# ---------------------------------------------------------------------- Basic AI
+
+
+class AssistTask(StrEnum):
+    DAY = "day"  # draft activities for one day
+    ACTIVITY = "activity"  # checklist items for one activity
+    CHANGE = "change"  # what changed about one activity
+    ASK = "ask"  # a question about the trip
+
+
+AssistText = Annotated[str, Field(min_length=1, max_length=rules().assist.max_chars)]
+
+
+class TravelDescribeIn(_In):
+    text: AssistText = Field(description="The trip in the person's own words")
+    locale: Locale = None
+
+
+class TravelAssistIn(_In):
+    task: AssistTask
+    day: dt.date | None = Field(default=None, description="day: the day to draft, of the trip")
+    activity_id: RecordRef = Field(
+        default=None, description="activity, change: a planned activity of the trip"
+    )
+    text: Annotated[AssistText | None, Blank] = Field(
+        default=None,
+        description="The person's words: what changed (change), the question (ask); a wish for "
+        "the day or the activity, if any",
+    )
+    locale: Locale = None
+
+    @model_validator(mode="after")
+    def says_what_its_task_needs(self) -> Self:
+        needs = {
+            AssistTask.DAY: ("day",),
+            AssistTask.ACTIVITY: ("activity_id",),
+            AssistTask.CHANGE: ("activity_id", "text"),
+            AssistTask.ASK: ("text",),
+        }
+        missing = [name for name in needs[self.task] if getattr(self, name) is None]
+        if missing:
+            raise ValueError(f"{self.task.value} needs {' and '.join(missing)}")
+        return self
+
+
+class TravelAssistOut(BaseModel):
+    """An AI run started in the background (202): nothing is written by it."""
+
+    run_id: str = Field(
+        description="Follow it at GET /v1/agents/runs/{run_id}: its stages while running, then "
+        "its answer, with its draft as a client action"
+    )
+
+
+class TravelTripDraft(_In):
+    """A trip as the person described it, for the planning steps: what they said and nothing
+    more. Travellers, notes and the mode are theirs to fill in. Checked as ``TripIn``."""
+
+    title: Name
+    destinations: Destinations
+    departure_city: Text80 = None
+    start_date: DayText
+    end_date: DayText
+    trip_type: TripType = TripType.OTHER
+    pace: Pace = Pace.BALANCED
+    budget: Major | None = None
+    currency: Currency | None = None
+    interests: Interests = Field(default_factory=list)
+
+    def as_input(self, base_currency: str) -> dict[str, Any]:
+        """As ``TripIn`` takes it: the budget in minor units of its currency, else of the
+        person's own (as the planning steps default it)."""
+        currency = self.currency or base_currency
+        budget = None if self.budget is None else to_minor(self.budget, currency)
+        return self.model_dump(exclude={"budget"}) | {"budget_minor": budget}
+
+
+DraftedActivities = Annotated[
+    list[DraftedActivity], Field(min_length=1, max_length=rules().assist.max_activities)
+]
+AiActivities = Annotated[
+    list[AiActivity], Field(min_length=1, max_length=rules().assist.max_activities)
+]
+
+
+class TravelDayDraftIn(_In):
+    day: dt.date
+    activities: DraftedActivities = Field(
+        description="Added after the day's own, in this order: nothing already there moves"
+    )
+    apply: bool = Field(default=False, description="False: nothing is written, only the preview")
+    ai_run_id: AiRunRef = None
+
+
+class DraftedItem(_In):
+    """A checklist or packing item as an AI draft gives it for one activity."""
+
+    title: Name
+    bag: PackingBag | None = Field(default=None, description="With a bag, it is a packing item")
+    quantity: Quantity = 1
+
+
+DraftedItems = Annotated[
+    list[DraftedItem], Field(min_length=1, max_length=rules().assist.max_items)
+]
+
+
+class TravelChecklistAssistIn(_In):
+    activity_id: Annotated[str, Field(min_length=1, max_length=32)] = Field(
+        description="A planned activity of the same trip: the items are tied to it, on its day"
+    )
+    items: DraftedItems
+    apply: bool = Field(default=False, description="False: nothing is written, only the preview")
+    ai_run_id: AiRunRef = None
 
 
 # ---------------------------------------------------------------------- bookings

@@ -6,6 +6,56 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added — Phase 19: Basic AI (B1 engine, B2 travel AI)
+
+- **Strands runs the agent loop** for every skill (ADR-0026, superseding ADR-0013's own loop and
+  keeping its contracts): `strands-agents==1.64.0`, core only, behind an adapter over the
+  provider chain (one quota call per model call, the configured order, the rest after a 429,
+  photos only to providers that read images). The runtime lock grows by 27 packages; `pywin32`
+  (which `mcp` needs on Windows only) is named in `pyproject.toml` with its marker. Strands is
+  imported with the first AI run, in a worker thread, never at startup. OpenTelemetry stays
+  unconfigured. Every existing agent test passes without weakening: two that took the only
+  agent from `GET /v1/agents` now pick it by name.
+- **A tool that fails** for an unexpected reason (the database gone, a bug) ends the run: the
+  model is told only `tool_failed` (a step), no further model call is made or quota taken, and
+  the fault is raised as before Strands: 500 for a run that answers when done, `incomplete` with
+  `agent_run_failed` in the log (its type only, never its words) for a background one.
+- **Background runs**: `start_skill(ctx, skill, text, *, locale, context)` saves a run as
+  `running` and works on in a task; `GET /v1/agents/runs/{id}` gives its `stages`
+  (`understanding`, `reading`, `drafting`, `proposing`, `checking`, `done`: codes, never the
+  model's words). New values: run status `running`, reason `timeout`, `RunOut.stages`.
+  `AGENT_RUN_TIMEOUT_SECONDS` (default 90, at most 120: pages stop following a run at 150 s)
+  ends one as `incomplete`, reason `timeout`, a restart's too.
+- **Cancel is real**: `POST /v1/agents/runs/{id}/cancel` stops the caller's own running run: no
+  further model call or quota, saved as `incomplete` with what it made so far (reason null,
+  `agent_run_cancelled` in the log). Another person's run answers 404, one finished otherwise 409
+  `AGENT_RUN_FINISHED`; one cancelled already answers as it is.
+- **Skills kept for one agent** (`metadata.agent` in `SKILL.md`): `GET /v1/agents` now also lists
+  the `travel` agent, so a client picks an agent by name; the palette's assistant never runs a
+  travel skill.
+- **Travel's Basic AI** (Basic now turns AI drafting on; a Static trip answers 409
+  `TRAVEL_AI_OFF`, Premium stays locked): `POST /v1/travel/assist` (describe a trip) and
+  `POST /v1/travel/trips/{id}/assist` (`day`, `activity`, `change`, `ask`) start a background run
+  and answer 202 with its id. Skills `describe-trip`, `plan-day`, `activity-checklist`,
+  `update-trip` and `ask-trip`; tools `travel_trip`, `travel_day`, `travel_activity`,
+  `travel_budget` (read) and `travel_trip_draft`, `travel_day_draft`, `travel_items_draft`,
+  `travel_change_draft`, `travel_open` (client): no write tools. The model reads money and
+  writes it in the currency's main unit, as the expenses tools do (`in_major`, now the
+  platform's), and is told the kinds of activity where it writes one; a drafted activity's cost
+  and a drafted trip's `budget` reach the page in main units, while the apply routes take minor
+  units as every write does.
+- **Applying a draft**: `POST /trips/{id}/activities/draft` (one `day_drafted` event; a run's
+  draft is added once, again only after its undo: 409 `TRAVEL_AI_DRAFT_APPLIED` with
+  `ai_run_id`), `POST /trips/{id}/checklist/assist` (the assistant's items, one
+  `checklist_ai_suggested` event) and `POST /activities/{id}/change` as ever. Each may name
+  `ai_run_id` (422 `TRAVEL_AI_RUN_INVALID` unless it is the caller's own AI run that drafted it
+  for this trip); events carry `source` (`manual` or `ai`) and `ai_run_id`.
+  `TravelSuggestIn.activity_id` gives one activity the rule suggestions, the honest fallback when
+  AI is unavailable.
+- A test inspects every request sent to the fake provider for what the model must never see,
+  the account's own name and email, what really happened to an activity, a booking's title and
+  place and a cost's title among them.
+
 ### Added — Phase 18: Travel trips core
 
 - **Travel** (beta, for everyone, ADR-0025), made by `poe new-module --backend-only` and grown,

@@ -4,7 +4,8 @@
 activities, a checklist and packing list, bookings and a budget. The plan changes one scoped step at
 a time, and the trip's history says what each change touched and can take it back. Beta since
 Phase 18 (ADR-0025; the owner's plan: `modules-usecases/Travel_Companion_Plan.md`), for everyone.
-Nothing in it uses AI: a trip's mode is only stored.
+Since Phase 19 a trip in Basic AI mode has AI help that only drafts (see *Basic AI* below); a Static
+trip has none, and Premium stays locked.
 
 ## What exists now
 
@@ -15,8 +16,9 @@ The module's pages (`src/modules/travel`), in English, Tamil and Hindi:
   countdown, readiness (or *No tasks yet*) and next step with its reason.
 - **My trips**: all of them, or those coming up, under way or past (kept in the address).
 - **Plan a trip**, in five steps: where and when; who (each traveller with their own passport
-  country, and more only if wanted); style, budget and the reminder; the mode (Static; Basic AI,
-  which works as Static; Premium, locked); a check to edit before saving.
+  country, and more only if wanted); style, budget and the reminder; the mode (Static; Basic AI;
+  Premium, locked); a check to edit before saving. (The pages' AI entry points are Phase 19's
+  frontend parts; this file describes the API they use.)
 - **A trip**, with tabs:
   - *Overview*: the countdown, readiness, the next step with *Do it now*, what is next and still
     open, the trip's details (edit it, or delete it with a moment to bring it back), its mode.
@@ -59,7 +61,7 @@ Outside its pages:
 | `GET`, `PATCH`, `DELETE /activities/{id}` | One activity; edit it (not its day); remove it (answers `{event_id}`) |
 | `POST /activities/{id}/change` | `done`, `skip`, `replace` or `reschedule`: a preview until `apply` is true |
 | `GET`, `POST /trips/{id}/checklist` | Checklist and packing items (`day`, `bag`, `activity_id`); add one |
-| `POST /trips/{id}/checklist/suggest` | Suggestions by rule (`day`, `packing`): a preview until `apply` is true |
+| `POST /trips/{id}/checklist/suggest` | Suggestions by rule (`day`, `activity_id`, `packing`): a preview until `apply` is true |
 | `PATCH`, `DELETE /checklist/{id}` | Change or tick an item; remove it (a removed suggestion isn't suggested again; answers `{event_id}`) |
 | `GET /trips/{id}/prepare?when=` | One day's plan: `today`, `tomorrow` or a date. Activities, checklist, bookings, transport, and `open_days` |
 | `GET`, `POST /trips/{id}/bookings` | Bookings, those with no time first; add one as the person has it |
@@ -67,8 +69,12 @@ Outside its pages:
 | `GET`, `POST /trips/{id}/expenses` | Estimates and actual costs, by day; add one |
 | `PATCH`, `DELETE /expenses/{id}` | Edit an expense; remove it (answers `{event_id}`) |
 | `GET /trips/{id}/budget` | Estimated against actual by category in the trip's currency, unconverted amounts, who owes whom |
-| `GET /trips/{id}/events` | The trip's history, newest first |
+| `GET /trips/{id}/events` | The trip's history, newest first (each event's `source`, `manual` or `ai`, and `ai_run_id`) |
 | `POST /events/{id}/undo` | Take one change back, if nothing it touched has changed since |
+| `POST /assist` | Basic AI: describe a trip in your words (`describe-trip`); 202 with the background run's id |
+| `POST /trips/{id}/assist` | Basic AI on a trip: `task` `day` (with `day`), `activity` or `change` (with `activity_id`), `ask`; 202 with the run's id |
+| `POST /trips/{id}/activities/draft` | Add a drafted day's activities after the day's own (`day`, `activities`, `ai_run_id`): a preview until `apply` is true |
+| `POST /trips/{id}/checklist/assist` | Add an activity's AI items (`activity_id`, `items`, `ai_run_id`): a preview until `apply` is true |
 
 Every edit carries the `revision_no` it was made from, and a record that has moved on answers 409
 `VERSION_CONFLICT` (a checklist item's edit may leave it out, so a tick made offline can be sent
@@ -89,7 +95,8 @@ too (`null` in a preview).
 
 Refusals: `TRAVEL_PREMIUM_LOCKED` (403), `TRAVEL_TRIP_DATES_INVALID`, `TRAVEL_TRAVELLER_UNKNOWN`,
 `TRAVEL_ACTIVITY_UNKNOWN`, `TRAVEL_BOOKING_UNKNOWN`, `TRAVEL_DAY_OUTSIDE_TRIP`,
-`TRAVEL_CHECKLIST_DAY_MISMATCH`, `TRAVEL_REORDER_MISMATCH` (422); `TRAVEL_TRIPS_FULL`,
+`TRAVEL_CHECKLIST_DAY_MISMATCH`, `TRAVEL_REORDER_MISMATCH`, `TRAVEL_AI_RUN_INVALID` (422);
+`TRAVEL_AI_OFF`, `TRAVEL_AI_DRAFT_APPLIED`, `TRAVEL_TRIPS_FULL`,
 `TRAVEL_ACTIVITIES_FULL`, `TRAVEL_CHECKLIST_FULL`, `TRAVEL_BOOKINGS_FULL`, `TRAVEL_EXPENSES_FULL`,
 `TRAVEL_ACTIVITIES_OUTSIDE_DATES`, `TRAVEL_CHECKLIST_OUTSIDE_DATES`, `TRAVEL_TRAVELLER_IN_USE`,
 `TRAVEL_BOOKING_IN_USE`, `TRAVEL_ACTIVITY_STATE`, `TRAVEL_SUGGESTION_TAKEN`,
@@ -112,9 +119,10 @@ Refusals: `TRAVEL_PREMIUM_LOCKED` (403), `TRAVEL_TRIP_DATES_INVALID`, `TRAVEL_TR
   `paid_by`, `shared_with`, a reorder's `activity_ids`) must be of the same trip. A traveller
   stays while a checklist item or an expense names them.
 - **Mode** (`static`, `basic`, `premium`) is one field of the trip: switching it writes nothing
-  else, not even an event or a feed entry (the trip's own revision keeps it). Basic can be saved,
-  and does what Static does. Premium can't be saved (403 `TRAVEL_PREMIUM_LOCKED`, through
-  `premium_allowed`, false for everyone).
+  else, not even an event or a feed entry (the trip's own revision keeps it), so every record
+  stays, those made from AI drafts too. Basic turns the trip's AI help on (below); on a Static trip
+  it answers 409 `TRAVEL_AI_OFF`. Premium can't be saved (403 `TRAVEL_PREMIUM_LOCKED`, through
+  `premium_allowed`, false for everyone), and AI refuses it too while it is locked.
 - **Changes and history** (`events.py`): a change is planned as steps, one write to one record
   each, and the event keeps the steps that take it back. Skipping or replacing an activity sets its
   own untouched, unfinished checklist items to not applicable; items the person edited or
@@ -136,6 +144,60 @@ Refusals: `TRAVEL_PREMIUM_LOCKED` (403), `TRAVEL_TRIP_DATES_INVALID`, `TRAVEL_TR
   and a packing list by the trip's length, for one person. They are stored as suggestions
   (`source` rule) and never overwrite the person's own work: asking again adds only what isn't
   there, and a removed suggestion stays removed.
+- **Basic AI** (Phase 19; the engine: ADR-0026). Only on a trip in Basic: on any other answers 409
+  `TRAVEL_AI_OFF`, and the tools refuse it too. The AI only drafts; every change goes through
+  Travel's own preview, apply, history and undo, so nothing it suggests is saved before the person
+  checks it.
+  - **Runs**: `POST /assist` and `POST /trips/{id}/assist` check everything first (the trip is the
+    person's and in Basic, the day is in it, the activity is of it and still planned), then start
+    one skill of the `travel` agent in the background (`start_skill`) and answer 202 with
+    `run_id`. They are rate-limited like every AI route (`agent_run`). The page follows the run at
+    `GET /v1/agents/runs/{id}`: its `stages` (understanding, reading, drafting, checking, done) while
+    `running`, then its answer with the draft as a client action. A run writes nothing to the trip.
+    Cancel stops it for real (`POST /v1/agents/runs/{id}/cancel`): no further AI call or quota,
+    and it ends `incomplete` with what it made so far.
+  - **Skills** (`skills/`, kept for the `travel` agent by `metadata.agent`, so the palette's
+    assistant never runs them; `agents/travel.md`): `describe-trip` (no trip yet:
+    `travel_trip_draft`, the new-trip steps, checked as `TripIn`), `plan-day` (`travel_day_draft`),
+    `activity-checklist` (`travel_items_draft`), `update-trip` (`travel_change_draft`) and
+    `ask-trip` (an answer in words, maybe `travel_open`). Their instructions forbid inventing
+    bookings, schedules, opening hours, prices, weather or entry rules, ask only for a missing
+    essential, and keep to the given day or activity.
+  - **What the model sees** (`tools.py`: `travel_trip`, `travel_day`, `travel_activity`,
+    `travel_budget`): the trip's places, dates, kind, pace, interests, how many travel and its
+    currency; its activities (not their notes or what really happened, and of a booking only that
+    there is one) and items (not who they are for); the budget's figures (not who paid or owes).
+    Never a name, a passport detail, a residence, food or access needs, the trip's notes or a
+    booking reference. The run's context carries ids only, and the person's typed words are masked
+    as everywhere (emails, long numbers). Money is in the currency's main unit, as people say it
+    (`in_major`, as in the expenses tools), beside the `currency`: the model never has to know a
+    currency's decimals.
+  - **Drafts** are client tools: each runs the same preview the page will, so it is checked by the
+    same schemas and rules as the person's own input. An AI activity has no `confirmed` or
+    `booking_id`, so it is an estimate with no booking, and its `kind` is one the tool lists. The
+    model writes money in the currency's main unit too (a drafted activity's `estimated_cost`, a
+    drafted trip's `budget`); the tool converts it (`to_minor`, the trip's currency, or the
+    draft's own, else the person's) before the preview. The client action keeps the main units,
+    which the page converts; the apply routes take minor units, as every write does.
+  - **Applying**: a day's draft through `POST /trips/{id}/activities/draft`, added after the day's
+    own as one `day_drafted` event; an activity's items through `POST /trips/{id}/checklist/assist`,
+    stored as the assistant's (`source` assistant, `suggestion_key` `ai:{activity_id}:{words}`) and
+    offered as suggestions are (never over an item there, a removed one never back), as one
+    `checklist_ai_suggested` event; a change through `POST /activities/{id}/change` as ever. Each
+    may name `ai_run_id`: the caller's own finished AI run (`mode` agent, `completed` or
+    `incomplete`) that handed over that kind of draft for this trip, else 422
+    `TRAVEL_AI_RUN_INVALID`. Its event then has `source: ai` and the run's id, and its revisions
+    the source `ai`. Undo and history work for them as for any event. A run's day draft is added
+    once (a retried apply, another tab): applying it again answers 409 `TRAVEL_AI_DRAFT_APPLIED`
+    (`ai_run_id`) until that addition is undone.
+  - **When AI is unavailable** (no consent, no provider, providers resting or failing, the day's
+    quota) the run ends `unavailable` with its `reason`, having written nothing, and the page offers
+    Retry and the manual way. Only `activity-checklist` has a static fallback, as it is honest: the
+    run answers `activity-checklist.rules` (or `.no_rules`) with `trip_id`, `activity_id` and `day`,
+    and the page shows the rule suggestions for that activity through
+    `POST /trips/{id}/checklist/suggest` with `activity_id`, stored as rule suggestions.
+  - **Limits** in `data/travel.yaml` (`assist`): the longest text typed, and the most activities or
+    items one draft adds. Each skill's `max-output-tokens` is in its `SKILL.md`.
 - **Bookings** are only ever what the person entered. They save `entered` or `confirmed` (they
   checked it with whoever it is with); `extracted` and `verified` are kept for the app's own
   reading and checking, which nothing does yet. A day's plan lists the bookings that start or end
@@ -178,7 +240,8 @@ Refusals: `TRAVEL_PREMIUM_LOCKED` (403), `TRAVEL_TRIP_DATES_INVALID`, `TRAVEL_TR
   - the most bookings, the budget's categories and the most expenses, and how long budgets leave
     the rates provider be once it fails;
   - how many next activities the overview shows, and the order of the next actions;
-  - the suggestions, by kind of activity and for packing, and the most added at once.
+  - the suggestions, by kind of activity and for packing, and the most added at once;
+  - Basic AI's limits: the longest text typed, and the most activities or items one draft adds.
 - **Privacy**: everything is the person's own (anyone else gets 404), in their export, and goes
   with their account.
 - **Languages**: the API sends keys (event kinds, reasons, next actions, categories, suggestion
@@ -186,9 +249,17 @@ Refusals: `TRAVEL_PREMIUM_LOCKED` (403), `TRAVEL_TRIP_DATES_INVALID`, `TRAVEL_TR
 
 ## Limits
 
-- **No AI**: suggestions are rules, and a trip's mode is only stored.
+- **AI only drafts, and only on Basic trips**. Live AI needs a provider in `AGENT_PROVIDERS`, the
+  person's consent and the day's quota; without them the trip works as Static. A run's input is
+  the person's words, masked, and its tools' answers leave out the fields above; the model's
+  answer in words (`ask`) is its own and isn't checked against the records.
+- **A day's draft can't be checked against a later change to that day before it is applied**: it
+  is added after whatever the day holds then.
+- **The generic route can run the travel agent too** (`POST /v1/agents/travel/runs`, with no trip
+  in its context): its tools still refuse any trip not in Basic, and nothing it drafts is applied
+  without the person.
 - **No weather, no entry or visa rules, no looked-up bookings or schedules**: there is no reliable
-  free source for them. Nothing of the kind is ever made up.
+  free source for them. Nothing of the kind is ever made up, by the app or by its AI.
 - **One time zone per trip**: a trip's today is at its first destination's time zone, else the
   person's own, so a trip across several time zones is only as precise as that.
 - **No transactions** (ADR-0002, ADR-0025): a change is written step by step, and a step that

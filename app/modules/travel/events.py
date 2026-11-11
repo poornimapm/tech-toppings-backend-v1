@@ -37,6 +37,7 @@ from app.modules.travel.models import (
     ChecklistItem,
     ChecklistRepository,
     EventRepository,
+    EventSource,
     ExpenseRepository,
     RecordChange,
     Step,
@@ -620,6 +621,7 @@ class Events:
         summary: Mapping[str, Any] | None = None,
         changes: Sequence[RecordChange] = (),
         undo: Sequence[Step] = (),
+        ai_run_id: str | None = None,
     ) -> TripEvent:
         return await self.repository.create(
             {
@@ -629,6 +631,8 @@ class Events:
                 "summary": dict(summary or {}),
                 "changes": list(changes),
                 "undo": list(undo),
+                "source": EventSource.AI if ai_run_id else EventSource.MANUAL,
+                "ai_run_id": ai_run_id,
             }
         )
 
@@ -681,15 +685,17 @@ class Events:
         planned: Sequence[Planned],
         *,
         summary: Mapping[str, Any] | None = None,
-        source: str = SOURCE_MANUAL,
+        ai_run_id: str | None = None,
     ) -> TripEvent | None:
         """Write what is planned, all of it or none of it, and record it. None when it changes
-        nothing: no event then. What follows the writes runs once it is recorded."""
+        nothing: no event then. What follows the writes runs once it is recorded. ``ai_run_id``:
+        the person applied that AI run's draft, so the event and the revisions say AI made it."""
         writes = writing(planned)
         if not writes:
             return None
 
-        ran = await self._run([item.step for item in writes], source)
+        source = EventSource.AI if ai_run_id else EventSource.MANUAL
+        ran = await self._run([item.step for item in writes], source.value)
 
         async def recorded(places: Sequence[int]) -> TripEvent:
             backs = [ran.backs[place] for place in places]
@@ -698,7 +704,12 @@ class Events:
                 for place in places
             ]
             return await self.record(
-                trip_id, kind, summary=summary, changes=changes, undo=list(reversed(backs))
+                trip_id,
+                kind,
+                summary=summary,
+                changes=changes,
+                undo=list(reversed(backs)),
+                ai_run_id=ai_run_id,
             )
 
         if ran.failed:

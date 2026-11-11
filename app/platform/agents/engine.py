@@ -236,13 +236,17 @@ class AgentLoop:
         self.skills = {skill.name: skill for skill in skills}
         # A skill named in the request is loaded from the start.
         self.loaded = {skill.name: skill for skill in skills if request.skill}
-        self.broken: set[str] = set()  # calls whose arguments weren't JSON
+        self.broken: set[str] = set()  # the last answer's calls whose arguments weren't JSON
         self.last: Completion | None = None
         self.stopped: Blocker | None = None
+        # A tool's unexpected failure (the database gone ...): it ends the loop, and is raised
+        # once Strands returns, so the run ends as it did before Strands.
+        self.fault: Exception | None = None
 
     async def run(self, instructions: str) -> None:
         """``instructions``: the agent's own, filled in; a preloaded skill's follow them.
-        Raises ``Stopped`` when the quota or the providers ended the loop."""
+        Raises ``Stopped`` when the quota or the providers ended the loop, and a tool's
+        unexpected failure as it was raised."""
         system: list[SystemContentBlock] = [{"text": instructions}]
         system += [{"text": skill.instructions} for skill in self.loaded.values()]
         agent = Agent(
@@ -265,6 +269,8 @@ class AgentLoop:
         result = await agent.invoke_async(
             prompt(text, self.request.photos), limits={"turns": self.runtime.settings.max_steps}
         )
+        if self.fault is not None:
+            raise self.fault
         if self.stopped is not None:
             raise Stopped(self.stopped)
         if result.stop_reason == "limit_turns":
@@ -274,7 +280,9 @@ class AgentLoop:
 
     async def complete(self, messages: list[dict[str, Any]]) -> Completion | None:
         """One model call: one call from the day's quota, then the provider chain. None: one of
-        them stopped the loop (``stopped`` says which)."""
+        them stopped the loop (``stopped`` says which), or a tool failed (``fault``)."""
+        if self.fault is not None:
+            return None
         if self.out.stages[-1] in TOOL_STAGES.values():
             await self.out.stage(RunStage.CHECKING)
         user = self.ctx.user.id
@@ -297,7 +305,8 @@ class AgentLoop:
         out.provider = completion.provider
         out.prompt_tokens += completion.prompt_tokens
         out.completion_tokens += completion.completion_tokens
-        self.broken |= {call.id for call in completion.tool_calls if call.arguments is None}
+        # This turn's: ids need only be unique within one answer.
+        self.broken = {call.id for call in completion.tool_calls if call.arguments is None}
         self.last = completion
         return completion
 
@@ -328,9 +337,16 @@ class AgentLoop:
         name, arguments = use["name"], use["input"]
         if name == LOAD_SKILL:
             result = self._load(arguments)
+        elif self.fault is not None:  # an earlier call of this answer failed: the run is over
+            result = {"error": "tool_skipped"}
         else:
-            await self.out.stage(TOOL_STAGES[self.runtime.catalog.tools[name].effect])
-            result = await self.box.call(name, arguments)
+            # Strands would send the failure's own words to the provider and carry on; only
+            # Exception, so a cancel or the run's timeout still goes through.
+            try:
+                await self.out.stage(TOOL_STAGES[self.runtime.catalog.tools[name].effect])
+                result = await self.box.call(name, arguments)
+            except Exception as fault:
+                self.fault, result = fault, {"error": "tool_failed"}
         return {
             "toolUseId": use["toolUseId"],
             "status": "error" if "error" in result else "success",

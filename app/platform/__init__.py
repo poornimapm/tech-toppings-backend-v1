@@ -30,7 +30,7 @@ from app.core.errors import (
 )
 from app.core.idempotency import REPLAYED_HEADER, IdempotencyKey, answer_once
 from app.core.logging import get_logger
-from app.core.money import convert, major_text, to_major, to_minor
+from app.core.money import convert, in_major, major_text, to_major, to_minor
 from app.core.pagination import Page, PageParams, PageParamsDep, page_params, parse_sort
 from app.core.rate_limit import rate_limit
 from app.core.repository import NEWEST_FIRST, Scope, ScopedRepository, parse_object_id
@@ -206,6 +206,7 @@ __all__ = [
     "file_response",
     "get_logger",
     "granted_users",
+    "in_major",
     "job",
     "load_lexicon",
     "load_slip_words",

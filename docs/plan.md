@@ -1002,7 +1002,7 @@ Then I stop until you reply `proceed`.
   past the first page, the audit names workers, the admin opens a project, the header never
   scrolls sideways (Tamil).
 
-### Phase 18 — Travel trips core (owner's choice, 2026-11-05; ADR-0025; built, waiting for the owner's review and commit)
+### Phase 18 — Travel trips core (owner's choice, 2026-11-05; ADR-0025; done 2026-11-06)
 
 - **Travel** (beta, for everyone), with no AI: trips with their travellers (each with their own
   passport country), a day-by-day plan of activities, checklist and packing items, bookings as
@@ -1032,6 +1032,47 @@ Then I stop until you reply `proceed`.
   database in the browser: planning a trip, an activity, packing suggestions, a skip previewed in
   Tamil, applied and undone, History, a budget with a cost in euros listed apart, Overview and
   Prepare.
+
+### Phase 19 — Basic AI (owner's choice, 2026-11-05; ADR-0026; built, waiting for the owner's review and commit)
+
+- **Strands runs the agent loop** for every AI feature, not only Travel (ADR-0026, superseding
+  ADR-0013's own loop and keeping its contracts). It was measured first: 172 MB at most with 20
+  runs at once, a third of Render's 512 MB. Strands is loaded with the first AI run, in a worker
+  thread. Its model is the app's provider chain behind one quota call per model call, so the
+  order of providers, the rest after a 429 and photo routing are unchanged. A tool's unexpected
+  failure ends the run as incomplete and its words never reach the provider.
+- **Background runs with stages**: a page starts a run (202), then follows
+  `GET /v1/agents/runs/{id}`, which says the stage codes reached (understanding, reading,
+  drafting, checking, done). A run ends as incomplete after `AGENT_RUN_TIMEOUT_SECONDS` (90, at
+  most 120), and `POST /v1/agents/runs/{id}/cancel` stops it, spending no further AI calls.
+- **Basic AI on a trip** (Travel; `docs/modules/travel.md`): describe your trip, draft a day,
+  prepare for an activity, tell it what changed, and ask about the trip. The AI only drafts:
+  each draft opens in the usual preview, and applying it is one undoable event that History marks
+  "From an AI draft". Only on Basic trips (409 `TRAVEL_AI_OFF` otherwise); a run's day draft is
+  added once until undone. Without AI, *Prepare for an activity* offers the rule suggestions; the
+  others say why AI can't help, with Retry and the manual way.
+- **What the model sees**: a trip's places, dates, kind, pace, interests, how many travel, and its
+  activities, items and budget figures, money in main units. Never names, passport details,
+  residence, food or access needs, notes, booking details or who paid; a test reads every request
+  sent to the fake provider for them.
+- **Screens** (en/ta/hi): the Basic AI card says what it does, that use is limited each day and
+  that the trip works as Static without AI. First load stays at 199.6 KB of 200 (the new-trip page
+  now loads through the trips' own loader).
+- **Checks** (2026-11-11; four parts, then five independent reviews with each finding checked by
+  a second reviewer (19 confirmed and fixed, 6 refuted), then every fix checked independently):
+  `poe check`: lint, types and imports pass, 1552 tests pass at 98% coverage, 2 are skipped, the
+  audit and actionlint pass. Its one failure, a push-reminder timing test this phase doesn't
+  touch, passed when its file was run alone. `npm run check`'s steps pass: lint, format, tsc,
+  knip, the build, the budget (`/` 199.6 KB, `/login` 193.4 KB), and all 842 vitest tests at 91%
+  statement coverage (`--maxWorkers=3`; one untouched test overran 15 s in the first run and
+  passed alone and in the rerun). `npm run e2e`: all 35 pass with `--workers=1`. The live check,
+  on the throwaway database with a scripted fake model in place of a provider: the consent
+  button, then a trip described in words, filled in and saved; a day drafted and added; Cancel
+  stopping a run on the server; an activity's checklist drafted; a skip drafted from the
+  person's words and applied; a question about the budget answered with a link to Budget;
+  History marking the three AI changes, in English and Tamil. No typed words or trip details
+  were in the API's log. No real model has been tried yet: that needs the owner's Groq key in
+  the local `.env`.
 
 ---
 

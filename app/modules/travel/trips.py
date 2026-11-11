@@ -1,7 +1,8 @@
 """Trips: where, when, who with and how. A trip's mode is one field of it, so switching mode leaves
-every other record as it is. Saving Premium stays locked (``premium_allowed``). A trip's "today" is
-at its first destination, else where its person is: a trip across several time zones is only as
-precise as that (a known limit)."""
+every other record as it is, those made from AI drafts too. Basic turns the trip's AI help on
+(ai.py); saving Premium stays locked (``premium_allowed``). A trip's "today" is at its first
+destination, else where its person is: a trip across several time zones is only as precise as that
+(a known limit)."""
 
 from __future__ import annotations
 
@@ -103,7 +104,8 @@ async def in_phase(
     return {"$or": [{FIRST_ZONE: {"$nin": zones}, **_within(phase, today)}, *clauses]}
 
 
-def _check_dates(body: TripIn) -> None:
+def check_dates(body: TripIn) -> None:
+    """A trip's dates as the planning steps check them, an AI draft's too."""
     if body.end_date < body.start_date:
         raise TripDatesError(details={"reason": "end_before_start"})
     longest = rules().trips.max_days
@@ -152,7 +154,7 @@ class Trips:
         )
 
     def _stored(self, body: TripIn, before: Trip | None = None) -> dict[str, Any]:
-        _check_dates(body)
+        check_dates(body)
         newly_premium = body.mode is TripMode.PREMIUM and (
             before is None or before.mode != body.mode
         )

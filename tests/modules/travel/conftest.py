@@ -3,6 +3,7 @@ stored for a person, read straight from the database, to prove what a change lef
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Iterator
 from typing import Any
 
@@ -25,6 +26,7 @@ from app.modules.travel.models import (
     TripRevision,
 )
 from tests.helpers import Account
+from tests.platform.agents.conftest import agent_client  # noqa: F401 - a fixture, used by name
 from tests.platform.fx.conftest import fx_rates  # noqa: F401 - a fixture, used by name
 
 TRAVEL = "/v1/travel"
@@ -180,6 +182,25 @@ def record_of(response: Response) -> dict[str, Any]:
     """What a write answered, as the record reads: without the event it recorded."""
     assert response.status_code == 200, response.text
     return {name: value for name, value in response.json().items() if name != "event_id"}
+
+
+async def assist(client: AsyncClient, account: Account, trip_id: str, **body: Any) -> str:
+    """Ask for AI help on a trip: the run's id, answered at once (202)."""
+    response = await client.post(f"{TRIPS}/{trip_id}/assist", headers=account.headers, json=body)
+    assert response.status_code == 202, response.text
+    return str(response.json()["run_id"])
+
+
+async def finished(client: AsyncClient, account: Account, run_id: str) -> dict[str, Any]:
+    """What the page does: follow the run until it is no longer running."""
+    for _ in range(500):
+        response = await client.get(f"/v1/agents/runs/{run_id}", headers=account.headers)
+        assert response.status_code == 200, response.text
+        run: dict[str, Any] = response.json()
+        if run["status"] != "running":
+            return run
+        await asyncio.sleep(0.01)
+    raise AssertionError(f"the run never finished: {run_id}")
 
 
 async def stored(account: Account) -> dict[str, list[dict[str, Any]]]:

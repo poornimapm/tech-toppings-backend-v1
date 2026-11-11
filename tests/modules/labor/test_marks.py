@@ -289,16 +289,17 @@ async def test_an_account_without_labor_reaches_none_of_it(client: AsyncClient) 
         json={"text": "everyone full day"},
     )
     run = await ask(client, stranger, "everyone full day")
-    [agent] = (await client.get("/v1/agents", headers=stranger.headers)).json()["items"]
+    agents = (await client.get("/v1/agents", headers=stranger.headers)).json()["items"]
 
     assert (response.status_code, response.json()["code"]) == (404, "MODULE_NOT_FOUND")
     assert "labor_attendance_draft" not in {item["tool"] for item in run["client_actions"]}
-    # Not even listed: a module given to some accounts isn't there for the others.
-    assert "mark-attendance" not in {skill["name"] for skill in agent["skills"]}
+    # Not even listed, by any agent: a module given to some accounts isn't there for the others.
+    assert "mark-attendance" not in {skill["name"] for agent in agents for skill in agent["skills"]}
 
 
 async def test_an_owner_given_labor_has_the_skill_listed(client: AsyncClient, owner: Owner) -> None:
-    [agent] = (await client.get("/v1/agents", headers=owner.account.headers)).json()["items"]
+    agents = (await client.get("/v1/agents", headers=owner.account.headers)).json()["items"]
+    [agent] = [item for item in agents if item["name"] == "assistant"]
 
     assert "mark-attendance" in {skill["name"] for skill in agent["skills"]}
 

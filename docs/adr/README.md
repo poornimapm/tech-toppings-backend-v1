@@ -17,7 +17,7 @@ New ADRs take the next number. Never edit an accepted ADR's decision; supersede 
 | [0010](0010-offline-capture-with-idempotent-sync.md) | Offline capture with idempotent sync | Accepted |
 | [0011](0011-registration-by-email-allowlist-no-email-sending-in-v1.md) | Registration by email allowlist; no email sending in v1 | Accepted |
 | [0012](0012-reminders-platform-service-with-in-app-and-web-push-channels.md) | Reminders platform service with in-app and Web Push channels | Accepted |
-| [0013](0013-skill-driven-agents-with-mode-and-fallback-switches.md) | Skill-driven agents with mode and fallback switches | Accepted |
+| [0013](0013-skill-driven-agents-with-mode-and-fallback-switches.md) | Skill-driven agents with mode and fallback switches | Superseded in part by 0026 |
 | [0014](0014-dashboard-widgets-activity-log-and-notification-inbox.md) | Dashboard widgets, activity log and notification inbox | Accepted |
 | [0015](0015-products-group-entries-by-name.md) | Products group entries by name | Accepted |
 | [0016](0016-analytics-share-the-list-filters-insights-cached-by-facts.md) | Analytics share the list's filters; insights are cached by their facts | Accepted |
@@ -29,4 +29,5 @@ New ADRs take the next number. Never edit an accepted ADR's decision; supersede 
 | [0022](0022-receipts-and-warranty-on-a-shared-scan.md) | Receipts & warranty, on a shared scan | Accepted |
 | [0023](0023-labor-management-owners-granted-modules-and-private-pictures.md) | Labor Management: owners, granted modules and private pictures | Accepted |
 | [0024](0024-labor-extras-offline-marks-report-files-and-marks-by-voice.md) | Labor's extras: offline marks, report files and marks by voice | Accepted |
-| [0025](0025-travel-trips-core-changes-with-undo-and-the-days-own-rates.md) | Travel's trips core: changes with undo, the day's own rates and room on the first page | Accepted |
+| [0025](0025-travel-trips-core-changes-with-undo-and-the-days-own-rates.md) | Travel's trips core: changes with undo, the day's own rates and room on the first page | Accepted; Basic amended in Phase 19 |
+| [0026](0026-strands-runs-the-agent-loop-background-runs-with-stages.md) | Strands runs the agent loop; background runs with stages | Accepted |

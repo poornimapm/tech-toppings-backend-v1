@@ -8,12 +8,14 @@
 3. Writes are never executed during a run: they become proposals the user confirms.
 
 A run answers when done (``run``), or starts in the background and records its stages for a
-page to follow (``start``). No prompt text lives here: agent and skill markdown carry it.
+page to follow (``start``), which may cancel it (``cancel``). No prompt text lives here: agent
+and skill markdown carry it.
 """
 
 from __future__ import annotations
 
 import asyncio
+import importlib
 import json
 import re
 from collections.abc import Awaitable, Callable, Mapping, Sequence
@@ -26,7 +28,7 @@ from app.core.config import AgentMode, AgentSettings
 from app.core.documents import OwnedDocument
 from app.core.errors import AppError, ConflictError, NotFoundError
 from app.core.logging import get_logger
-from app.core.repository import ScopedRepository
+from app.core.repository import Scope, ScopedRepository
 from app.platform.agents.catalog import (
     AgentCatalog,
     AgentSpec,
@@ -50,11 +52,17 @@ logger = get_logger(__name__)
 
 PLACEHOLDER = re.compile(r"{{\s*(\w+)\s*}}")
 NO_MATCH = "static.no_match"
+ENGINE = "app.platform.agents.engine"  # imports Strands
 
 
 class ProposalClosedError(ConflictError):
     code = "AGENT_PROPOSAL_CLOSED"
     default_message = "This proposal was already handled or has expired."
+
+
+class RunFinishedError(ConflictError):
+    code = "AGENT_RUN_FINISHED"
+    default_message = "This run has already finished."
 
 
 class _Blocked(Exception):  # noqa: N818 - control flow inside the runtime, never escapes
@@ -87,6 +95,7 @@ class Outcome:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     reason: Blocker | None = None
+    cancelled: bool = False  # the person stopped it while it ran (``AgentRuntime.cancel``)
     plan: Plan = field(default_factory=lambda: Plan(None, None))  # the mode it runs in
     stages: list[RunStage] = field(default_factory=lambda: [RunStage.UNDERSTANDING])
     # A background run's record follows its stages as they come.
@@ -103,9 +112,10 @@ class AgentRunRepository(ScopedRepository[AgentRun]):
     model: ClassVar[type[OwnedDocument]] = AgentRun
 
     async def write(self, run: AgentRun, changes: Mapping[str, Any]) -> None:
-        """Set fields of a run still being worked on (a background run's stages)."""
+        """Set fields of a run still being worked on (a background run's stages): once it has
+        ended (finished, or cancelled), nothing more is written over it."""
         await AgentRun.get_pymongo_collection().update_one(
-            self.query({"_id": run.id}),
+            self.query({"_id": run.id, "status": RunStatus.RUNNING}),
             {
                 "$set": {
                     **changes,
@@ -157,7 +167,10 @@ class AgentRuntime:
         self.clock = clock
         self.quota = Quota(settings, clock)
         self._redactions = [re.compile(pattern) for pattern in settings.redact_patterns]
-        self._background: set[asyncio.Task[None]] = set()  # held, so none is collected mid-run
+        # Background runs by id, held until done so none is collected mid-run; and those still
+        # working (not yet saving their outcome), which ``cancel`` may stop.
+        self._background: dict[str, asyncio.Task[None]] = {}
+        self._working: set[str] = set()
 
     # ------------------------------------------------------------------ policy
 
@@ -207,13 +220,14 @@ class AgentRuntime:
     async def start(self, request: RunRequest, ctx: ActorContext) -> AgentRun:
         """``run`` in the background: answers at once with the run saved as running. Its record
         follows the run's stages, gets the outcome at the end, and ends as incomplete (reason
-        timeout) after AGENT_RUN_TIMEOUT_SECONDS."""
+        timeout) after AGENT_RUN_TIMEOUT_SECONDS, or when the person cancels it."""
         agent, skills = await self._skills(request, ctx)  # a refusal answers at once
         out, box = Outcome(skill=request.skill), self._box(skills, ctx)
         repository = AgentRunRepository(ctx.scope, self.clock)
         running = await repository.create(
             self._fields(agent, request, out, box) | {"status": RunStatus.RUNNING}
         )
+        run_id = str(running.id)
 
         async def report(stages: list[RunStage]) -> None:
             await repository.write(running, {"stages": stages})
@@ -224,16 +238,50 @@ class AgentRuntime:
                     await self._work(agent, skills, request, ctx, out, box)
             except TimeoutError:
                 out.status, out.reason = RunStatus.INCOMPLETE, Blocker.TIMEOUT
-            except Exception:  # a fault (the database ...) must not leave it running
-                logger.exception("agent_run_failed", run_id=str(running.id))
+            except asyncio.CancelledError:
+                if run_id in self._working:  # the server stopping: it reads as timed out
+                    raise
+                if (current := asyncio.current_task()) is not None:
+                    current.uncancel()  # taken on purpose: the save below waits as usual
+                logger.info("agent_run_cancelled", run_id=run_id)
+                out.status, out.cancelled = RunStatus.INCOMPLETE, True
+            except Exception as fault:  # the database ... must not leave it running
+                # Its type, not its words or traceback: they may carry what logs must not.
+                failed = type(fault).__name__
+                logger.error("agent_run_failed", run_id=run_id, error=failed)  # noqa: TRY400
                 out.status = RunStatus.INCOMPLETE
+            finally:
+                self._working.discard(run_id)
             await self._save(agent, request, ctx, out, box, running)
 
         out.report = report
         task = asyncio.create_task(work())
-        self._background.add(task)
-        task.add_done_callback(self._background.discard)
+        self._background[run_id] = task
+        self._working.add(run_id)
+        task.add_done_callback(lambda _: self._background.pop(run_id, None))
         return running
+
+    async def cancel(self, run_id: str, scope: Scope) -> AgentRun:
+        """Stop one of the caller's running runs: it makes no further model call, and is saved
+        as incomplete with what it made so far (``cancelled``, reason None). One cancelled
+        already answers as it is; one finished otherwise is refused."""
+        repository = AgentRunRepository(scope, self.clock)
+        run = self.current(await repository.get(run_id))  # another person's: not found
+        if run.status is not RunStatus.RUNNING:
+            if run.cancelled:
+                return run
+            raise RunFinishedError(details={"status": run.status})
+        key = str(run.id)
+        task = self._background.get(key)
+        if task is not None:
+            if key in self._working:  # not yet saving what it finished with
+                self._working.discard(key)
+                task.cancel()
+            await asyncio.wait([task])
+        # Not running here (a restart cut it short) or stopped before it began: ended as it stands.
+        ended = {"status": RunStatus.INCOMPLETE, "cancelled": True}
+        await repository.write(run, ended | {"stages": [*run.stages, RunStage.DONE]})
+        return self.current(await repository.get(run_id))
 
     def current(self, run: AgentRun) -> AgentRun:
         """A run as it stands: one still running past AGENT_RUN_TIMEOUT_SECONDS (the server
@@ -248,9 +296,10 @@ class AgentRuntime:
 
     async def close(self) -> None:
         """At shutdown: stop the background runs (each then reads as timed out)."""
-        for task in self._background:
+        tasks = list(self._background.values())
+        for task in tasks:
             task.cancel()
-        await asyncio.gather(*self._background, return_exceptions=True)
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _skills(
         self, request: RunRequest, ctx: ActorContext
@@ -312,7 +361,9 @@ class AgentRuntime:
         ctx: ActorContext,
         out: Outcome,
     ) -> None:
-        # Strands loads here, with the first AI run: importing it at startup costs ~2.4 s.
+        # Strands loads with the first AI run, not at startup (~2.4 s), and in a worker thread:
+        # on the event loop, every request in flight would wait for it.
+        await asyncio.to_thread(importlib.import_module, ENGINE)
         from app.platform.agents.engine import AgentLoop, Stopped  # noqa: PLC0415
 
         loop = AgentLoop(self, skills, request, box, ctx, out)
@@ -381,6 +432,7 @@ class AgentRuntime:
             "status": out.status,
             "mode": out.plan.mode,
             "reason": out.reason or out.plan.reason,
+            "cancelled": out.cancelled,
             "input": self.redact(request.input),
             "photos": len(request.photos),  # how many, never what
             "locale": request.locale,

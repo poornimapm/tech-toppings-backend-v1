@@ -378,6 +378,14 @@ class RecordChange(BaseModel):
     suggestion_key: str | None = None
 
 
+class EventSource(StrEnum):
+    """Who made a change: the person by hand, or the person applying an AI draft. Its revisions
+    say the same."""
+
+    MANUAL = "manual"
+    AI = "ai"
+
+
 class TripEvent(OwnedDocument):
     """One change to a trip: what kind, the words for its summary, what it reached and how to
     take it back. Written only by events.py; no route edits or removes one."""
@@ -391,6 +399,8 @@ class TripEvent(OwnedDocument):
     changes: list[RecordChange] = Field(default_factory=list)
     undo: list[Step] = Field(default_factory=list)  # empty: this one can't be undone
     undone_at: datetime | None = None
+    source: EventSource = EventSource.MANUAL
+    ai_run_id: str | None = None  # the AI run whose draft was applied (source ai)
 
     class Settings:
         name = "travel_events"

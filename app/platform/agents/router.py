@@ -177,6 +177,18 @@ async def read_run(run_id: str, runtime: RuntimeDep, scope: UserScope) -> RunOut
 
 
 @router.post(
+    "/runs/{run_id}/cancel",
+    summary="Cancel one of my running runs",
+    description="Stops a background run: it makes no further AI call, and keeps what it made so "
+    "far as `incomplete` (its `reason` null). A run cancelled already answers as it is; one that "
+    "finished otherwise answers 409 `AGENT_RUN_FINISHED`.",
+    responses=error_responses(401, 404, 409),
+)
+async def cancel_run(run_id: str, runtime: RuntimeDep, scope: UserScope) -> RunOut:
+    return RunOut.of(await runtime.cancel(run_id, scope))
+
+
+@router.post(
     "/proposals/{proposal_id}/confirm",
     summary="Confirm a proposed change (runs it)",
     responses=error_responses(401, 404, 409),

@@ -314,7 +314,8 @@ defaults instead of failing.
 Skill-driven agents (ADR-0013) live in `platform/agents/`. The package only runs them:
 - agents are `agents/<name>.md`;
 - skills are `skills/<name>/SKILL.md` (Agent Skills format) with an optional
-  `scripts/static.py` and `references/`;
+  `scripts/static.py` and `references/`; a skill with `metadata: agent: <name>` runs on that
+  agent alone, never on one that takes every skill (the general assistant);
 - tools are `@tool` functions in a `tools.py`.
 
 All three are discovered from platform sub-packages and modules with the same folder scan
@@ -322,8 +323,8 @@ as modules.
 
 ```mermaid
 flowchart LR
-  Ask["POST /v1/agents/{name}/runs"] --> Plan{"policy.plan<br/>mode + blockers + fallback"}
-  Plan -- agent --> Loop["model + load_skill + tools<br/>(free providers, quota, redaction)"]
+  Ask["POST /v1/agents/{name}/runs<br/>run_skill / start_skill"] --> Plan{"policy.plan<br/>mode + blockers + fallback"}
+  Plan -- agent --> Loop["Strands agent: model + load_skill + tools<br/>(provider chain, quota, redaction)"]
   Plan -- static --> Script["skills/*/scripts/static.py<br/>(same tools, lexicon data)"]
   Plan -- unavailable --> Honest["status: unavailable + reason"]
   Loop --> Run[("agent_runs (TTL)")]
@@ -342,6 +343,22 @@ mode and an honest "unavailable". The blockers are: no consent, quota used up, n
 provider, all providers failing.
 
 Daily budgets are counted per AI call (`agent_usage`, per user and global, by UTC day).
+
+Strands runs the agent loop (ADR-0026, `engine.py`), loaded with the first AI run rather than at
+startup, in a worker thread. A Strands `Agent` is built per run over the app's own pieces: its
+model is an adapter that takes one call from the quota and then asks the provider chain (OpenAI
+format both ways, photos included); each tool calls `ToolBox.call`; a hook refuses tools of
+skills not loaded. No console output, no retries, one tool at a time, and `AGENT_MAX_STEPS` as
+the turn limit. A tool that fails unexpectedly ends the run (the model is told only
+`tool_failed`). OpenTelemetry stays unconfigured, so Strands' spans record nothing.
+
+A run answers when done, or starts in the background (`start_skill`, for a page that shows
+progress): its record is saved as `running` and gets stage codes as it works (`understanding`,
+`reading`, `drafting`, `proposing`, `checking`, `done`), which the page polls at
+`GET /v1/agents/runs/{id}`. After `AGENT_RUN_TIMEOUT_SECONDS` it ends as `incomplete` with
+reason `timeout`; a record a restart left `running` reads the same once that time has passed.
+`POST /v1/agents/runs/{id}/cancel` stops one: no further AI call, and it ends as `incomplete`
+with what it made so far.
 
 ## Dashboard, activity, notifications and reminders
 

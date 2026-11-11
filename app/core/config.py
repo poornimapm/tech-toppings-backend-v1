@@ -434,7 +434,8 @@ class AgentSettings(BaseSettings):
     packages: Annotated[tuple[str, ...], NoDecode] = ("app.platform",)
     max_steps: int = Field(default=6, ge=1, le=20)
     # A background run (start_skill) still working after this ends as incomplete, reason timeout.
-    run_timeout_seconds: float = Field(default=90.0, gt=0, le=600)
+    # At most 120: pages stop following a run at 150 s.
+    run_timeout_seconds: float = Field(default=90.0, gt=0, le=120)
     max_input_chars: int = Field(default=1000, ge=10, le=10000)
     # Text read from a photo on the device (a receipt's lines) is longer than anything typed.
     max_ocr_chars: int = Field(default=4000, ge=10, le=20000)

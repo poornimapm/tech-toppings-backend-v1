@@ -145,6 +145,8 @@ def test_a_blank_job_token_means_none(required_env: pytest.MonkeyPatch) -> None:
         ("SECURITY_PROXY_SECRET", "with a space " * 4, "32\\+ printable ASCII"),
         ("SECURITY_PROXY_HEADER", "X TT Proxy", "should match pattern"),
         ("PUSH_MAX_TRIES", "0", "greater than or equal to 1"),
+        # Pages stop following a background run at 150 s.
+        ("AGENT_RUN_TIMEOUT_SECONDS", "121", "less than or equal to 120"),
         # More pushes under way than the shared HTTP client has connections would wait for one
         # on the browser's time.
         (

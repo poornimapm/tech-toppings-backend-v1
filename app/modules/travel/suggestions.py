@@ -1,6 +1,7 @@
 """Suggestions for a trip's checklist and packing, by rule (data/travel.yaml): from the activities
 it really has and how long it is, and nothing about any place or operator. They are stored as what
-they are (``source`` rule, with a ``suggestion_key``), for the page to label.
+they are (``source`` rule, with a ``suggestion_key``), for the page to label. An activity's AI items
+(drafts.py) are offered the same way, stored as the assistant's.
 
 The person's word beats them: asking again only adds keys not there yet, so an item edited,
 completed or removed is never touched, and one removed doesn't come back (rule 4). Like a change,
@@ -9,9 +10,10 @@ it's a preview until ``apply``, and applying records one event, which can be und
 from __future__ import annotations
 
 import datetime as dt
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping, Sequence
 from typing import Any
 
+from app.modules.travel.checklist import UnknownActivityError
 from app.modules.travel.events import (
     CHECKLIST,
     ChecklistFullError,
@@ -87,42 +89,58 @@ class Suggestions:
 
     async def _wanted(self, trip: Trip, body: TravelSuggestIn) -> list[Planned]:
         """From what is still to come: an activity done, skipped or replaced needs nothing, and
-        neither does a day gone by. The list for the whole trip belongs to no one day."""
+        neither does a day gone by. The list for the whole trip belongs to no one day, nor to one
+        activity."""
         day = body.day.isoformat() if body.day else None
         if day:
             ensure_in_trip(trip, day)
+        if body.activity_id:
+            found = await self.activities.find(body.activity_id)
+            if found is None or found.trip_id != trip.id:
+                raise UnknownActivityError
         today = trip_today(trip, self.ctx).isoformat()
         ahead = [
             activity
             for activity in await self.activities.of_trip(trip.id, day)
-            if activity.status is ActivityStatus.PLANNED and activity.day >= today
+            if activity.status is ActivityStatus.PLANNED
+            and activity.day >= today
+            and body.activity_id in (None, str(activity.id))
         ]
         wanted = list(_of_activities(trip, ahead, packing=body.packing))
-        return [*wanted, *_of_trip(trip)] if body.packing and day is None else wanted
+        whole = body.packing and day is None and body.activity_id is None
+        return [*wanted, *_of_trip(trip)] if whole else wanted
 
     async def run(self, trip_id: str, body: TravelSuggestIn) -> TravelSuggestOut:
         trip = await self.trips.get(trip_id)
+        summary = {"packing": body.packing, "day": body.day.isoformat() if body.day else None}
+        return await self.offer(
+            trip, KIND, await self._wanted(trip, body), apply=body.apply, summary=summary
+        )
+
+    async def offer(
+        self,
+        trip: Trip,
+        kind: str,
+        wanted: Sequence[Planned],
+        *,
+        apply: bool,
+        summary: Mapping[str, Any],
+        ai_run_id: str | None = None,
+    ) -> TravelSuggestOut:
+        """Those not suggested before (rule 4), as many as there is room for and one request adds:
+        the preview, or added as one event of this ``kind``."""
         taken = set(await self.checklist.taken_keys(trip.id))
-        fresh = [
-            item for item in await self._wanted(trip, body) if item.step.fields[KEY] not in taken
-        ]
+        fresh = [item for item in wanted if item.step.fields[KEY] not in taken]
         limits = rules()
         room = limits.checklist.max_per_trip - await self.checklist.count_of(trip.id)
         if fresh and room <= 0:
             raise ChecklistFullError
         batch = fresh[: min(room, limits.suggestions.max_per_run)]
         more = len(fresh) > len(batch)
-        if not body.apply:
+        if not apply:
             return TravelSuggestOut.of([item.shown for item in batch], [], [], more=more)
         event = await self.events.commit(
-            trip.id,
-            KIND,
-            batch,
-            summary={
-                "count": len(batch),
-                "packing": body.packing,
-                "day": body.day.isoformat() if body.day else None,
-            },
+            trip.id, kind, batch, summary={"count": len(batch), **summary}, ai_run_id=ai_run_id
         )
         changes = event.changes if event else []
         event_id = str(event.id) if event else None

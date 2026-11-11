@@ -287,7 +287,8 @@ async def test_the_assistant_says_where_a_scans_photo_would_be_read(
         account = await register(client)
         if consent:
             await give_consent(client, account)
-        [assistant] = (await client.get("/v1/agents", headers=account.headers)).json()["items"]
+        agents = (await client.get("/v1/agents", headers=account.headers)).json()["items"]
+        [assistant] = [item for item in agents if item["name"] == "assistant"]
 
     skills = {skill["name"]: skill for skill in assistant["skills"]}
     assert skills["scan-receipt"]["photo_mode"] == photo_mode

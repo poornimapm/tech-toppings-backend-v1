@@ -82,8 +82,8 @@ async def test_only_loaded_skills_tools_run_and_each_refusal_is_a_step(
     assert [m["content"] for m in tool_messages(route, 1)] == ['{"error": "tool_not_loaded"}']
     offered = [[tool["function"]["name"] for tool in sent(route, i)["tools"]] for i in range(3)]
     assert offered[0] == ["load_skill"]
-    assert "modules_list" in offered[2]
-    assert "load_skill" not in offered[2]  # nothing left to load
+    assert "modules_list" not in offered[1]
+    assert {"modules_list", "load_skill"} <= set(offered[2])  # other skills remain to load
     # The model's own calls go back with their ids, each answered in order.
     third = sent(route, 2)["messages"]
     assistant = [m for m in third if m["role"] == "assistant"][-1]
@@ -195,15 +195,17 @@ async def test_no_opentelemetry_provider_is_set_up(ai_client: AsyncClient) -> No
     assert not trace.get_tracer("check").start_span("anything").is_recording()
 
 
+STARTUP = """
+import json, sys
+from tests.helpers import build_app, build_settings
+build_app(build_settings("mongodb://localhost:27017/tt-startup-only"))
+print(json.dumps(sorted({"strands", "boto3"} & set(sys.modules))))
+"""
+
+
 def test_strands_is_not_imported_at_startup() -> None:
-    code = (
-        "import sys\n"
-        "from tests.helpers import build_app, build_settings\n"
-        "build_app(build_settings('mongodb://localhost:27017/tt-startup-only'))\n"
-        "print(json.dumps(sorted({'strands', 'boto3'} & set(sys.modules))))\n"
-    )
     found = subprocess.run(  # noqa: S603 - this interpreter, on code written here
-        [sys.executable, "-c", f"import json\n{code}"],
+        [sys.executable, "-c", STARTUP],
         cwd=PROJECT_ROOT,
         capture_output=True,
         text=True,

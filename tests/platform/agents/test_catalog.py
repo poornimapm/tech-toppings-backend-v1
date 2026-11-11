@@ -6,7 +6,7 @@ from collections.abc import Callable
 
 import pytest
 
-from app.platform.agents.catalog import discover_agents
+from app.platform.agents.catalog import UnknownSkillError, discover_agents
 from app.platform.plugins import PluginError, subpackages
 from tests.helpers import build_app, build_settings
 
@@ -102,6 +102,24 @@ def test_the_app_ships_the_assistant_and_its_skills(mongo_uri: str) -> None:
         "notifications_list": "read",
         "notifications_mark_all_read": "write",
         "notifications_open": "client",
+        "travel_trip": "read",
+        "travel_day": "read",
+        "travel_activity": "read",
+        "travel_budget": "read",
+        "travel_trip_draft": "client",
+        "travel_day_draft": "client",
+        "travel_items_draft": "client",
+        "travel_change_draft": "client",
+        "travel_open": "client",
+    }
+    # Travel's own, kept off the assistant: run only from a trip's pages.
+    assert set(catalog.agents) == {"assistant", "travel"}
+    assert set(catalog.agents["travel"].skills) == {
+        "describe-trip",
+        "plan-day",
+        "activity-checklist",
+        "update-trip",
+        "ask-trip",
     }
 
 
@@ -139,6 +157,59 @@ def test_malformed_plugins_stop_startup(
 ) -> None:
     with pytest.raises(PluginError, match=message):
         catalog_of(plugin_package, demo(**files))
+
+
+KEPT = """---
+name: plan-trip
+description: Plan a trip.
+allowed-tools: demo_count
+metadata:
+  agent: {agent}
+---
+Plan the trip.
+"""
+TRIPS = """---
+name: trips
+description: A page's own agent.
+skills: [plan-trip]
+---
+You plan trips.
+"""
+
+
+def kept(agent: str = "trips", **files: str) -> dict[str, str]:
+    return demo(
+        **{"skills/plan-trip/SKILL.md": KEPT.format(agent=agent), "agents/trips.md": TRIPS} | files
+    )
+
+
+def test_a_skill_kept_for_one_agent_is_left_out_of_the_general_one(
+    plugin_package: MakePackage,
+) -> None:
+    catalog = catalog_of(plugin_package, kept())
+    helper = catalog.agents["helper"]
+
+    assert helper.skills == ("count-things",)  # no list = every skill not kept for another
+    assert catalog.agents["trips"].skills == ("plan-trip",)
+    assert catalog.skills["plan-trip"].agent == "trips"
+    with pytest.raises(UnknownSkillError):  # as POST /v1/agents/helper/runs would find
+        catalog.skills_of(helper, "plan-trip")
+
+
+@pytest.mark.parametrize(
+    ("files", "message"),
+    [
+        (kept(agent="nobody"), "kept for agent 'nobody'"),
+        (kept(**{"agents/trips.md": TRIPS.replace("[plan-trip]", "[count-things]")}), "listed by"),
+        (kept(**{"agents/helper.md": agent("skills: [plan-trip]\n")}), "listed by"),
+        (kept(agent="''"), "metadata agent is empty"),
+    ],
+)
+def test_a_kept_skill_is_listed_by_its_agent_alone(
+    plugin_package: MakePackage, files: dict[str, str], message: str
+) -> None:
+    with pytest.raises(PluginError, match=message):
+        catalog_of(plugin_package, files)
 
 
 def test_skill_names_are_unique_across_packages(plugin_package: MakePackage) -> None:

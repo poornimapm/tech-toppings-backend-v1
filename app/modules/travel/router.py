@@ -1,7 +1,8 @@
 """The routes, under ``/v1/travel``: every record is the signed-in person's own (anyone else's
 trip, activity, booking, expense or event answers 404), and each route names one record. A write
 answers the event of the trip's history it recorded (``event_id``), so the page undoes exactly
-that one."""
+that one. AI help (``assist``) starts a background run and answers 202 at once; what it drafts is
+applied here like anything else, after the person has seen the preview."""
 
 from __future__ import annotations
 
@@ -11,10 +12,12 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, Query, Response, status
 
 from app.modules.travel.activities import Activities
+from app.modules.travel.assist import Assist
 from app.modules.travel.bookings import Bookings
 from app.modules.travel.budget import Budget
 from app.modules.travel.changes import Changes
 from app.modules.travel.checklist import Checklist
+from app.modules.travel.drafts import AiItems, DayDrafts
 from app.modules.travel.events import Events
 from app.modules.travel.expenses import TripExpenses
 from app.modules.travel.models import TripPhase
@@ -26,6 +29,8 @@ from app.modules.travel.schemas import (
     TravelActivityOut,
     TravelActivityPatch,
     TravelActivityRecorded,
+    TravelAssistIn,
+    TravelAssistOut,
     TravelBookingIn,
     TravelBookingOut,
     TravelBookingPatch,
@@ -33,10 +38,13 @@ from app.modules.travel.schemas import (
     TravelBudgetOut,
     TravelChangeIn,
     TravelChangeOut,
+    TravelChecklistAssistIn,
     TravelChecklistIn,
     TravelChecklistOut,
     TravelChecklistPatch,
     TravelChecklistRecorded,
+    TravelDayDraftIn,
+    TravelDescribeIn,
     TravelEventOut,
     TravelExpenseIn,
     TravelExpenseOut,
@@ -63,6 +71,7 @@ from app.platform import (
     PageParamsDep,
     answer_once,
     error_responses,
+    rate_limit,
 )
 
 router = APIRouter()
@@ -111,6 +120,19 @@ async def travel_options(ctx: ActorDep) -> TravelOptions:
         max_item_quantity=settings.checklist.max_quantity,
         expense_categories=list(settings.budget.categories),
     )
+
+
+@router.post(
+    "/assist",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Describe a trip in your words: AI drafts the new-trip steps (describe-trip)",
+    description="Starts a background AI run and answers its id at once. Its draft "
+    "(`travel_trip_draft`) fills the planning steps; nothing is saved by it.",
+    dependencies=[Depends(rate_limit("agent_run"))],
+    responses=error_responses(401, 403, 422, 429),
+)
+async def describe_trip(body: TravelDescribeIn, ctx: ActorDep) -> TravelAssistOut:
+    return await Assist(ctx).describe(body)
 
 
 # ---------------------------------------------------------------------- trips
@@ -182,6 +204,21 @@ async def trip_overview(trip_id: str, ctx: ActorDep) -> TravelOverviewOut:
     return await Overview(ctx).of(trip_id)
 
 
+@router.post(
+    "/trips/{trip_id}/assist",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="AI help on a Basic AI trip: draft a day, prepare an activity, say what changed, ask",
+    description="Starts a background AI run and answers its id at once: `day` (plan-day) drafts "
+    "`travel_day_draft`, `activity` (activity-checklist) `travel_items_draft`, `change` "
+    "(update-trip) `travel_change_draft`, and `ask` (ask-trip) answers in words. A trip not in "
+    "Basic answers 409 `TRAVEL_AI_OFF`. Nothing is written by a run.",
+    dependencies=[Depends(rate_limit("agent_run"))],
+    responses=error_responses(401, 403, 404, 409, 422, 429),
+)
+async def assist_trip(trip_id: str, body: TravelAssistIn, ctx: ActorDep) -> TravelAssistOut:
+    return await Assist(ctx).on_trip(trip_id, body)
+
+
 @router.get(
     "/trips/{trip_id}/activities",
     summary="A trip's activities in timeline order, or one day's",
@@ -226,6 +263,17 @@ async def reorder_activities(
     return [TravelActivityRecorded.of(item, event_id=saved.event_id) for item in saved.record]
 
 
+@router.post(
+    "/trips/{trip_id}/activities/draft",
+    summary="Add a drafted day's activities after the day's own: a preview until apply is true",
+    description="An AI run's draft (`ai_run_id`) is added once: again only after that addition "
+    "is undone (409 `TRAVEL_AI_DRAFT_APPLIED`).",
+    responses=error_responses(401, 403, 404, 409, 422),
+)
+async def draft_day(trip_id: str, body: TravelDayDraftIn, ctx: ActorDep) -> TravelChangeOut:
+    return await DayDrafts(ctx).run(trip_id, body)
+
+
 @router.get(
     "/trips/{trip_id}/checklist",
     summary="A trip's checklist and packing items, or those of a day, a bag or an activity",
@@ -266,6 +314,18 @@ async def add_checklist_item(
 )
 async def suggest_checklist(trip_id: str, body: TravelSuggestIn, ctx: ActorDep) -> TravelSuggestOut:
     return await Suggestions(ctx).run(trip_id, body)
+
+
+@router.post(
+    "/trips/{trip_id}/checklist/assist",
+    summary="Add an activity's AI items (the assistant's suggestions): a preview until apply is "
+    "true",
+    responses=error_responses(401, 403, 404, 409, 422),
+)
+async def assist_checklist(
+    trip_id: str, body: TravelChecklistAssistIn, ctx: ActorDep
+) -> TravelSuggestOut:
+    return await AiItems(ctx).run(trip_id, body)
 
 
 @router.get(

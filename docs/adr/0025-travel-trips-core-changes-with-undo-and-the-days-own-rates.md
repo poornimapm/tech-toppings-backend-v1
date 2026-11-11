@@ -1,6 +1,7 @@
 # ADR-0025: Travel's trips core: changes with undo, the day's own rates and room on the first page
 
-- **Status:** Accepted
+- **Status:** Accepted; amended in part by Phase 19, where Basic turns on the trip's AI help
+  (its engine: [ADR-0026](0026-strands-runs-the-agent-loop-background-runs-with-stages.md))
 - **Date:** 2026-11-06
 - **Deciders:** project owner (Phase 18: "Trips core (no AI needed)", from the plan of 2026-11-05)
 
@@ -106,14 +107,18 @@ Three things shaped the design:
   even split leaves over go one each to the first sharers in the trip's order of travellers; the
   largest debt is then paid to the largest credit. The same records always give the same transfers.
 
-### Premium is locked in the API; Basic AI works as Static
+### Premium is locked in the API; Basic AI works as Static (until Phase 19)
 
 - A trip's `mode` (`static`, `basic`, `premium`) is one field of the trip.
 - Saving `premium`, on a new trip or as a switch, answers 403 `TRAVEL_PREMIUM_LOCKED`, through one
   function, `premium_allowed(ctx)`, false for everyone. `GET /options` says so
   (`premium_available`), and the app's Premium card can't be chosen. The lock is the API's; the
   page only follows it.
-- `basic` can be saved. Such a trip works exactly as a Static one, and its card says so.
+- `basic` can be saved. In Phase 18 such a trip worked exactly as a Static one, and its card said
+  so. **Superseded in part by Phase 19** (ADR-0026, `docs/modules/travel.md`): Basic now turns on
+  the trip's AI help, which only drafts; every change it drafts still goes through the preview,
+  the one event and its undo described here, the event saying AI made it (`source: ai`). A Static
+  trip refuses AI (409 `TRAVEL_AI_OFF`), and so does Premium while it is locked.
 - A switch of mode alone writes only the trip's own revision: no event, no feed entry, no reminder
   change (rule 7).
 

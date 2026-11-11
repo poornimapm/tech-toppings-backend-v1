@@ -3,7 +3,7 @@
 What exists, what comes next, and how the upcoming modules get built (Phase 13). The phase
 history and every decision are in [`plan.md`](plan.md); this page looks forward.
 
-## Where things stand (2026-11-06)
+## Where things stand (2026-11-11)
 
 - **Platform**:
   - accounts (allowlist, Google, two-step sign-in), the module system, the agents runtime with
@@ -23,10 +23,12 @@ history and every decision are in [`plan.md`](plan.md); this page looks forward.
   can read paper (`app/platform/slips`, the frontend's `src/core/scan`).
 - **Labor Management** (Phase 16, beta, for the owners the admin makes): projects, workers with
   photos, attendance, wages, payments, reports and an audit trail (`modules/labor.md`).
-- **Travel** (Phase 18, beta, for everyone; built, waiting for the owner's review and commit):
-  trips with their travellers, a day-by-day plan that changes one scoped step at a time, with its
-  history and undo, checklists and packing, bookings as entered, and a budget with shared costs
-  (`modules/travel.md`). Nothing in it uses AI; a trip's mode is only stored.
+- **Travel** (Phase 18, beta, for everyone): trips with their travellers, a day-by-day plan that
+  changes one scoped step at a time, with its history and undo, checklists and packing, bookings
+  as entered, and a budget with shared costs (`modules/travel.md`). **Basic AI** (Phase 19,
+  ADR-0026; Strands now runs every skill): on a trip in Basic, AI drafts a new trip from a
+  sentence, a day, an activity's checklist or what changed, and answers about the trip; each
+  draft goes through the trip's own preview, apply, history and undo. Live AI needs a provider.
 
 ## Next
 
@@ -36,10 +38,10 @@ history and every decision are in [`plan.md`](plan.md); this page looks forward.
    - a push on Android from the cron.
 2. **Measure the scan with AI**: once a key is set, `poe eval-receipts --ai` on the 20
    samples, and then on real receipts (photos with their truth added to the samples).
-3. **Room in the first-load budget** (199.9 KB of 200 on `/` after Travel): 0.1 KB is left, so
-   the next module's manifest, or a new route in Travel's, needs room found first (its routes and
-   icon load with the first page). The next lever measured is loading English feed words and
-   replies with their module rather than the first page: about 1.25 KB.
+3. **Room in the first-load budget** (199.6 KB of 200 on `/` after Travel's Basic AI): 0.4 KB is
+   left, so the next module's manifest, or a new route in Travel's, needs room found first (its
+   routes and icon load with the first page). The next lever measured is loading English feed
+   words and replies with their module rather than the first page: about 1.25 KB.
 4. **The upcoming modules**, below, in the order the owner chooses. Each *Notify me* press is
    stored per person, on their preferences for that module (`user_modules`,
    `notify_requested_at`; the plan's separate `module_interest` collection wasn't needed). The
